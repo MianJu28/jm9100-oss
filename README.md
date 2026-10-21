@@ -23,8 +23,8 @@ sudo ./switch-mwv207-oss.sh install    # 切换到开源栈 (自动快照+看门
 | 目录 | 功能 |
 |------|------|
 | `switch-mwv207-oss.sh` | 切换脚本 (根目录入口): check/install/rollback/verify/status/watchdog |
-| `reports/` | 五份阶段报告: 逐行分析 / 兼容性 / VA 硬解移植 / 全功能栈 / 切换脚本 |
-| `patches/` | 缺陷修复补丁集 0001-0007 (KMD 1 个 + UMD 4 个 + 硬解移植 1 个 + 10bit HEVC 黑屏修复 1 个) |
+| `reports/` | 六份阶段报告: 逐行分析 / 兼容性 / VA 硬解移植 / 全功能栈 / 切换脚本 / 性能调查 |
+| `patches/` | 缺陷修复补丁集 0001-0008 (KMD 2 个 + UMD 4 个 + 硬解移植 1 个 + 10bit HEVC 黑屏修复 1 个) |
 | `payload-24/` | Mesa 24.1.2 全功能栈载荷源 (GL+VA+VDPAU+OpenCL, MANIFEST 校验) |
 | `tests/` | 硬件验证套件: run-all.sh / run-full-regression.sh + 源码与二进制 |
 | `compat-env/` | 兼容运行环境 (libva 2.22 deb + 解包根, 供旧 libva 系统临时定向) |
@@ -40,6 +40,13 @@ sudo ./switch-mwv207-oss.sh install    # 切换到开源栈 (自动快照+看门
 3. `HWDECODE-FEASIBILITY-REPORT.md` — OpenHarmony video-codec 移植 + VA 硬解 + 10bit HEVC 黑屏修复 (§7)
 4. `FULLFEATURE-REPORT.md` — rusticl OpenCL / VDPAU / 全 codec 全功能栈
 5. `PHASE5-SWITCH-REPORT.md` — 切换脚本重构 + glamor 点亮破案 + 冷启动验证
+6. `PERFORMANCE-REPORT.md` — glmark2 性能调查: devfreq 启动失败缺陷修复 + 四因子分离
+
+## GPU 频率修复 (系统级, 已部署)
+
+`/etc/modprobe.d/mwv207-devfreq.conf`: `softdep mwv207 pre: governor_performance` —
+修复 in-tree KMD devfreq 启动即失败的缺陷 (GPU 停 vbios 低频), 重启后自动生效。
+源码正解为 `patches/0008-KMD-devfreq-governor-softdep.patch` (MODULE_SOFTDEP)。
 
 ## 路径约定
 
