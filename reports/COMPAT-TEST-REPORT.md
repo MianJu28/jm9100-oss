@@ -21,7 +21,7 @@
 | **硬件解码** | VA-API (vainfo) | ✅ 不崩溃* | 修复 NULL deref 后正常报告 VAProfileNone |
 | **硬件解码** | ffmpeg `-hwaccel vaapi` | ✅ 优雅回退 | VA 连接成功；H264 profile 不存在 → 自动软解，无崩溃 |
 | **硬件解码** | GStreamer libgstva | ⚠️ | 系统插件按 libva 2.20 编译，加载 2.22 后段错误（版本 ABI） |
-| **WebGL** | Firefox headless | ❌ env 不可达 | Firefox 按系统 glvnd ICD 选库，env 定向无效；实际命中系统 llvmpipe |
+| **WebGL** | Firefox headless | ✅ 系统级可用 | 22.3/env 时代 ❌ 不可达；24.1.2+libEGL.so 无后缀拦截后 GPU 进程全跑 mwv207 栈（见 §二-4 状态更新） |
 | **VDPAU** | vdpauinfo | ➖ 未测 | payload 有 libvdpau_mwv207，但同为闭源 VA 栈的镜像问题（无公开源码），意义有限 |
 
 *开源 UMD 不含视频 codec 实现 → 硬件编解码本身不可用（见 §三-1）
@@ -80,6 +80,21 @@ GL version : OpenGL ES 3.1 Mesa 22.3.7 (git-4197d4a)
 | `__EGL_VENDOR_LIBRARY_FILENAMES` 指到我们的 libEGL | glvnd 加载成功但 `eglInitialize` 失败（22.3 standalone EGL 作 glvnd vendor 的入口差异） |
 
 结论：**浏览器/Electron 类应用只能通过系统级 ICD 接入开源驱动**（把 mwv207 的 ICD JSON 装进 `/usr/share/glvnd/egl_vendor.d/` 并配置排序——即工作区 `switch-to-oss.sh` 已实现的方案，含 09_ 前缀优先与厂商 ICD 停用）。env 模式测不了它们是机制限制，不是驱动缺陷。
+
+> **状态更新 (2026-10-21 18:30, 系统级切换后复测)**：本节为 22.3/env 时代记录。
+> 系统级切换（switch-mwv207-oss.sh + 公开名 SONAME 拦截）后，Firefox 的接入
+> 已被攻克——但走的不是 glvnd ICD 路线（24.1.2 非 glvnd 构建，glvnd 无法加载），
+> 而是 **无后缀开发名拦截**：Firefox GPU 进程 `dlopen("libEGL.so")`（无版本
+> 后缀），该名不在 ldconfig 的 SONAME 缓存里，落到 glvnd 开发软链 → 厂商
+> ICD 失败（mwv207 KMD 下 ENODEV）→ 系统 Mesa 24.3 llvmpipe——about:support
+> 长期显示 WebGL renderer=llvmpipe 而 GPU #1 却正确识别 MWV207 的根因。
+> 修复 = 给 `libEGL.so` 做 SONAME 改名胶水副本入 ldconfig 缓存（与 libGL.so
+> 同配方，GLUE_COPIES 已固化，git 88aedd8）。修后探针：dlopen("libEGL.so")
+> → `/usr/local/lib/mwv207-oss/libEGL.so` → **MWV207 ES 3.1**；X11 窗口表面
+> + 5×swapBuffers 全过（WebRender 所需能力完备）。端到端：重启 Firefox 后
+> GL 宿主进程 maps 只剩 `/usr/local/lib/mwv207-oss/` 四件套
+> （libEGL.so+libglapi+libGL.so+mwv207_dri.so），llvmpipe/gallium-24.3
+> 全部消失。WebGL/WebRender 从"❌ env 不可达"升级为系统级可用。
 
 ### 5. Qt —— 平台插件机制限制
 
