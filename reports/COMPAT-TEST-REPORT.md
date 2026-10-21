@@ -96,6 +96,33 @@ GL version : OpenGL ES 3.1 Mesa 22.3.7 (git-4197d4a)
 > （libEGL.so+libglapi+libGL.so+mwv207_dri.so），llvmpipe/gallium-24.3
 > 全部消失。WebGL/WebRender 从"❌ env 不可达"升级为系统级可用。
 
+> **追加调查 (2026-10-21 20:10, 用户报告"火狐黑屏"后的定案)**：
+> 硬件加速生效后出现新现象——Firefox 窗口黑屏。逐层排查结论：
+>
+> **驱动 present 路径彻底无罪**（多探针互证）：mpv X11+GLX/EGL 路径画面
+> 完美；dmabuf 导出成功（ABGR 单平面）；WebRender 同款 core-profile
+> (3.2/4.0) + ARGB visual 渲染回读逐像素精确；静帧保持 20 秒不丢。
+> （排查中曾出现"clear 不上屏"假象，系探针自身 bug——glClear 的参数
+> 形态是 GLbitfield 掩码不是四个 float 颜色，传颜色值≈0 等于什么都不清；
+> 白色三角 = 无 glColor 时默认当前色，同样是被正确渲染上屏的结果。）
+>
+> **真实影响面矩阵**（全部冷启动新 Firefox，ffmpeg x11grab 采样 + PIL
+> 像素分析）：
+>
+> | 场景 | 结果 |
+> |------|------|
+> | 冷启动 `about:support` / `about:blank` 内页 | ❌ 100% 纯黑（mean=0, stdev=2.3, 无文本结构——非深色主题） |
+> | 冷启动 file:// 静态页（纯绿） | ✅ 正常显示（avg RGB 0,203,0） |
+> | 动画页 150 帧后停帧 | ✅ 绿色保持（停帧 7 秒 G=220 稳定） |
+> | 黑屏窗口内导航到外部静态页 | ✅ 立即恢复正常（0,203,0） |
+>
+> 定性：黑屏仅出现在**窗口首呈现早于 WM 重定向就绪**的 `about:` 内页
+> （浏览器启动瞬间首帧）。机制推测：首帧 damage 发生在窗口尚未被合成器
+> 重定向到 backing pixmap 时而丢失，WebRender 对 idle 页不重新 present，
+> 窗口保持黑。任何后续导航/动画/静帧全正常——**用户日常浏览外部 URL
+> 不受影响**（网络/加载延迟天然让首呈现晚于窗口就绪）。
+> 规避：黑屏是"未加载内容"状态，输入 URL 导航即恢复；无需改配置。
+
 ### 5. Qt —— 平台插件机制限制
 
 - Qt 的 offscreen 平台插件**硬编码 GLX** → 撞上 §三-2 的混载崩溃（系统 24.3 GLX driver + 注入的 22.3 glapi）
