@@ -1,0 +1,40 @@
+From d94c10684ce3097e47c3b66ab6741b0a1dcc4eb3 Mon Sep 17 00:00:00 2001
+From: MianJu <2462692286@qq.com>
+Date: Wed, 21 Oct 2026 17:23:32 +0800
+Subject: [PATCH] mwv207: declare governor_performance softdep so devfreq
+ registers at boot
+
+devm_devfreq_add_device(DEVFREQ_GOV_PERFORMANCE) does not request_module the
+governor. On systems with no other devfreq device, governor_performance.ko is
+never loaded, both devfreq registrations fail at probe time and the GPU PLL
+stays at the vbios default low frequency (measured: glmark2 scenes at less
+than a quarter of the achievable rate). MODULE_SOFTDEP makes modprobe pull in
+the governor first.
+
+Observed on Deepin 25 / 6.6.143-arm64-desktop-hwe, in-tree mwv207 0.1.0.
+The running distro kernel cannot be patched in place; for it use:
+  /etc/modprobe.d/mwv207-devfreq.conf: softdep mwv207 pre: governor_performance
+---
+ drivers/gpu/drm/mwv207/mwv207_drv.c | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/drivers/gpu/drm/mwv207/mwv207_drv.c b/drivers/gpu/drm/mwv207/mwv207_drv.c
+index e9b005c..f81cdc9 100644
+--- a/drivers/gpu/drm/mwv207/mwv207_drv.c
++++ b/drivers/gpu/drm/mwv207/mwv207_drv.c
+@@ -545,3 +545,12 @@ module_exit(mwv207_exit);
+ MODULE_DESCRIPTION("MWV207 Graphics Driver");
+ MODULE_AUTHOR("shanjinkui");
+ MODULE_LICENSE("GPL");
++/*
++ * devfreq 注册使用 DEVFREQ_GOV_PERFORMANCE governor (mwv207_devfreq.c:192),
++ * 但 devm_devfreq_add_device() 不会 request_module 该 governor——若系统无其他
++ * devfreq 设备先触发 governor_performance.ko 加载, mwv207 的 devfreq 注册
++ * 将在 probe 时失败 (dmesg: "Unable to find governor for the device"),
++ * GPU PLL 停留在 vbios 低频, 3D 性能损失可达数倍。
++ * 声明 softdep 使 modprobe 在加载本驱动前先拉起 governor_performance。
++ */
++MODULE_SOFTDEP("pre: governor_performance");
+-- 
+2.51.0
+
