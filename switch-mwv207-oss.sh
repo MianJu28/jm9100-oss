@@ -131,6 +131,11 @@ declare -A SONAME_LINKS=(
 # 直接命中我们。回归: glmark2 MWV207 硬件加速点亮, glxinfo 不受影响。
 declare -A GLUE_COPIES=(
     [libEGL.so.1]=libEGL_mwv207.so.1.0.0
+    # libEGL.so (无后缀开发名): Firefox/WebRender 与一切 dlopen 开发名者的用法
+    # ——不拦截则落 glvnd→厂商ICD失败→系统Mesa llvmpipe (about:support 实证
+    # 2026-10-21: WebGL renderer llvmpipe Mesa 24.3; 拦截后 X11 窗口表面+swap
+    # 实测 MWV207)。与 libGL.so 同配方。
+    [libEGL.so]=libEGL_mwv207.so.1.0.0
     [libGL.so.1]=libGL_mwv207.so.1.2.0
     [libGL.so]=libGL_mwv207.so.1.2.0
     [libgbm.so.1]=libgbm_mwv207.so.1.0.0
