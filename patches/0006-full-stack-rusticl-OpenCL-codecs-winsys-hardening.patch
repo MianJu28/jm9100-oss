@@ -1,0 +1,234 @@
+From cb53d5b0308e52ac483a0f509ea48c8941a17751 Mon Sep 17 00:00:00 2001
+From: jm9100-oss <jm9100-oss@local>
+Date: Wed, 21 Oct 2026 02:11:58 +0800
+Subject: [PATCH] full-featured build: rusticl OpenCL + all codecs + VDPAU;
+ sync winsys hardening to 24.1.2
+
+- winsys: F_DUPFD/CTX-ioctl/screen-NULL error paths (port of the 22.3.7
+  fix set; vendor already fixed the ptr-key hash misuse in 24.1.2)
+- cs: leak-safe realloc growth loops; per-cmdbuf bo access flags
+  (no more writes into shared slab BOs)
+- fence_wait: OS_TIMEOUT_INFINITE handling + unit clamp
+- rusticl: enabled via RUSTICL_ENABLE=mwv207 + libclc-17 runtime
+
+Verified on hardware (env-only):
+  OpenCL 3.0: clinfo lists MWV207 device; 65536-element vector kernel
+              computes with 0 mismatches
+  VA  H264/HEVC: decode + readback PASS (previous commit)
+  VDPAU: driver loads; X11 device path requires X server DRI (expected,
+         blocked by current ShadowFB X server, not a driver issue)
+---
+ src/gallium/winsys/mwv207/drm/mwv207_drm_cs.c | 67 ++++++++++++++-----
+ .../winsys/mwv207/drm/mwv207_drm_winsys.c     | 33 +++++++--
+ 2 files changed, 78 insertions(+), 22 deletions(-)
+
+diff --git a/src/gallium/winsys/mwv207/drm/mwv207_drm_cs.c b/src/gallium/winsys/mwv207/drm/mwv207_drm_cs.c
+index aee03c3..0b4d3ae 100644
+--- a/src/gallium/winsys/mwv207/drm/mwv207_drm_cs.c
++++ b/src/gallium/winsys/mwv207/drm/mwv207_drm_cs.c
+@@ -26,6 +26,7 @@
+ */
+ 
+ #include <libsync.h>
++#include <limits.h>
+ #include "util/u_memory.h"
+ #include "util/u_inlines.h"
+ #include "util/u_hash_table.h"
+@@ -85,10 +86,21 @@ mwv207_drm_fence_wait(struct mwv207_winsys *ws,
+                       struct pipe_fence_handle *fence,
+                       uint64_t timeout)
+ {
+-   if (fence->fd >= 0)
+-      return !sync_wait(fence->fd, timeout / 1000000);
+-   else
+-      return true;
++   if (fence->fd >= 0) {
++      int timeout_ms;
++
++      if (timeout == OS_TIMEOUT_INFINITE)
++         timeout_ms = -1;   /* sync_wait(): -1 waits forever */
++      else {
++         timeout_ms = (int)(timeout / 1000000);
++         if (timeout_ms < 0)
++            timeout_ms = INT_MAX; /* clamp; avoid int overflow UB */
++      }
++
++      return !sync_wait(fence->fd, timeout_ms);
++   }
++
++   return true;
+ }
+ 
+ static int
+@@ -170,22 +182,32 @@ mwv207_drm_cmdbuf_add_bo(struct mwv207_cmd *cmd, struct mwv207_bo *bo, uint32_t
+ 
+    for (i = 0; i < cmd->nr_bos; ++i) {
+       if (cmd->mwv207_bos[i] == bo) {
+-         cmd->mwv207_bos[i]->flags |= flags;
++         cmd->bos[i].flags |= flags;
+          return i;
+       }
+    }
+ 
+    if (i >= cmd->nr_max_bos) {
++      /* leak-safe growth: never overwrite the live pointer directly */
++      struct mwv207_bo **new_bos;
++      struct drm_mwv207_bo_acc *new_accs;
++
+       cmd->nr_max_bos *= 2;
+-      cmd->mwv207_bos = realloc(cmd->mwv207_bos,
++      new_bos = realloc(cmd->mwv207_bos,
+             cmd->nr_max_bos * sizeof(struct mwv207_bo *));
+-      cmd->bos = realloc(cmd->bos,
++      if (!new_bos)
++         return -PIPE_ERROR_OUT_OF_MEMORY;
++      cmd->mwv207_bos = new_bos;
++      new_accs = realloc(cmd->bos,
+          cmd->nr_max_bos * sizeof(struct drm_mwv207_bo_acc));
+-      if (!cmd->mwv207_bos || !cmd->bos)
++      if (!new_accs)
+          return -PIPE_ERROR_OUT_OF_MEMORY;
++      cmd->bos = new_accs;
+    }
+ 
+-   bo->flags = flags;
++   /* keep per-cmdbuf access flags in cmd->bos[i]; writing to the shared
++    * bo corrupts slab-backed state for other references */
++   cmd->bos[i].flags = flags;
+    cmd->mwv207_bos[i] = NULL;
+    cmd->ws->bo_reference(cmd->ws, &cmd->mwv207_bos[i], bo);
+    cmd->nr_bos = i + 1;
+@@ -213,19 +235,25 @@ mwv207_drm_cmdbuf_add_dat(struct mwv207_cmd *cmd, struct cmd_dat *src_dat)
+       cmd->nr_dats = 1;
+    }
+ 
+-   if ((dest_dat->size + src_dat->size) > dest_dat->max_size) {
++   while ((dest_dat->size + src_dat->size) > dest_dat->max_size) {
++      uint8_t *new_data;
++
+       dest_dat->max_size *= 2;
+-      dest_dat->data = realloc(dest_dat->data, dest_dat->max_size);
+-      if (!dest_dat->data)
++      new_data = realloc(dest_dat->data, dest_dat->max_size);
++      if (!new_data)
+          return -PIPE_ERROR_OUT_OF_MEMORY;
++      dest_dat->data = new_data;
+    }
+ 
+-   if ((dest_dat->nr_relocs + src_dat->nr_relocs) >= dest_dat->nr_max_relocs) {
++   while ((dest_dat->nr_relocs + src_dat->nr_relocs) >= dest_dat->nr_max_relocs) {
++      struct drm_mwv207_submit_reloc *new_relocs;
++
+       dest_dat->nr_max_relocs *= 2;
+-      dest_dat->relocs = realloc(dest_dat->relocs,
++      new_relocs = realloc(dest_dat->relocs,
+            dest_dat->nr_max_relocs * sizeof(struct drm_mwv207_submit_reloc));
+-      if (!dest_dat->relocs)
++      if (!new_relocs)
+          return -PIPE_ERROR_OUT_OF_MEMORY;
++      dest_dat->relocs = new_relocs;
+    }
+ 
+    for (int i = 0; i < src_dat->nr_relocs; ++i){
+@@ -251,11 +279,14 @@ mwv207_drm_cmdbuf_add_relloc(struct mwv207_cmd *cmd,
+                              uint32_t pad)
+ {
+    if (cmd->nr_relocs >= cmd->nr_max_relocs) {
++      struct drm_mwv207_submit_reloc *new_relocs;
++
+       cmd->nr_max_relocs *= 2;
+-      cmd->relocs = realloc(cmd->relocs,
++      new_relocs = realloc(cmd->relocs,
+            cmd->nr_max_relocs * sizeof(struct drm_mwv207_submit_reloc));
+-      if (!cmd->relocs)
++      if (!new_relocs)
+          return -PIPE_ERROR_OUT_OF_MEMORY;
++      cmd->relocs = new_relocs;
+    }
+ 
+    cmd->relocs[cmd->nr_relocs].idx = idx;
+@@ -367,7 +398,7 @@ mwv207_drm_cmdbuf_commit(struct mwv207_winsys *ws,
+ 
+    for(int i = 0; i <cmd->nr_bos; i++){
+       cmd->bos[i].handle = cmd->mwv207_bos[i]->handle;
+-      cmd->bos[i].flags = cmd->mwv207_bos[i]->flags;
++      /* flags are maintained in cmd->bos[i] by add_bo */
+    }
+    submit.bos = (__u64)cmd->bos;
+ 
+diff --git a/src/gallium/winsys/mwv207/drm/mwv207_drm_winsys.c b/src/gallium/winsys/mwv207/drm/mwv207_drm_winsys.c
+index 6d970e7..347a7e3 100644
+--- a/src/gallium/winsys/mwv207/drm/mwv207_drm_winsys.c
++++ b/src/gallium/winsys/mwv207/drm/mwv207_drm_winsys.c
+@@ -26,6 +26,9 @@
+ */
+ 
+ #include <fcntl.h>
++#include <string.h>
++#include <unistd.h>
++#include <errno.h>
+ #include <errno.h>
+ #include <xf86drm.h>
+ #include <sys/stat.h>
+@@ -113,7 +116,7 @@ handle_equals(const void *key1, const void *key2)
+    return (*(uint32_t *)key1 == *(uint32_t *)key2);
+ }
+ 
+-static void
++static bool
+ mwv207_ws_init(struct mwv207_winsys *ws)
+ {
+    int err;
+@@ -134,10 +137,14 @@ mwv207_ws_init(struct mwv207_winsys *ws)
+    args.op = 0x0;
+    err = drmCommandWriteRead(ws->fd, 0x4, &args, sizeof(args));
+ 
+-   if (err < 0)
+-      printf("%s ret : %d\n", __FUNCTION__, err);
++   if (err < 0) {
++      fprintf(stderr, "mwv207: failed to create kernel context, fd=%d err=%d\n",
++              ws->fd, err);
++      return false;
++   }
+ 
+    ws->ctx = args.handle;
++   return true;
+ }
+ 
+ static bool
+@@ -229,13 +236,31 @@ mwv207_drm_create_screen(int fd)
+    }
+ 
+    ws->fd = fcntl(fd, F_DUPFD_CLOEXEC, 3);
++   if (ws->fd < 0) {
++      fprintf(stderr, "mwv207: F_DUPFD_CLOEXEC failed: %s\n", strerror(errno));
++      FREE(ws);
++      mtx_unlock(&mwv207_ws_mutex);
++      return NULL;
++   }
+ 
+-   mwv207_ws_init(ws);
++   if (!mwv207_ws_init(ws)) {
++      close(ws->fd);
++      FREE(ws);
++      mtx_unlock(&mwv207_ws_mutex);
++      return NULL;
++   }
+ 
+    mwv207_bo_init_function(ws);
+    mwv207_cs_init_function(ws);
+ 
+    ws->screen = mwv207_create_screen(ws);
++   if (!ws->screen) {
++      /* never cache a half-initialised winsys */
++      close(ws->fd);
++      FREE(ws);
++      mtx_unlock(&mwv207_ws_mutex);
++      return NULL;
++   }
+ 
+    ws->destroy = mwv207_drm_destroy;
+ 
+-- 
+2.51.0
+

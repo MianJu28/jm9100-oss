@@ -1,0 +1,76 @@
+From 1a7d8c2636d15b0d5b533bb9936f062eb0209345 Mon Sep 17 00:00:00 2001
+From: jm9100-oss <jm9100-oss@local>
+Date: Tue, 20 Oct 2026 23:39:20 +0800
+Subject: [PATCH] =?UTF-8?q?mwv207:=20implement=20get=5Fvideo=5Fparam=20?=
+ =?UTF-8?q?=E2=80=94=20fix=20universal=20VA-API=20segfault?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+vl_codec_supported() (vl/vl_codec.c:60) unconditionally calls
+screen->get_video_param() with no NULL check. mwv207 never registered
+the callback, so every VA-API consumer (vainfo, any app using VA)
+crashed in vaQueryConfigProfiles with a NULL function pointer —
+verified: vainfo SIGSEGV at vl_codec.c:60 before this patch, clean
+'VAProfileNone + VAEntrypointVideoProc' enumeration after.
+
+The public jemoic/mesa tree ships no pipe_video_codec implementation,
+so PIPE_VIDEO_CAP_SUPPORTED honestly reports 0 and VA consumers fall
+back to software paths instead of dying.
+
+Also register get_video_param in mwv207_create_screen().
+---
+ src/gallium/drivers/mwv207/mwv207_screen.c | 30 ++++++++++++++++++++++
+ 1 file changed, 30 insertions(+)
+
+diff --git a/src/gallium/drivers/mwv207/mwv207_screen.c b/src/gallium/drivers/mwv207/mwv207_screen.c
+index 3454765..0447c72 100644
+--- a/src/gallium/drivers/mwv207/mwv207_screen.c
++++ b/src/gallium/drivers/mwv207/mwv207_screen.c
+@@ -618,6 +618,35 @@ mwv207_get_timestamp(struct pipe_screen *screen)
+    return os_time_get_nano();
+ }
+ 
++/*
++ * The public jemoic/mesa tree ships no pipe_video_codec implementation for
++ * mwv207 (the vendor ships a separate closed VA stack).  The gallium VA
++ * frontend and the vl layer call screen->get_video_param() unconditionally
++ * (vl_codec_supported() has no NULL check), so leaving the callback unset
++ * makes every VA-API consumer crash in vaQueryConfigProfiles with a NULL
++ * function pointer (verified with vainfo + gdb).
++ *
++ * Until a video codec frontend is published, report no video support so
++ * VA-API consumers degrade gracefully instead of segfaulting.
++ */
++static int
++mwv207_get_video_param(struct pipe_screen *pscreen,
++                       enum pipe_video_profile profile,
++                       enum pipe_video_entrypoint entrypoint,
++                       enum pipe_video_cap param)
++{
++   switch (param) {
++   case PIPE_VIDEO_CAP_SUPPORTED:
++      return 0;   /* no public video codec implementation yet */
++   case PIPE_VIDEO_CAP_NPOT_TEXTURES:
++      return 1;
++   case PIPE_VIDEO_CAP_PREFERED_FORMAT:
++      return PIPE_FORMAT_B8G8R8A8_UNORM;
++   default:
++      return 0;
++   }
++}
++
+ static void mwv207_fence_reference(struct pipe_screen *screen,
+                                    struct pipe_fence_handle **ptr,
+                                    struct pipe_fence_handle *fence)
+@@ -681,6 +710,7 @@ mwv207_create_screen(struct mwv207_winsys *winsys)
+    screen->base.is_format_supported  = mwv207_is_format_supported;
+ 
+    screen->base.get_timestamp   = mwv207_get_timestamp;
++   screen->base.get_video_param = mwv207_get_video_param;
+ 
+    screen->base.context_create  = mwv207_context_create;
+    screen->base.destroy         = mwv207_destroy_screen;
+-- 
+2.51.0
+

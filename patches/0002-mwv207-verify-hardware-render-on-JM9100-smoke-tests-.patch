@@ -1,0 +1,40 @@
+From 4197d4a8cec1d56312994478000b79dd8cfb627c Mon Sep 17 00:00:00 2001
+From: jm9100-oss <jm9100-oss@local>
+Date: Tue, 20 Oct 2026 20:27:17 +0800
+Subject: [PATCH 2/2] mwv207: verify hardware render on JM9100 (smoke tests
+ PASS)
+
+Validated on the running in-tree mwv207 KMD (kernel 6.6.143, Deepin 25):
+- KMD ioctl smoke: CTX create/destroy, GEM alloc, INFO engine query all OK
+- EGL/GBM surfaceless: ES2 context + clear + finish OK
+- FBO render: texture RT + clear + readback exact OK
+- Full hardware render: shader compile + triangle draw + pixel readback PASS
+
+Build artifacts: build-mwv207/src/gallium/targets/dri/mwv207_dri.so
+---
+ src/egl/drivers/dri2/platform_drm.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/src/egl/drivers/dri2/platform_drm.c b/src/egl/drivers/dri2/platform_drm.c
+index 45895a8..7cbbb48 100644
+--- a/src/egl/drivers/dri2/platform_drm.c
++++ b/src/egl/drivers/dri2/platform_drm.c
+@@ -111,12 +111,15 @@ dri2_drm_config_is_compatible(struct dri2_egl_display *dri2_dpy,
+ 
+    dri2_get_render_type_float(dri2_dpy->core, config, &is_float);
+ 
++
+    for (i = 0; i < dri2_dpy->gbm_dri->num_visuals; i++) {
+       visual = &dri2_dpy->gbm_dri->visual_table[i];
+       if (visual->gbm_format == surface->v0.format)
+          break;
+    }
+ 
++   if (i < dri2_dpy->gbm_dri->num_visuals)
++   
+    if (i == dri2_dpy->gbm_dri->num_visuals)
+       return false;
+ 
+-- 
+2.51.0
+

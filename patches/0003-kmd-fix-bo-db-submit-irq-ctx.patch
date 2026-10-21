@@ -1,0 +1,275 @@
+From 0ec48165dc20097dfe1d607d76501a5115933943 Mon Sep 17 00:00:00 2001
+From: jm9100-oss <jm9100-oss@local>
+Date: Tue, 20 Oct 2026 20:35:48 +0800
+Subject: [PATCH] mwv207 KMD: fix bo.c precedence bug, db.c ioctl semantics,
+ submit.c EFAULT, irq.c mapping check, ctx.c stack cap
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+- bo.c: '!jbo->flags & (1<<0)' parsed as (!flags)&1 == 0 — kmap permission
+  check never fired; also undo drm_gem_object_init on ttm_bo_init failure.
+- db.c: copy_to_user() result returned as ioctl retval (positive = bogus
+  success to userspace); uninitialized rec.val; hardcoded 8-byte element
+  size in sort/bsearch; dangling jdev->db after fini.
+- submit.c: copy_from_user() partial counts returned as positive ioctl
+  values (5 sites) — now -EFAULT with proper cleanup; engine_id u32
+  redundant >= 0 removed.
+- irq.c: irq_create_mapping() return never checked; a 0 mapping later
+  hits BUG_ON(va_irq == 0) in kms init or request_irq(0) — now fails
+  cleanly with partial-mapping cleanup.
+- ctx.c: scheds[6] fixed stack array filled from device engine count
+  without a bound check; boot-time BUG_ON replaced with WARN_ON + error.
+---
+ drivers/gpu/drm/mwv207/mwv207_bo.c     | 12 ++++++++--
+ drivers/gpu/drm/mwv207/mwv207_ctx.c    | 11 +++++++--
+ drivers/gpu/drm/mwv207/mwv207_db.c     | 16 +++++++++----
+ drivers/gpu/drm/mwv207/mwv207_irq.c    | 17 +++++++++----
+ drivers/gpu/drm/mwv207/mwv207_submit.c | 33 +++++++++++++++++++-------
+ 5 files changed, 67 insertions(+), 22 deletions(-)
+
+diff --git a/drivers/gpu/drm/mwv207/mwv207_bo.c b/drivers/gpu/drm/mwv207/mwv207_bo.c
+index ef63abe..6348c59 100644
+--- a/drivers/gpu/drm/mwv207/mwv207_bo.c
++++ b/drivers/gpu/drm/mwv207/mwv207_bo.c
+@@ -140,8 +140,13 @@ int mwv207_bo_create(struct mwv207_device *jdev,
+ 			type != ttm_bo_type_kernel, acc_size,
+ 			NULL, NULL, &mwv207_ttm_bo_destroy);
+ 
+-	if (unlikely(ret))
++	if (unlikely(ret)) {
++		/* drm_gem_object_release() was not undone here; on failure the
++		 * shmem pages (drm_gem_object_init) leaked. */
++		drm_gem_object_release(&jbo->tbo.base);
++		kfree(jbo);
+ 		return ret;
++	}
+ 	*pbo = jbo;
+ 	return 0;
+ }
+@@ -169,7 +174,10 @@ int mwv207_bo_kmap_reserved(struct mwv207_bo *jbo, void **ptr)
+ 	bool is_iomem;
+ 	int ret;
+ 
+-	if (!jbo->flags & (1<<0))
++	/* The intent is "if the BO is not CPU-visible, fail".
++	 * !jbo->flags & (1<<0) parses as (!jbo->flags) & (1<<0) == 0,
++	 * so the check never fired and kmap was allowed on invisible BOs. */
++	if (!(jbo->flags & (1<<0)))
+ 		return -EPERM;
+ 
+ 	if (jbo->kptr) {
+diff --git a/drivers/gpu/drm/mwv207/mwv207_ctx.c b/drivers/gpu/drm/mwv207/mwv207_ctx.c
+index 595d6a9..bf38751 100644
+--- a/drivers/gpu/drm/mwv207/mwv207_ctx.c
++++ b/drivers/gpu/drm/mwv207/mwv207_ctx.c
+@@ -51,14 +51,20 @@ static void mwv207_ctx_entity_fini(struct mwv207_ctx *ctx)
+ }
+ 
+ 
++#define MWV207_MAX_SCHED_PER_ENGINE 6
++
+ static int mwv207_ctx_entity_init_single(struct mwv207_ctx *ctx,
+ 		struct drm_gpu_scheduler **sched,
+ 		struct drm_sched_entity **entities, int nr)
+ {
+-	struct drm_gpu_scheduler *scheds[6];
++	struct drm_gpu_scheduler *scheds[MWV207_MAX_SCHED_PER_ENGINE];
+ 	struct drm_sched_entity *entity;
+ 	int i, ret;
+ 
++	/* scheds[] is a fixed-size stack array: silently filling more than
++	 * 6 entries would smash the stack. Fail loudly instead. */
++	if (nr > MWV207_MAX_SCHED_PER_ENGINE)
++		return -EINVAL;
+ 
+ 	for (i = 0; i < nr; i++) {
+ 		scheds[i] = sched[i];
+@@ -99,7 +105,8 @@ static int mwv207_ctx_entity_init(struct drm_device *dev, struct mwv207_ctx *ctx
+ 	ctx->entity_enc = &ctx->entity_dec[1 + 1];
+ 	ctx->entity_2d  = &ctx->entity_enc[1 + 1];
+ 	ctx->entity_dma = &ctx->entity_2d[1 + 1];
+-	BUG_ON(ctx->entity_dma[1] != ctx->entities[11 - 1]);
++	if (WARN_ON(ctx->entity_dma[1] != ctx->entities[11 - 1]))
++		return -EINVAL;
+ 
+ 	ret = mwv207_ctx_entity_init_single(ctx, jdev->sched_3d, ctx->entity_3d, jdev->nr_3d);
+ 	if (ret)
+diff --git a/drivers/gpu/drm/mwv207/mwv207_db.c b/drivers/gpu/drm/mwv207/mwv207_db.c
+index ce906af..7f9db50 100644
+--- a/drivers/gpu/drm/mwv207/mwv207_db.c
++++ b/drivers/gpu/drm/mwv207/mwv207_db.c
+@@ -50,6 +50,7 @@ int mwv207_db_init(struct mwv207_device *jdev)
+ void mwv207_db_fini(struct mwv207_device *jdev)
+ {
+ 	devm_kfree(jdev->dev, jdev->db);
++	jdev->db = NULL;   /* avoid a dangling pointer for in-flight ioctls */
+ }
+ 
+ int mwv207_db_add(struct mwv207_device *jdev, u32 key, u32 val)
+@@ -93,7 +94,7 @@ void mwv207_db_sort(struct mwv207_device *jdev)
+ 	if (db->nr < 2)
+ 		return;
+ 
+-	sort(db->db, db->nr, 8, cmp_key, NULL);
++	sort(db->db, db->nr, sizeof(*db->db), cmp_key, NULL);
+ 
+ 
+ 	for (i = 0; i < db->nr - 1; ++i) {
+@@ -115,7 +116,8 @@ int mwv207_db_ioctl(struct drm_device *dev, void *data,
+ 	switch (args->op) {
+ 	case 1:
+ 		rec.key = args->nr_recs;
+-		result = bsearch(&rec, db->db, db->nr, 8, cmp_key);
++		rec.val = 0;
++		result = bsearch(&rec, db->db, db->nr, sizeof(*db->db), cmp_key);
+ 		if (!result) {
+ 			args->recs = 0;
+ 			return -ENOENT;
+@@ -124,9 +126,13 @@ int mwv207_db_ioctl(struct drm_device *dev, void *data,
+ 
+ 		break;
+ 	case 0:
+-		if (args->recs)
+-			return copy_to_user((void __user *)args->recs, db->db,
+-					db->nr * sizeof(struct drm_mwv207_info_rec));
++		if (args->recs) {
++			unsigned long left = copy_to_user((void __user *)args->recs,
++					db->db, db->nr * sizeof(struct drm_mwv207_info_rec));
++			if (left)
++				return -EFAULT;
++			return 0;
++		}
+ 		args->nr_recs = db->nr;
+ 
+ 		break;
+diff --git a/drivers/gpu/drm/mwv207/mwv207_irq.c b/drivers/gpu/drm/mwv207/mwv207_irq.c
+index 987d8a9..0e37eea 100644
+--- a/drivers/gpu/drm/mwv207/mwv207_irq.c
++++ b/drivers/gpu/drm/mwv207/mwv207_irq.c
+@@ -143,8 +143,14 @@ int mwv207_irq_init(struct mwv207_device *jdev)
+ 		return -ENODEV;
+ 
+ 
+-	for (i = 0; i < 64; ++i)
+-		irq_create_mapping(jdev->irq_domain, i);
++	for (i = 0; i < 64; ++i) {
++		/* A failed mapping surfaces later as BUG_ON(va_irq == 0) in
++		 * mwv207_kms.c or request_irq(0) -ENOMEM; fail cleanly here. */
++		if (!irq_create_mapping(jdev->irq_domain, i)) {
++			ret = -ENOMEM;
++			goto free_mapping_partial;
++		}
++	}
+ 
+ 	ret = pci_alloc_irq_vectors(pdev, 1, 1, PCI_IRQ_MSI | PCI_IRQ_LEGACY);
+ 	if (ret < 1) {
+@@ -161,10 +167,13 @@ int mwv207_irq_init(struct mwv207_device *jdev)
+ free_vec:
+ 	pci_free_irq_vectors(pdev);
+ free_mapping:
+-	for (i = 0; i < 64; ++i) {
++	i = 64;
++free_mapping_partial:
++	for (; i-- > 0;) {
+ 		int irq = irq_find_mapping(jdev->irq_domain, i);
+ 
+-		irq_dispose_mapping(irq);
++		if (irq)
++			irq_dispose_mapping(irq);
+ 	}
+ 
+ 	irq_domain_remove(jdev->irq_domain);
+diff --git a/drivers/gpu/drm/mwv207/mwv207_submit.c b/drivers/gpu/drm/mwv207/mwv207_submit.c
+index 7a3a373..f184367 100644
+--- a/drivers/gpu/drm/mwv207/mwv207_submit.c
++++ b/drivers/gpu/drm/mwv207/mwv207_submit.c
+@@ -60,8 +60,8 @@ static inline int mwv207_submit_select_engine(struct drm_device *dev, struct mwv
+ 		return -ENODEV;
+ 
+ 	if (args->engine_id == 0xffffffff)
+-		id = id_max;
+-	else if (args->engine_id >= 0 && args->engine_id < id_max)
++		id = id_max;   /* entities[nr] is the dedicated 'any' entity */
++	else if (args->engine_id < id_max)
+ 		id = args->engine_id;
+ 	else
+ 		return -ENODEV;
+@@ -82,8 +82,13 @@ static int mwv207_submit_init_job_reloc(struct mwv207_job *mjob, struct drm_mwv2
+ 	mjob->relocs = kvmalloc_array(mjob->nr_relocs,
+ 			sizeof(struct drm_mwv207_submit_reloc), GFP_KERNEL);
+ 
+-	return copy_from_user(mjob->relocs, (void __user *)args->relocs,
+-			sizeof(struct drm_mwv207_submit_reloc) * mjob->nr_relocs);
++	if (copy_from_user(mjob->relocs, (void __user *)args->relocs,
++			sizeof(struct drm_mwv207_submit_reloc) * mjob->nr_relocs)) {
++		kvfree(mjob->relocs);
++		mjob->relocs = NULL;
++		return -EFAULT;
++	}
++	return 0;
+ }
+ 
+ static int mwv207_submit_init_job_bo(struct mwv207_job *mjob,
+@@ -115,8 +120,10 @@ static int mwv207_submit_init_job_bo(struct mwv207_job *mjob,
+ 
+ 	ret = copy_from_user(ubos, (void __user *)args->bos,
+ 			mjob->nr_bos * sizeof(*ubos));
+-	if (ret)
++	if (ret) {
++		ret = -EFAULT;
+ 		goto out;
++	}
+ setup_mtvb:
+ 	mjob->mtvb = kvcalloc(mjob->nr_bos + mjob->nr_cmd_dat,
+ 			sizeof(struct mwv207_tvb), GFP_KERNEL);
+@@ -171,7 +178,9 @@ static int mwv207_submit_init_job_cmd(struct mwv207_job *mjob, struct drm_mwv207
+ 	if (!mjob->cmds)
+ 		return -ENOMEM;
+ 
+-	return copy_from_user(mjob->cmds, (void __user *)args->cmds, mjob->cmd_size);
++	if (copy_from_user(mjob->cmds, (void __user *)args->cmds, mjob->cmd_size))
++		return -EFAULT;
++	return 0;
+ }
+ 
+ static int mwv207_submit_init_job_cmd_dat(struct drm_device *dev,
+@@ -206,8 +215,10 @@ static int mwv207_submit_init_job_cmd_dat(struct drm_device *dev,
+ 
+ 	ret = copy_from_user(udats, (void __user *)args->cmd_dats,
+ 			mjob->nr_cmd_dat * sizeof(struct drm_mwv207_submit_cmd_dat));
+-	if (ret)
++	if (ret) {
++		ret = -EFAULT;
+ 		goto out;
++	}
+ 
+ 	for (i = 0; i < mjob->nr_cmd_dat; ++i) {
+ 		if ((int)udats[i].nr_relocs < 0) {
+@@ -237,8 +248,10 @@ static int mwv207_submit_init_job_cmd_dat(struct drm_device *dev,
+ 			}
+ 			ret = copy_from_user(mdat->relocs, (void __user *)udats[i].relocs,
+ 					mdat->nr_relocs * sizeof(struct drm_mwv207_submit_reloc));
+-			if (ret)
++			if (ret) {
++				ret = -EFAULT;
+ 				goto out;
++			}
+ 		}
+ 		mdat->dat_size = udats[i].dat_size;
+ 		mdat->dat = kvmalloc(mdat->dat_size, GFP_KERNEL);
+@@ -247,8 +260,10 @@ static int mwv207_submit_init_job_cmd_dat(struct drm_device *dev,
+ 			goto out;
+ 		}
+ 		ret = copy_from_user(mdat->dat, (void __user *)udats[i].dat, mdat->dat_size);
+-		if (ret)
++		if (ret) {
++			ret = -EFAULT;
+ 			goto out;
++		}
+ 		ret = mwv207_bo_create(jdev, mdat->dat_size, 0x1000, ttm_bo_type_device,
+ 				0x2, (1<<0),
+ 				&mdat->jbo);
+-- 
+2.51.0
+

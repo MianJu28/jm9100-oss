@@ -1,0 +1,17 @@
+# 上游源码树 — gitee jemoic 克隆(含嵌套 .git, 无法作为普通文件纳入管理);
+# 全部缺陷修复以补丁形式保存在 patches/0001-0007, 可作用于上游克隆复现
+src/
+
+# 二进制载荷 — 构建产物(mesa build-full 输出), 可由 src + patches 复现;
+# 含 >50MB 大文件不适合 git 管理; 部署用 switch-mwv207-oss.sh 自 payload 构建
+payload-24/
+
+# 外部兼容环境 — deb 解包产物(deepin libva 2.22)
+compat-env/
+
+# 编译产物
+tests/cl-test
+tests/egl-smoke
+tests/egl-smoke-ldconfig
+tests/gltest-mwv207
+*.o

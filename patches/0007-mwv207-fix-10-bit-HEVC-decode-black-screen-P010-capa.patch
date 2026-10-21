@@ -1,0 +1,115 @@
+From 6cb20bd761d543cf18cc2d74451c44edc846394f Mon Sep 17 00:00:00 2001
+From: MianJu <2462692286@qq.com>
+Date: Wed, 21 Oct 2026 13:44:46 +0800
+Subject: [PATCH] mwv207: fix 10-bit HEVC decode black screen (P010 capability
+ lie + PPU output mismatch)
+
+1. mwv207_is_video_format_supported: second switch unconditionally
+   overwrote the format verdict with profile support (OR instead of
+   AND), advertising P010/P016/YV12/IYUV/UYVY/YUYV/BGRA as supported.
+   VA frontend config.c then broadcasts VA_RT_FORMAT_YUV420_10BPP,
+   ffmpeg/mpv create P010 surfaces for Main10 streams, but
+   texture_infos has no R16_UNORM/R16G16_UNORM entry so the P010
+   planes can never get a sampler view -> mwv207_blit refuses the
+   p010->nv12 conversion every frame -> black window.
+   Fix: AND semantics, with PIPE_VIDEO_PROFILE_UNKNOWN (VPP/image
+   list paths) exempt from profile filtering.
+
+2. mwv207_dec_pp_params_init: bit_depth>8 unconditionally set
+   out_p010=1 regardless of the actual target buffer format.  With
+   the capability fix, 10-bit streams now negotiate NV12 surfaces;
+   the PPU would write P010 (pixel_width=16, doubled stride) into
+   8-bit buffers.  Fix: choose out_p010 only for P010/P016 targets,
+   otherwise use the hardware down-conversion path out_cut_8bits
+   (PP_OUT_FMT_YUV420_8BIT, output pixel_width=8, NV12 half-plane
+   layout) so 10-bit decode lands correctly in NV12.
+---
+ .../video-codec/mwv207/mwv207_video_dec.c     | 19 ++++++++-
+ .../mwv207/video-codec/mwv207_video_codec.c   | 41 ++++++++++++-------
+ 2 files changed, 44 insertions(+), 16 deletions(-)
+
+diff --git a/src/gallium/drivers/mwv207/video-codec/mwv207/mwv207_video_dec.c b/src/gallium/drivers/mwv207/video-codec/mwv207/mwv207_video_dec.c
+index 9a6a7ac..2f4ec9d 100644
+--- a/src/gallium/drivers/mwv207/video-codec/mwv207/mwv207_video_dec.c
++++ b/src/gallium/drivers/mwv207/video-codec/mwv207/mwv207_video_dec.c
+@@ -215,7 +215,24 @@ mwv207_dec_pp_params_init(struct mwv207_video_dec *dec,
+    }
+ 
+    if (bit_depth > 8) {
+-      ppu_ext_cfg->out_p010 = 1;
++      /* FIX(jm9100-oss): 原实现位深 >8 时无条件 out_p010=1, 却不看
++       * outsurface 实际是什么 buffer——target 为 NV12 时 PPU 会按
++       * P010(pixel_width=16, 双倍 stride)写入 8bit buffer, 越界/错位。
++       * 现在按目标 buffer 的实际格式分流:
++       *  - P010/P016 目标: 维持 out_p010=1(硬件 fmt_p010_support=1);
++       *  - 8bit 目标(NV12): 走 PPU 硬件降位输出 out_cut_8bits=1
++       *    (mwv207_pp_unit_set_int_config: out_format=
++       *     PP_OUT_FMT_YUV420_8BIT, 输出 pixel_width=8, NV12 半平面),
++       *    解码核心仍按 10bit 输出到 staging, 仅输出级降到 8bit。
++       * 配套 is_video_format_supported 的 AND 语义修复后, ffmpeg/mpv
++       * 对 10bit 流会协商出 NV12 surface, 走到 cut_8bits 分支。 */
++      if (target &&
++          (target->buffer_format == PIPE_FORMAT_P010 ||
++           target->buffer_format == PIPE_FORMAT_P016)) {
++         ppu_ext_cfg->out_p010 = 1;
++      } else {
++         ppu_ext_cfg->out_cut_8bits = 1;
++      }
+    }
+    ppu_ext_cfg->outsurface = target;
+    
+diff --git a/src/gallium/drivers/mwv207/video-codec/mwv207_video_codec.c b/src/gallium/drivers/mwv207/video-codec/mwv207_video_codec.c
+index b331b37..60e321c 100644
+--- a/src/gallium/drivers/mwv207/video-codec/mwv207_video_codec.c
++++ b/src/gallium/drivers/mwv207/video-codec/mwv207_video_codec.c
+@@ -103,21 +103,32 @@ mwv207_is_video_format_supported(struct pipe_screen *pscreen,
+       break;
+    }
+ 
+-   switch (profile) {
+-   case PIPE_VIDEO_PROFILE_MPEG4_AVC_BASELINE:
+-   case PIPE_VIDEO_PROFILE_MPEG4_AVC_CONSTRAINED_BASELINE:
+-   case PIPE_VIDEO_PROFILE_MPEG4_AVC_MAIN:
+-   case PIPE_VIDEO_PROFILE_MPEG4_AVC_EXTENDED:
+-   case PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH:
+-   case PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH10:
+-   case PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH422:
+-   case PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH444:
+-   case PIPE_VIDEO_PROFILE_HEVC_MAIN:
+-   case PIPE_VIDEO_PROFILE_HEVC_MAIN_10:
+-      ret = true;
+-      break;
+-   default:
+-      break;
++   /* FIX(jm9100-oss): 原实现是两个独立 switch, 第二个按 profile 的 switch
++    * 无条件 ret = true, 把第一个按 format 的判定结果整体覆盖(OR 语义)。
++    * 后果: P010/P016/YV12/IYUV/UYVY/YUYV/BGRA 等一律被谎报支持——
++    * VA 前端 config.c 据此广播 VA_RT_FORMAT_YUV420_10BPP, ffmpeg/mpv
++    * 为 10bit 流创建 P010 surface, 而纹理格式表(texture_infos)并无
++    * R16_UNORM/R16G16_UNORM, P010 平面建不出 sampler view, 渲染端
++    * blit 全拒 → 10bit HEVC 硬解黑屏(mwv207_blit.c:947)。
++    * 正确语义是 AND: format 支持 && 该 profile 的解码链路可用。
++    * 例外: VPP 配置传入 PIPE_VIDEO_PROFILE_UNKNOWN, 不做 profile 过滤。 */
++   if (ret && profile != PIPE_VIDEO_PROFILE_UNKNOWN) {
++      switch (profile) {
++      case PIPE_VIDEO_PROFILE_MPEG4_AVC_BASELINE:
++      case PIPE_VIDEO_PROFILE_MPEG4_AVC_CONSTRAINED_BASELINE:
++      case PIPE_VIDEO_PROFILE_MPEG4_AVC_MAIN:
++      case PIPE_VIDEO_PROFILE_MPEG4_AVC_EXTENDED:
++      case PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH:
++      case PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH10:
++      case PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH422:
++      case PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH444:
++      case PIPE_VIDEO_PROFILE_HEVC_MAIN:
++      case PIPE_VIDEO_PROFILE_HEVC_MAIN_10:
++         break;
++      default:
++         ret = false;
++         break;
++      }
+    }
+    return ret;
+ }
+-- 
+2.51.0
+
