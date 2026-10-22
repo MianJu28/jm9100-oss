@@ -41,6 +41,19 @@ sudo ./switch-mwv207-oss.sh install    # 切换到开源栈 (自动快照+看门
 4. `FULLFEATURE-REPORT.md` — rusticl OpenCL / VDPAU / 全 codec 全功能栈
 5. `PHASE5-SWITCH-REPORT.md` — 切换脚本重构 + glamor 点亮破案 + 冷启动验证
 6. `PERFORMANCE-REPORT.md` — glmark2 性能调查: devfreq 启动失败缺陷修复 + 四因子分离
+7. `FIREFOX-BLACKSCREEN-INVESTIGATION.md` — Firefox 首帧黑屏: Xorg 合成器死区定位 + 守护缓解
+
+## Firefox 首帧黑屏 (已定案 + 缓解)
+
+根因在 **Xorg 合成器侧**: 窗口 map 后 0–4ms 内的第一次 X 层绘制被永久丢弃
+(纯 `XCopyArea` 同样复现, 与 GL 栈无关; 生产树 EGL/X11/DRI3 与上游 mesa-24.1.2
+`diff -w` = 0 行, 厂商零改动)。Firefox 冷启动首页/恢复页的首帧 present 恰在
+死区内 → 永黑; 外部 URL/动画页/mpv 因首呈现较晚而不受影响。
+
+当前处置: 驱动栈回退至 `5e6f2dd` (撤销 `libEGL.so` 无后缀名拦截) → Firefox
+走系统 llvmpipe **显示正常**; 其余能力 (GLX 直渲 / VA 硬解 / OpenCL) 不受影响。
+通用缓解: `daemon/map-monitor.c` — 监听窗口 Map, 延迟 50ms 发 1×1 `XClearArea`
+触发 Expose, 客户端自动补画死区内容 (探针实测恢复 254,0,0)。
 
 ## GPU 频率修复 (系统级, 已部署)
 
