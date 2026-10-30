@@ -1,47 +1,62 @@
 #!/bin/bash
 # ============================================================================
-# switch-mwv207-oss.sh — JM9100 (MWV207) 开源全功能驱动栈 系统级切换/回滚
+# switch-mwv207.sh — JM9100 (MWV207) 开源全功能驱动栈 统一切换/回滚脚本
 # ============================================================================
-# 生成于 2026-10-21，取代旧 switch-to-oss.sh (690 行, 缺陷记录于
-# reports/PHASE5-SWITCH-REPORT.md §2, 脚本本体已清理)。
+# 2026-10-31 由 switch-mwv207-oss.sh (用户态, 701 行) 与 switch-mwv207-kmd.sh
+# (内核态, 483 行) 合并而来。两者操作的对象完全不同, 合并的动机是"一个入口、
+# 一次看全": 判断桌面为什么是软件渲染时, 需要同时看用户态栈和 KMD 身份。
 #
-# 载荷: mesa-24.1.2 build-full (GL/EGL + VA-API 硬解 + VDPAU + OpenCL rusticl)
-#   含本会话全部缺陷修复 (patches/0001-0006) 与 OpenHarmony 仓库移植的
-#   H264/HEVC 硬件解码 (video-codec 56 文件)。
-#
-# 与旧脚本的架构差异 (旧脚本逐行分析结论, 详见 STAGE5-SWITCH-REPORT.md):
-#   1. 无 KMD 切换段 —— mwv207 已是内核 modules.alias 默认驱动 (0731:9100),
-#      不需要任何 modprobe.d / initramfs / grub 操作。旧脚本第 2/6 节为死代码。
-#   2. 非 glvnd 构建的私有目录方案 —— 本载荷 libEGL/libGL 未按 glvnd 构建
-#      (无 eglvnd 入口), 不能走 glvnd ICD; 改为:
-#        /etc/ld.so.conf.d/00-mwv207-oss.conf  (排最前, 实测优先级有效)
-#        + SONAME 胶水副本 (libEGL.so.1/libGL.so.1/libgbm.so.1/...)
-#      ldconfig 缓存按 SONAME 索引, 故必须为公开名做 patchelf 改名副本;
-#      libGL.so.1 副本同样关键 —— epoxy 探测 GL 版本时会 dlopen libGL.so.1,
-#      命中系统 glvnd GL 则无有效 context → glamor "Ignoring GL < 2.1"
-#      (2026-10-21 08:28 实测; 09:23 补副本后 glamor 点亮)。
-#        另: mwv207_dri.so 为安装目录内带 $ORIGIN rpath 的实体副本 ——
-#      Xorg 经 dri 目录软链加载时 NEEDED libglapi 必须由 rpath 解析 (实证)。
-#   3. 零 env 方案 —— GL/EGL/VA/VDPAU 全部经默认搜索路径自动命中:
-#        DRI   /usr/local/lib/aarch64-linux-gnu/dri/mwv207_dri.so (编译期默认)
-#        VA    /usr/lib/aarch64-linux-gnu/dri/mwv207_drv_video.so (libva 默认,
-#              驱动名自动探测 = 内核驱动名 mwv207, 实测有效)
-#        VDPAU /usr/lib/aarch64-linux-gnu/vdpau/libvdpau_mwv207.so.1
-#      仅 OpenCL 需 RUSTICL_ENABLE=mwv207 (environment.d/environment/profile.d)。
-#   4. 看门狗 —— lightdm 重启后 240s 内监视 Xorg.0.log 软渲染标记, 命中即自动
-#      回滚 (判据与旧脚本一致, 已对当前日志实证标定)。
+# 分层(操作互不干扰, 可单独切换):
+#   用户态 (umd)  Mesa/GL/EGL/VA-API/VDPAU/OpenCL —— 载荷目录 + ldconfig + 软链
+#   内核态 (kmd)  mwv207.ko —— 内核内建版 vs 自建带修复版, 靠 srcversion 区分
 #
 # 用法:
-#   sudo ./switch-mwv207-oss.sh check              # 预检 (不改系统)
-#   sudo ./switch-mwv207-oss.sh install            # 安装+切换+自动验证
-#   sudo ./switch-mwv207-oss.sh rollback           # 回滚到系统软件栈
-#   sudo ./switch-mwv207-oss.sh rollback --no-restart   # 回滚但不重启 lightdm
-#   sudo ./switch-mwv207-oss.sh status             # 查看当前状态
-#   sudo ./switch-mwv207-oss.sh verify             # 安装后自检
-#   sudo ./switch-mwv207-oss.sh watchdog           # (内部) 看门狗循环
+#   sudo ./switch-mwv207.sh status                # 同时看用户态 + 内核态
+#   sudo ./switch-mwv207.sh check                 # 两层一起预检
+#   sudo ./switch-mwv207.sh verify                # 两层一起自检
 #
-# 注意: install/rollback 会重启 lightdm —— 图形会话将被终止 (包括浏览器),
-#       lightdm 回来后需重新登录。脚本与看门狗运行在 systemd 系统层, 不受影响。
+#   sudo ./switch-mwv207.sh umd install           # 装用户态载荷并切换 (会重启 lightdm)
+#   sudo ./switch-mwv207.sh umd rollback [--no-restart]
+#   sudo ./switch-mwv207.sh umd {check|verify|status}
+#   sudo ./switch-mwv207.sh umd watchdog          # (内部) 看门狗循环
+#
+#   sudo ./switch-mwv207.sh kmd check             # 预检 (不需 root)
+#   ./switch-mwv207.sh kmd build                  # 构建 src/kernel-6.6 (不需 root)
+#   sudo ./switch-mwv207.sh kmd status            # 内建/自建/实际加载 三方对照
+#   sudo ./switch-mwv207.sh kmd install           # 装自建模块并热切换 (会停 lightdm)
+#   sudo ./switch-mwv207.sh kmd rollback
+#   ./switch-mwv207.sh kmd --dry-run install      # 只打印将执行的命令
+#   ./switch-mwv207.sh kmd --root /tmp/fake rehearse   # 假根演练, 零副作用
+#
+# 全局选项 (须写在子命令之前):
+#   --root <dir>   把"系统"搬到假根下 (供 kmd rehearse 演练)
+#   --dry-run      特权命令只打印不执行
+#
+# 用户态要点 (2026-10-21 实证, 详见 reports/PHASE5-SWITCH-REPORT.md):
+#   1. 非 glvnd 构建的私有目录方案 —— 本载荷 libEGL/libGL 未按 glvnd 构建,
+#      不能走 glvnd ICD; 改为 /etc/ld.so.conf.d/00-mwv207-oss.conf 排最前
+#      + SONAME 胶水副本 (libEGL.so.1/libGL.so.1/libgbm.so.1/...)。
+#      libGL.so.1 副本同样关键 —— epoxy 探测 GL 版本时 dlopen libGL.so.1,
+#      命中系统 glvnd GL 则无有效 context → glamor "Ignoring GL < 2.1"。
+#        另: mwv207_dri.so 为安装目录内带 $ORIGIN rpath 的实体副本 ——
+#      Xorg 经 dri 目录软链加载时 NEEDED libglapi 必须由 rpath 解析 (实证)。
+#   2. 零 env 方案 —— GL/EGL/VA/VDPAU 全部经默认搜索路径自动命中。
+#      仅 OpenCL 需 RUSTICL_ENABLE=mwv207。
+#   3. 看门狗 —— lightdm 重启后 240s 内监视 Xorg.0.log 软渲染标记, 命中即回滚。
+#
+# 内核态要点 (都是踩过的坑):
+#   1. 模块名就叫 mwv207, 与内核内建的**同名**。所以"谁生效"不能靠名字判断,
+#      只能比对 srcversion: /sys/module/mwv207/srcversion 是已加载的那个,
+#      两个候选 .ko 各自 modinfo -F srcversion 是磁盘上的。三者一比就清楚。
+#   2. 自建模块放 /lib/modules/$KVER/updates/dkms/ —— depmod 的既有顺序里
+#      /updates 优先于 /kernel, 所以 depmod -a 之后 modprobe 会挑到它。
+#   3. 换模块必须先 modprobe -r, 而 Xorg 持有 /dev/dri (refcnt 常是几十),
+#      所以顺序固定为: 停显示管理器 → rmmod → depmod → modprobe → 校验 →
+#      起显示管理器 → 再校验。任一步失败自动回滚。
+#   4. 回滚不是"删掉了事": 内建 .ko 一直都在, 回滚 = 删掉 updates 里的副本
+#      + depmod -a + 重新 modprobe。install 前先备份并记 md5, rollback 后
+#      要求它逐字节不变。
+#   5. 签名不挡路 (SecureBoot 已关、lockdown none), 所以不做签模块这一步。
 # ============================================================================
 set -u
 
@@ -68,7 +83,7 @@ INST_DIR="/usr/local/lib/mwv207-oss"                  # 载荷安装目录 (平�
 CACHE_DIR="/var/lib/mwv207-oss"                       # 状态+历史+载荷缓存
 STATE_FILE="$CACHE_DIR/active-stack"
 HIST_ROOT="$CACHE_DIR/switch-history"
-LOG_FILE="/var/log/mwv207-oss-switch.log"
+LOG_FILE="/var/log/mwv207-switch.log"
 SELF_INSTALLED="/usr/local/sbin/mwv207-oss-switch"
 STAMP="/run/mwv207-oss-switch.stamp"
 
@@ -158,12 +173,54 @@ MANAGED=(
     "$SYS_ENVIRONMENT"
 )
 
-# ----------------------------- 基础工具 ------------------------------------
-log()  { echo "[$(date '+%F %T')] $*" | tee -a "$LOG_FILE" 2>/dev/null || echo "[$(date '+%F %T')] $*"; }
-die()  { log "错误: $*"; exit 1; }
-need_root() { [ "$(id -u)" = 0 ] || die "请以 root 运行: sudo $0 $*"; }
 
-# 仓库内可用载荷目录, 新版本优先 (payload-25 排在 payload-24 之前)
+# ----------------------------- 全局选项 -------------------------------------
+# --root 把整个"系统"搬到假根下, 用来做零副作用演练
+R=""
+# --dry-run 只打印特权命令
+DRY_RUN=0
+
+# ----------------------------- 基础工具 ------------------------------------
+# 注意: 原实现是 `echo ... | tee -a "$LOG_FILE" 2>/dev/null || echo ...` ——
+# 非 root 时 tee 写 /var/log 失败被 2>/dev/null 吞掉, 于是走 || 分支再打一遍,
+# 每条日志出现两行。改成先 echo 到 stdout, 写日志文件失败时静默跳过。
+log()  { echo "[$(date '+%F %T')] $*"; { echo "[$(date '+%F %T')] $*" >> "$LOG_FILE"; } 2>/dev/null || true; }
+die()  { log "错误: $*"; exit 1; }
+warn() { log "[WARN] $*"; }
+
+# 特权命令统一走 run(): 演练/假根时只打印
+run() {
+    printf '  + %s\n' "$*"
+    [ -n "$R" ] && return 0
+    [ "$DRY_RUN" = 1 ] && return 0
+    "$@"
+}
+
+need_root() {
+    [ -n "$R" ] && return 0          # 假根演练不需要 root
+    [ "$DRY_RUN" = 1 ] && return 0
+    [ "$(id -u)" = 0 ] || die "请以 root 运行: sudo $0 $*"
+}
+
+
+# ============================ 内核态 (kmd) 常量 =============================
+KVER=$(uname -r)
+SRC_DIR="$WORKDIR/src/kernel-6.6"
+KOBJ="/lib/modules/$KVER/build"
+
+# 内建 (内核自带) 与自建 (放 updates) 两个位置
+IN_TREE_REL="kernel/drivers/gpu/drm/mwv207/mwv207.ko"
+DKMS_REL="updates/dkms/mwv207.ko"
+
+# 路径统一经过 rp(): 假根演练时前缀 $R
+rp() { if [ -n "$R" ]; then echo "$R$1"; else echo "$1"; fi; }
+ko_in_tree() { rp "/lib/modules/$KVER/$IN_TREE_REL"; }
+ko_dkms()    { rp "/lib/modules/$KVER/$DKMS_REL"; }
+ko_state()   { rp "/var/lib/mwv207-oss/kmd"; }
+
+
+# ============================ 用户态 (umd) =============================
+
 repo_payloads() {
     local d
     for d in "$WORKDIR"/payload-*; do
@@ -206,10 +263,10 @@ kernel_driver() {
     lsmod | awk '$1=="mwv207"{print "mwv207"}' | head -1
 }
 
-active_stack() { [ -f "$STATE_FILE" ] && cat "$STATE_FILE" | head -1 || echo "unknown"; }
+umd_active_stack() { [ -f "$STATE_FILE" ] && cat "$STATE_FILE" | head -1 || echo "unknown"; }
 
 # ----------------------------- check: 预检 ---------------------------------
-cmd_check() {
+umd_check() {
     echo "== MWV207 开源栈切换 预检 =="
     local rc=0
 
@@ -271,14 +328,14 @@ cmd_check() {
         fi
     fi
 
-    local cur; cur=$(active_stack)
+    local cur; cur=$(umd_active_stack)
     [ "$cur" = "oss-$ver" ] && echo "  [注意] 当前已是 oss 栈 ($cur, install 将拒绝, 除非 --force)"
     echo "== 预检结果: $([ $rc = 0 ] && echo 通过 || echo 未通过) =="
     return $rc
 }
 
 # ----------------------------- 备份/回滚框架 --------------------------------
-backup_snapshot() {
+umd_backup_snapshot() {
     local ts hist
     ts=$(date '+%Y%m%d-%H%M%S')
     hist="$HIST_ROOT/$ts"
@@ -303,7 +360,7 @@ backup_snapshot() {
     echo "$ts"
 }
 
-restore_snapshot() {
+umd_restore_snapshot() {
     local hist="$1" line status p enc
     while IFS=$'\t' read -r status p; do
         [ -n "${p:-}" ] || continue
@@ -331,7 +388,7 @@ restore_snapshot() {
 }
 
 # ----------------------------- install -------------------------------------
-deploy_payload() {
+umd_deploy() {
     local src="$1"
     rm -rf "$INST_DIR"; mkdir -p "$INST_DIR"
     local f
@@ -376,26 +433,26 @@ deploy_payload() {
     cp -f "$src/MANIFEST.sha256" "$CACHE_DIR/manifest.sha256" || die "无法保存 MANIFEST"
 }
 
-cmd_install() {
-    need_root install
+umd_install() {
+    need_root "umd install"
     local force=0
     [ "${1:-}" = "--force" ] && force=1
 
-    cmd_check >/dev/null 2>&1 || { cmd_check; die "预检未通过, 中止"; }
+    umd_check >/dev/null 2>&1 || { umd_check; die "预检未通过, 中止"; }
     local src; src=$(payload_src) || die "无载荷"
     local ver; ver=$(payload_version "$src")
 
-    local cur; cur=$(active_stack)
+    local cur; cur=$(umd_active_stack)
     [ "$cur" = "oss-$ver" ] && [ $force = 0 ] && die "当前已是 oss 栈 ($cur)。如需重装: install --force"
 
     log "==== install 开始 (载荷 $src, 版本 $ver) ===="
 
     # 1) 备份快照
-    local ts; ts=$(backup_snapshot "$ver")
+    local ts; ts=$(umd_backup_snapshot "$ver")
     log "已创建系统快照: $HIST_ROOT/$ts"
 
     # 2) 部署载荷 + 缓存
-    deploy_payload "$src"
+    umd_deploy "$src"
     log "载荷已部署: $INST_DIR ($(du -sh "$INST_DIR" | cut -f1))"
 
     # 2.5) 测试工具随缓存 —— 供自安装副本 (/usr/local/sbin) 的 verify 使用
@@ -457,18 +514,18 @@ cmd_install() {
 
     # 10) 自检验证
     sleep 8
-    if wait_xorg_and_check; then
+    if umd_wait_xorg; then
         systemctl stop mwv207-oss-watchdog 2>/dev/null || true
         log "install 完成: glamor 硬件加速已生效"
-        # 自检失败必须以非零退出 —— 原实现丢弃 cmd_verify 的 rc, 即使
+        # 自检失败必须以非零退出 —— 原实现丢弃 umd_verify 的 rc, 即使
         # VA/OpenCL/EGL 全挂, install 依然报成功。这里不自动回滚(图形已可用),
         # 只把失败如实上报。
-        cmd_verify || die "install 已切换但自检未通过 (见上); 未自动回滚, 如需还原请执行 rollback"
+        umd_verify || die "install 已切换但自检未通过 (见上); 未自动回滚, 如需还原请执行 rollback"
         return 0
     else
         log "install 后 X 仍为软件渲染 → 自动回滚"
         systemctl stop mwv207-oss-watchdog 2>/dev/null || true
-        do_rollback "watchdog-script" ""   # 不再重启: 下一步会重启
+        umd_do_rollback "watchdog-script" ""   # 不再重启: 下一步会重启
         systemctl restart lightdm
         die "切换失败已回滚, 详见 $LOG_FILE / $XORG_LOG"
     fi
@@ -477,27 +534,27 @@ cmd_install() {
 # Xorg.0.log 的 "Time: ..." 在 "(==) Log file:" 行内, 不在首行! 首行是
 # "[148885.730] $" 时间戳空行 —— head -n1|sed 抓不到 Time 会返回空值,
 # 被上层判为 "无新日志" (2026-10-21 03:06/03:24 两次安装均实测踩坑,
-# 导致 wait_xorg_and_check 超时假性回滚)。grep -m1 全文抓取彻底修复。
-xorg_log_epoch() {
+# 导致 umd_wait_xorg 超时假性回滚)。grep -m1 全文抓取彻底修复。
+umd_xorg_log_epoch() {
     local t
     t=$(grep -m1 "Time:" "$XORG_LOG" 2>/dev/null | sed 's/.*Time: //')
     [ -n "$t" ] && date -d "$t" +%s 2>/dev/null
 }
-stamp_epoch() { stat -c %Y "$STAMP" 2>/dev/null || echo 0; }
-xorg_log_is_new() {  # $1 = 基准 epoch
-    local e; e=$(xorg_log_epoch) || return 1
+umd_stamp_epoch() { stat -c %Y "$STAMP" 2>/dev/null || echo 0; }
+umd_xorg_log_is_new() {  # $1 = 基准 epoch
+    local e; e=$(umd_xorg_log_epoch) || return 1
     [ -n "$e" ] && [ "$e" -ge "$1" ]
 }
 
 # 等待新 Xorg 日志并检查标记
-wait_xorg_and_check() {
+umd_wait_xorg() {
     local se i
-    se=$(stamp_epoch)
+    se=$(umd_stamp_epoch)
     for i in $(seq 1 40); do
-        [ -f "$XORG_LOG" ] && xorg_log_is_new "$se" && break
+        [ -f "$XORG_LOG" ] && umd_xorg_log_is_new "$se" && break
         sleep 3
     done
-    xorg_log_is_new "$se" || { log "未等到新 Xorg 日志(Time 校验)"; return 1; }
+    umd_xorg_log_is_new "$se" || { log "未等到新 Xorg 日志(Time 校验)"; return 1; }
     # 再等 glamor 探测完成(新 Xorg 启动 ~2s 内写 glamor 行, 多留余量)
     for i in $(seq 1 10); do
         grep -qiE "$PASS_MARKERS" "$XORG_LOG" && break
@@ -517,14 +574,14 @@ wait_xorg_and_check() {
 }
 
 # ----------------------------- rollback ------------------------------------
-do_rollback() {
+umd_do_rollback() {
     local reason="${1:-manual}" no_restart="${2:-}"
     local hist="$HIST_ROOT/LATEST"
     [ -d "$hist" ] || die "无回滚快照 ($HIST_ROOT)"
     log "==== rollback 开始 (原因: $reason, 快照: $hist) ===="
-    restore_snapshot "$hist"
+    umd_restore_snapshot "$hist"
     # MANAGED 路径 (LDCONF/INST_DIR/ENVIRONMENT_D/PROFILE_D/OPENCL_ICD) 一律由
-    # restore_snapshot 三态语义处理, 不可在此无条件 rm —— 否则会把快照恢复出的
+    # umd_restore_snapshot 三态语义处理, 不可在此无条件 rm —— 否则会把快照恢复出的
     # "装前已存在"状态再次破坏 (2026-10-21 10:19 实证: 装前手动部署态被恢复后
     # 又被 rm 掉, 只剩 DRI_LINK 悬垂指向已删除的 INST_DIR)。此处只清瞬态文件。
     rm -f "$STAMP" 2>/dev/null
@@ -538,20 +595,20 @@ do_rollback() {
     log "rollback 完成 (系统已还原为软件渲染栈; 载荷缓存保留于 $CACHE_DIR/payload-cache)"
 }
 
-cmd_rollback() {
-    need_root rollback
-    do_rollback "manual" "${1:-}"
+umd_rollback() {
+    need_root "umd rollback"
+    umd_do_rollback "manual" "${1:-}"
 }
 
 # ----------------------------- watchdog (内部) -----------------------------
-cmd_watchdog() {
+umd_watchdog() {
     local stamp="${1:-$STAMP}" i se
     se=$(stat -c %Y "$stamp" 2>/dev/null || echo 0)
     for i in $(seq 1 60); do
         sleep 4
         [ -f "$XORG_LOG" ] || continue
         # Time 校验: 只认本次切换之后新起的 Xorg 写的日志
-        local e; e=$(xorg_log_epoch) || continue
+        local e; e=$(umd_xorg_log_epoch) || continue
         [ -n "$e" ] && [ "$e" -ge "$se" ] || continue
         # PASS 优先(见 FAIL_MARKERS 注释): 加速点亮的日志也会带 DRISWRAST 行
         if grep -qiE "$PASS_MARKERS" "$XORG_LOG"; then
@@ -560,7 +617,7 @@ cmd_watchdog() {
         fi
         if grep -qE "$FAIL_MARKERS" "$XORG_LOG"; then
             log "看门狗: 新 Xorg 日志命中软件渲染标记 → 自动回滚: $(grep -m1 -E "$FAIL_MARKERS" "$XORG_LOG")"
-            do_rollback "watchdog" ""
+            umd_do_rollback "watchdog" ""
             exit 1
         fi
     done
@@ -568,7 +625,7 @@ cmd_watchdog() {
 }
 
 # ----------------------------- verify / status ------------------------------
-cmd_verify() {
+umd_verify() {
     echo "== 安装后自检 =="
     local rc=0
     for s in libEGL.so.1 libGL.so.1 libgbm.so.1 libGLESv2.so.2; do
@@ -649,9 +706,9 @@ cmd_verify() {
     return $rc
 }
 
-cmd_status() {
+umd_status() {
     echo "== MWV207 开源栈状态 =="
-    echo "  活动栈:     $(active_stack)"
+    echo "  活动栈:     $(umd_active_stack)"
     echo "  内核驱动:   $(kernel_driver 2>/dev/null || echo 未知)"
     local src ver
     if src=$(payload_src); then
@@ -663,8 +720,8 @@ cmd_status() {
     # 自安装副本才是 watchdog / rollback 的实际执行者; 它与仓库脚本不一致,
     # 就意味着回滚跑的是旧逻辑。
     if [ -f "$SELF_INSTALLED" ]; then
-        if [ -f "$WORKDIR/switch-mwv207-oss.sh" ]; then
-            cmp -s "$SELF_INSTALLED" "$WORKDIR/switch-mwv207-oss.sh" \
+        if [ -f "$WORKDIR/switch-mwv207.sh" ]; then
+            cmp -s "$SELF_INSTALLED" "$WORKDIR/switch-mwv207.sh" \
                 && echo "  自安装副本: 与仓库脚本一致" \
                 || echo "  自安装副本: [WARN] 与仓库脚本不同 (重新 install 可同步)"
         else
@@ -682,20 +739,462 @@ cmd_status() {
     sudo grep -m2 -iE "$PASS_MARKERS|$FAIL_MARKERS" "$XORG_LOG" 2>/dev/null | sed 's/^/     /' || echo "     (无日志)"
     echo "  -- ICD:"
     ls "$OPENCL_DIR" 2>/dev/null | sed 's/^/     /'
+    return 0
 }
 
-# ----------------------------- main ----------------------------------------
+# ============================ 内核态 (kmd) =============================
+
+# ---- 模块身份 ----
+
+# 已加载模块的 srcversion（未加载则空）
+loaded_srcver() {
+    cat /sys/module/mwv207/srcversion 2>/dev/null
+}
+loaded_refcnt() {
+    awk '$1=="mwv207"{print $3}' /proc/modules 2>/dev/null
+}
+ko_srcver() {
+    [ -f "$1" ] || { echo ""; return; }
+    modinfo -F srcversion "$1" 2>/dev/null
+}
+ko_field() {
+    [ -f "$1" ] || { echo ""; return; }
+    modinfo -F "$2" "$1" 2>/dev/null
+}
+# modprobe 下次会挑哪个文件
+next_module_path() {
+    modinfo -n mwv207 2>/dev/null
+}
+
+# ---- check ----
+
+kmd_check() {
+    local rc=0
+    log "预检（内核 $KVER）"
+
+    if [ -d "$(rp "$KOBJ")" ] || [ -d "$KOBJ" ]; then
+        log "  [OK] 内核构建目录: $KOBJ"
+    else
+        warn "  缺少内核构建目录 $KOBJ（需要 linux-headers-$KVER）"; rc=1
+    fi
+
+    if command -v make >/dev/null && command -v modinfo >/dev/null; then
+        log "  [OK] make / modinfo 可用"
+    else
+        warn "  缺少 make 或 modinfo"; rc=1
+    fi
+
+    if [ -f "$(ko_in_tree)" ] || [ -f "$(ko_in_tree)" ]; then
+        log "  [OK] 内核内建模块存在: $(ko_in_tree)"
+    else
+        warn "  找不到内核内建模块，rollback 将无从恢复"; rc=1
+    fi
+
+    # SecureBoot / lockdown
+    if command -v mokutil >/dev/null 2>&1; then
+        case "$(mokutil --sb-state 2>/dev/null)" in
+            *enabled*) warn "  SecureBoot 已开启：自建模块需要签名，否则加载失败"; rc=1;;
+            *)         log "  [OK] SecureBoot 未开启";;
+        esac
+    fi
+    [ -r "$(rp /sys/kernel/security/lockdown)" ] && \
+        log "  lockdown: $(cat "$(rp /sys/kernel/security/lockdown)")"
+
+    # 当前加载情况
+    local lv; lv=$(loaded_srcver)
+    if [ -n "$lv" ]; then
+        log "  当前已加载 mwv207，srcversion=$lv，refcnt=$(loaded_refcnt)"
+        log "  下次 modprobe 会挑: $(next_module_path)"
+    else
+        warn "  mwv207 当前未加载"
+    fi
+
+    # /dev/dri 占用（决定能不能 rmmod）
+    if command -v fuser >/dev/null 2>&1 && [ -z "$R" ]; then
+        local users
+        users=$(fuser /dev/dri/* 2>/dev/null | tr -s ' ')
+        [ -n "${users// /}" ] && warn "  /dev/dri 正被占用（停显示管理器后才可能 rmmod）: $users"
+    fi
+
+    # 磁盘空间（模块 5.6MB，备份一次也就 6MB 级）
+    local avail; avail=$(df -Pk / 2>/dev/null | awk 'NR==2{print $4}')
+    if [ -n "$avail" ] && [ "$avail" -lt 102400 ]; then
+        warn "  / 剩余不足 100MB"; rc=1
+    fi
+
+    [ "$rc" = 0 ] && log "预检通过" || warn "预检有问题（见上）"
+    return "$rc"
+}
+
+# ---- build ----
+
+kmd_build() {
+    [ -d "$SRC_DIR" ] || die "源码目录不存在: $SRC_DIR"
+    log "构建 $SRC_DIR"
+    make -C "$KOBJ" M="$SRC_DIR" CONFIG_DRM_MWV207=m || die "构建失败"
+    [ -f "$SRC_DIR/mwv207.ko" ] || die "没有产出 mwv207.ko"
+
+    local vm kvm
+    vm=$(ko_field "$SRC_DIR/mwv207.ko" vermagic)
+    kvm=$(cat "$KOBJ/include/config/kernel.release" 2>/dev/null || echo "$KVER")
+    log "  产物: $(stat -c %s "$SRC_DIR/mwv207.ko") B  srcversion=$(ko_srcver "$SRC_DIR/mwv207.ko")"
+    log "  vermagic: $vm"
+    case "$vm" in
+        "$kvm"*) log "  [OK] vermagic 与目标内核一致";;
+        *)       die "vermagic 不匹配（期望 $kvm）";;
+    esac
+}
+
+# ---- status ----
+
+kmd_status() {
+    log "KMD 状态（内核 $KVER）"
+    local it="$(ko_in_tree)" dk="$(ko_dkms)"
+    printf '  %-28s %s\n' "内建模块:"   "$it"
+    printf '  %-28s %s\n' "  存在/srcversion:" "$([ -f "$it" ] && echo "是 / $(ko_srcver "$it")" || echo 否)"
+    printf '  %-28s %s\n' "自建模块:"   "$dk"
+    printf '  %-28s %s\n' "  存在/srcversion:" "$([ -f "$dk" ] && echo "是 / $(ko_srcver "$dk")" || echo 否)"
+    printf '  %-28s %s\n' "实际加载 srcversion:" "$(loaded_srcver)"
+    printf '  %-28s %s\n' "refcnt:" "$(loaded_refcnt)"
+    printf '  %-28s %s\n' "下次 modprobe 挑:" "$(next_module_path)"
+
+    local lv is dkv; lv=$(loaded_srcver); is=$(ko_srcver "$it"); dkv=$(ko_srcver "$dk")
+    if [ -z "$lv" ]; then
+        echo "  → 未加载"
+    elif [ -n "$dkv" ] && [ "$lv" = "$dkv" ]; then
+        echo "  → 正在跑【自建版】"
+    elif [ "$lv" = "$is" ]; then
+        echo "  → 正在跑【内核内建版】"
+    else
+        echo "  → 正在跑一个两边都对不上的版本（源码/sysfs 不一致？）"
+    fi
+
+    # 注意: 原写法 `[ -f ... ] && log ...` 在没有备份文件时会让整个 status
+    # 返回 1, 于是 "status" 这个只读命令被误报成失败。改成显式 if。
+    if [ -f "$(ko_state)/backup.md5" ]; then
+        log "  上次备份: $(cat "$(ko_state)/backup.md5")"
+    fi
+    return 0
+}
+
+# ---- 备份 / 恢复 ----
+
+kmd_do_backup() {
+    local it="$(ko_in_tree)"
+    [ -f "$it" ] || die "找不到内建模块，拒绝继续: $it"
+    run mkdir -p "$(ko_state)"
+    run cp -a "$it" "$(ko_state)/mwv207.ko.in-tree"
+    local m; m=$(md5sum "$it" | awk '{print $1}')
+    if [ -z "$R" ] && [ "$DRY_RUN" = 0 ]; then echo "$m" > "$(ko_state)/backup.md5"; fi
+    log "  已备份内建模块 → $(ko_state)/mwv207.ko.in-tree (md5 $m)"
+    echo "$m"
+}
+
+# ---- 显示管理器 ----
+
+stop_display() {
+    if systemctl list-unit-files 2>/dev/null | grep -q '^lightdm\.service'; then
+        log "  停止 lightdm（释放 /dev/dri）"
+        run systemctl stop lightdm
+        sleep 2
+    else
+        warn "  没有 lightdm，需自行确保 X/合成器已退出"
+    fi
+}
+
+start_display() {
+    if systemctl list-unit-files 2>/dev/null | grep -q '^lightdm\.service'; then
+        run systemctl start lightdm
+    fi
+}
+
+wait_x_ok() {
+    local i
+    [ -n "$R" ] && return 0
+    for i in $(seq 1 20); do
+        if grep -qE 'glamor X acceleration enabled|glamor initialized' /var/log/Xorg.0.log 2>/dev/null; then
+            log "  [OK] Xorg glamor 已点亮"
+            return 0
+        fi
+        sleep 1
+    done
+    warn "  Xorg 日志里没看到 glamor 标记"
+    return 1
+}
+
+# ---- install ----
+
+kmd_install() {
+    need_root "kmd install"
+    kmd_build
+    local src="$SRC_DIR/mwv207.ko" it="$(ko_in_tree)" dk="$(ko_dkms)"
+
+    log "安装自建模块"
+    local backup_md5; backup_md5=$(kmd_do_backup)
+    [ -n "$backup_md5" ] || die "备份失败"
+
+    # 装到 updates（depmod 顺序里优先）
+    run install -D -m 0644 "$src" "$dk"
+    run depmod -a "$KVER"
+
+    local installed; installed=$(ko_srcver "$dk")
+    log "  已放置: $dk (srcversion $installed)"
+
+    stop_display
+    log "  卸载旧模块并加载新模块"
+    if ! run modprobe -r mwv207; then
+        warn "  modprobe -r 失败（仍被占用）"
+        kmd_do_rollback
+        die "无法卸载旧模块，已回滚"
+    fi
+    if ! run modprobe mwv207; then
+        warn "  modprobe 新模块失败"
+        kmd_do_rollback
+        die "新模块加载失败，已回滚"
+    fi
+
+    sleep 1
+    local lv; lv=$(loaded_srcver)
+    if [ "$lv" != "$installed" ]; then
+        warn "  加载后 srcversion=$lv，期望 $installed"
+        kmd_do_rollback
+        die "加载的不是新模块，已回滚"
+    fi
+
+    start_display
+    wait_x_ok || { warn "  X 未点亮"; kmd_do_rollback; die "显示未恢复，已回滚"; }
+
+    log "安装完成：正在跑【自建版】(srcversion $lv)"
+    kmd_verify
+}
+
+# ---- rollback ----
+
+kmd_do_rollback() {
+    local it="$(ko_in_tree)" dk="$(ko_dkms)"
+    log "回滚到内核内建模块"
+    stop_display
+    [ -f "$dk" ] && run rm -f "$dk"
+    run depmod -a "$KVER"
+    run modprobe -r mwv207
+    run modprobe mwv207
+    sleep 1
+    local lv is; lv=$(loaded_srcver); is=$(ko_srcver "$it")
+    log "  回滚后 srcversion=$lv（内建应为 $is）"
+
+    # 内建 .ko 必须逐字节没被我们动过
+    if [ -f "$(ko_state)/backup.md5" ] && [ -z "$R" ] && [ "$DRY_RUN" = 0 ]; then
+        local want now
+        want=$(cat "$(ko_state)/backup.md5"); now=$(md5sum "$it" | awk '{print $1}')
+        [ "$want" = "$now" ] && log "  [OK] 内建模块 md5 未变 ($now)" \
+                             || warn "  内建模块 md5 变了: $want → $now"
+    fi
+    start_display
+}
+
+kmd_rollback() {
+    need_root "kmd rollback"
+    kmd_do_rollback
+    log "已回滚"
+}
+
+# ---- verify ----
+
+kmd_verify() {
+    local rc=0 it="$(ko_in_tree)" dk="$(ko_dkms)"
+    log "校验"
+    local lv is dkv
+    lv=$(loaded_srcver); is=$(ko_srcver "$it"); dkv=$(ko_srcver "$dk")
+
+    if [ -z "$lv" ]; then warn "  mwv207 未加载"; rc=1
+    elif [ -n "$dkv" ] && [ "$lv" = "$dkv" ]; then log "  [OK] 正在跑自建版 ($lv)"
+    elif [ "$lv" = "$is" ]; then log "  [OK] 正在跑内建版 ($lv)"
+    else warn "  srcversion=$lv 与两个候选都不符"; rc=1; fi
+
+    [ -e /dev/dri/renderD128 ] && log "  [OK] /dev/dri/renderD128 在" || { warn "  没有 renderD128"; rc=1; }
+    [ -e /dev/dri/card0 ]      && log "  [OK] /dev/dri/card0 在"      || { warn "  没有 card0"; rc=1; }
+
+    # DRM 版本（内核给的 name/date，能区分是否真是 mwv207）
+    if [ -x /tmp/drmver ]; then
+        local out; out=$(/tmp/drmver 2>/dev/null | tr '\n' ' ')
+        [ -n "$out" ] && log "  DRM: $out"
+    fi
+
+    # 连到显示器的头像
+    for c in /sys/class/drm/card*-*; do
+        [ -e "$c/status" ] || continue
+        local st; st=$(cat "$c/status" 2>/dev/null)
+        [ "$st" = "connected" ] && log "  显示器: $(basename "$c") $st"
+    done
+
+    # 用户态是否还能画（要 X）
+    if [ -n "${DISPLAY:-}" ] && command -v glxinfo >/dev/null 2>&1; then
+        glxinfo -B 2>/dev/null | grep -E 'OpenGL renderer|OpenGL version' | sed 's/^/  /'
+    fi
+
+    [ "$rc" = 0 ] && log "校验通过" || warn "校验有问题"
+    return "$rc"
+}
+
+# ---- 演练：假根里 install → rollback ----
+
+kmd_rehearse() {
+    [ -n "$R" ] || die "rehearse 必须配合 --root 使用，例如: $0 --root /tmp/kmd-rehearse rehearse"
+    local it="$(ko_in_tree)" dk="$(ko_dkms)"
+    log "演练（假根 $R，零副作用）"
+
+    [ -f "$it" ] || die "假根里没有内建模块，先把一个 .ko 拷到 $it"
+    local before; before=$(md5sum "$it" | awk '{print $1}')
+    log "  演练前 内建 md5=$before"
+
+    log "—— 第 1 步：模拟 install 的文件操作 ——"
+    local bm; bm=$(kmd_do_backup)
+    mkdir -p "$(ko_state)"
+    cp -a "$it" "$(ko_state)/mwv207.ko.in-tree"
+    mkdir -p "$(dirname "$dk")" && cp -a "$SRC_DIR/mwv207.ko" "$dk"
+    local dkv; dkv=$(ko_srcver "$dk")
+    log "  假根内自建模块 srcversion=$dkv"
+    [ "$dkv" = "$(ko_srcver "$SRC_DIR/mwv207.ko")" ] \
+        && log "  [OK] 自建模块已就位" || die "自建模块没就位"
+
+    log "—— 第 2 步：模拟 rollback ——"
+    rm -f "$dk"
+    [ -f "$dk" ] && die "rollback 没删掉自建模块"
+    log "  [OK] updates 里的副本已删除"
+
+    local after; after=$(md5sum "$it" | awk '{print $1}')
+    log "  演练后 内建 md5=$after"
+    if [ "$before" = "$after" ]; then
+        log "  [OK] 内建模块逐字节未变 → 回滚可完全还原"
+    else
+        die "内建模块被改动了！$before → $after"
+    fi
+    if [ -f "$(ko_state)/mwv207.ko.in-tree" ]; then
+        local bmd; bmd=$(md5sum "$(ko_state)/mwv207.ko.in-tree" | awk '{print $1}')
+        [ "$bmd" = "$before" ] && log "  [OK] 备份副本与原件一致 ($bmd)" \
+                               || warn "  备份副本与原件不一致: $bmd vs $before"
+    fi
+    # 关键一步：证明 depmod 会优先挑 updates 里的那份（否则装了也白装）
+    log "—— 第 3 步：验证 depmod 的挑选顺序（两边同名时谁赢）——"
+    if command -v depmod >/dev/null 2>&1; then
+        mkdir -p "$(dirname "$dk")" && cp -a "$SRC_DIR/mwv207.ko" "$dk"
+        local base all entry
+        base=$(cd "$R" && pwd)
+        all=$(depmod -b "$base" -n "$KVER" 2>/dev/null)
+        entry=$(printf '%s\n' "$all" | grep -m1 '^.*mwv207\.ko:$')
+        if [ -z "$entry" ]; then
+            warn "  depmod -n 无输出（假根缺内核符号表，属正常）——此项未验证"
+        else
+            printf '  %s\n' "$entry"
+            printf '%s\n' "$all" | grep '^alias pci:.* mwv207$' | sed 's/^/  /'
+            case "$entry" in
+                updates/dkms/mwv207.ko:*)
+                    log "  [OK] modules.dep 选的是 updates 里的自建模块（/updates 优先于 /kernel）";;
+                *)
+                    warn "  modules.dep 没按预期选 updates，需要复核";;
+            esac
+            if printf '%s\n' "$all" | grep -q '^softdep mwv207 pre: governor_performance'; then
+                log "  [OK] 自建模块带 patch 0008 的 softdep"
+            else
+                warn "  softdep 缺失（检查 mwv207_drv.c 的 MODULE_SOFTDEP）"
+            fi
+        fi
+        rm -f "$dk"
+        [ -f "$dk" ] && warn "  清理失败：$dk 还在"
+    else
+        warn "  没有 depmod，跳过顺序验证"
+    fi
+
+    log "演练通过：install 的落点 / rollback 的清除 / 内建模块的不变性 / depmod 的优先级 均已验证"
+    log "（真实加载/卸载/显示恢复只能在真机上验，见 --dry-run install 打印的命令序列）"
+}
+
+# ---- dry-run 打印 ----
+
+kmd_dryrun() {
+    local src="$SRC_DIR/mwv207.ko" it="$(ko_in_tree)" dk="$(ko_dkms)"
+    log "dry-run：计划在真机上执行的命令序列（本次不执行任何特权操作）"
+    log "当前状态"
+    printf '  内建模块      %s  srcversion=%s\n' "$it" "$(ko_srcver "$it")"
+    printf '  自建模块      %s  srcversion=%s\n' "$src" "$(ko_srcver "$src")"
+    printf '  已加载        srcversion=%s  refcnt=%s\n' "$(loaded_srcver)" "$(loaded_refcnt)"
+    printf '  下次 modprobe %s\n' "$(next_module_path)"
+    log "计划步骤（共 9 步，任一步失败自动回滚）"
+    cat <<EOF
+  1) 备份内建模块     cp -a $it $(ko_state)/mwv207.ko.in-tree
+  2) 放置自建模块     install -D -m 0644 $src $dk
+  3) 刷新模块索引     depmod -a $KVER
+  4) 停显示管理器     systemctl stop lightdm
+  5) 卸载旧模块       modprobe -r mwv207          # 现 refcnt=$(loaded_refcnt)
+  6) 加载新模块       modprobe mwv207
+  7) 校验身份         cat /sys/module/mwv207/srcversion   # 期望 $(ko_srcver "$src")
+  8) 起显示管理器     systemctl start lightdm
+  9) 等 glamor 点亮   grep -E 'glamor X acceleration enabled|glamor initialized' /var/log/Xorg.0.log
+  回滚 = 删 $dk + depmod -a + 重加载内建 + 起 lightdm + 核对内建 md5 未变
+EOF
+}
+
+# ----------------------------- usage ---------------------------------------
+usage() {
+    sed -n '2,20p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+}
+
+# ----------------------------- 分层派发 ------------------------------------
+umd_main() {
+    case "${1:-help}" in
+        check)    shift; umd_check "$@" ;;
+        install)  shift; umd_install "$@" ;;
+        rollback) shift; umd_rollback "$@" ;;
+        verify)   shift; umd_verify "$@" ;;
+        status)   shift; umd_status "$@" ;;
+        watchdog) shift; umd_watchdog "$@" ;;
+        *)        usage ;;
+    esac
+}
+
+kmd_main() {
+    case "${1:-help}" in
+        check)    shift; kmd_check "$@" ;;
+        build)    shift; kmd_build "$@" ;;
+        status)   shift; kmd_status "$@" ;;
+        install)  shift; if [ "$DRY_RUN" = 1 ]; then kmd_dryrun "$@"; else kmd_install "$@"; fi ;;
+        rollback) shift; kmd_rollback "$@" ;;
+        verify)   shift; kmd_verify "$@" ;;
+        rehearse) shift; kmd_rehearse "$@" ;;
+        *)        usage ;;
+    esac
+}
+
+# 全局选项可写在任意位置 (层名前后都行): 逐个扫描参数, 收下选项、留下位置参数。
+# 原实现只在开头收一次, 于是 "kmd --dry-run install" 这种更自然的写法会被
+# 当成未知命令打 usage。
 main() {
-    mkdir -p "$CACHE_DIR" "$HIST_ROOT"
-    local cmd="${1:-help}"
-    case "$cmd" in
-        check)    shift; cmd_check "$@" ;;
-        install)  shift; cmd_install "$@" ;;
-        rollback) shift; cmd_rollback "$@" ;;
-        verify)   shift; cmd_verify "$@" ;;
-        status)   shift; cmd_status "$@" ;;
-        watchdog) shift; cmd_watchdog "$@" ;;
-        *) sed -n '2,40p' "${BASH_SOURCE[0]}" | grep '^#' | sed 's/^# \{0,2\}//' ;;
+    local pos=()
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --root)    R="$2"; shift 2 ;;
+            --root=*)  R="${1#*=}"; shift ;;
+            --dry-run) DRY_RUN=1; shift ;;
+            --)        shift; while [ $# -gt 0 ]; do pos+=("$1"); shift; done ;;
+            *)         pos+=("$1"); shift ;;
+        esac
+    done
+    [ -n "$R" ] && LOG_FILE="$R/var/log/mwv207-switch.log"
+
+    mkdir -p "$CACHE_DIR" "$HIST_ROOT" 2>/dev/null || true
+
+    set -- "${pos[@]+"${pos[@]}"}"
+    local layer="${1:-}"
+    local cmd="${2:-}"
+    case "$layer" in
+        umd)  shift 2; umd_main "${cmd:-help}" "$@" ;;
+        kmd)  shift 2; kmd_main "${cmd:-help}" "$@" ;;
+        # 不带层名的 status/check/verify 同时跑两层 —— 桌面异常时要一起看
+        status) shift; umd_status "$@"; echo; kmd_status "$@" ;;
+        check)  shift; umd_check "$@";  echo; kmd_check "$@" ;;
+        verify) shift; umd_verify "$@"; echo; kmd_verify "$@" ;;
+        ""|help|-h|--help) usage ;;
+        *) usage; exit 1 ;;
     esac
 }
 main "$@"

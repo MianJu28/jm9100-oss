@@ -160,7 +160,7 @@ X Error of failed request: BadValue ... (X_GLXCreateContext)
 
 两条可行路：
 1. `git worktree add` 检出 `6cb20bd`，在工作树里插 instrumentation（版本号即匹配）；
-2. 用 `tools/make-payload.sh` 产出完整 payload 并 `switch-mwv207-oss.sh install`，
+2. 用 `tools/make-payload.sh` 产出完整 payload 并 `switch-mwv207.sh umd install`，
    让 libGL 与 DRI 版本一致。
 
 推荐 ①（不触碰系统安装）。

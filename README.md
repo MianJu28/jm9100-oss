@@ -9,10 +9,12 @@ Deepin 25 aarch64 / 内核 6.6.143-arm64-desktop-hwe / JingjiaMicro JM9100
 ## 快速使用
 
 ```bash
-sudo ./switch-mwv207-oss.sh status     # 查看当前栈状态
-sudo ./switch-mwv207-oss.sh verify     # 14 项安装自检 (零 env, 非侵入)
-sudo ./switch-mwv207-oss.sh rollback   # 一键回滚系统软件栈
-sudo ./switch-mwv207-oss.sh install    # 切换到开源栈 (自动快照+看门狗+自检)
+sudo ./switch-mwv207.sh status              # 一次看全: 用户态栈 + KMD 身份
+sudo ./switch-mwv207.sh umd install         # 切换到开源用户态栈 (快照+看门狗+自检)
+sudo ./switch-mwv207.sh umd verify          # 14 项安装自检 (零 env, 非侵入)
+sudo ./switch-mwv207.sh umd rollback        # 一键回滚系统软件栈
+sudo ./switch-mwv207.sh kmd status          # KMD: 内建/自建/实际加载 三方对照
+sudo ./switch-mwv207.sh kmd install         # KMD 切换为自建带修复版 (需 root)
 ```
 
 安装后系统级入口: `/usr/local/sbin/mwv207-oss-switch` (自安装副本, 载荷走
@@ -22,8 +24,8 @@ sudo ./switch-mwv207-oss.sh install    # 切换到开源栈 (自动快照+看门
 
 | 目录 | 功能 |
 |------|------|
-| `switch-mwv207-oss.sh` | 切换脚本 (根目录入口): check/install/rollback/verify/status/watchdog |
-| `switch-mwv207-kmd.sh` | KMD 切换脚本: check/build/status/install/rollback/verify + `--root` 假根演练 / `--dry-run` |
+| `switch-mwv207.sh` | 统一切换脚本 (根目录入口, 1188 行): `umd` 用户态层 + `kmd` 内核态层; 不带层名的 `status`/`check`/`verify` 同时跑两层。全局选项 `--root`/`--dry-run` 可写在任意位置 |
+| — (2026-10-31 合并) | 原 `switch-mwv207-oss.sh`(701 行, 用户态) 与 `switch-mwv207-kmd.sh`(483 行, 内核态) 已并入上一条, 不再单独维护 |
 | `reports/` | 阶段报告 14 份: 逐行分析 / 兼容性 / VA 硬解移植 / 全功能栈 / 切换脚本 / 性能调查 / 黑屏定案 / 运行态快照 / GLES 3.2 与鲁棒访问 / 16 位格式 / KMD 6.6 移植 |
 | `patches/` | 缺陷修复补丁集 0001-0012 (KMD 2 个 + UMD 4 个 + 硬解移植 1 个 + 10bit HEVC 黑屏修复 1 个 + GLES 3.2/鲁棒访问/16位格式 1 个 + 显存单位与 winsys O2/O3 1 个 + KMD 6.6 移植 1 个) |
 | `payload-24/` | Mesa 24.1.2 全功能栈载荷源 (GL+VA+VDPAU+OpenCL, MANIFEST 校验) —— **不含** GLES 3.2 等后续修复 |
@@ -72,5 +74,5 @@ sudo ./switch-mwv207-oss.sh install    # 切换到开源栈 (自动快照+看门
 ## 路径约定
 
 仓库内所有脚本使用**相对自身位置**的路径 (不硬编码用户主目录):
-`switch-mwv207-oss.sh` 以脚本所在目录为仓库根; `tests/*.sh` 以 `..` 为仓库根。
+`switch-mwv207.sh` 以脚本所在目录为仓库根; `tests/*.sh` 以 `..` 为仓库根。
 移动仓库目录或换用户调用均不受影响。

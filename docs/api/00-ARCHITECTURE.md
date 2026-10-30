@@ -275,7 +275,7 @@ LIBGL_DRIVERS_PATH=$PWD/build-full/src/gallium/targets/dri \
 MESA_LOADER_DRIVER_OVERRIDE=mwv207 glxinfo -B
 
 # 4) 正式安装到系统
-#    产物 --> payload-24/ --> switch-mwv207-oss.sh install
+#    产物 --> payload-24/ --> switch-mwv207.sh umd install
 ```
 
 产物路径：`build-full/src/gallium/targets/dri/libmwv207_dri.so`，

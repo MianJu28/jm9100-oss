@@ -33,7 +33,7 @@ FROM=""
 OUT=""
 VER=""
 
-# 10 个实体文件 (MANIFEST 的校验对象) —— 必须与 switch-mwv207-oss.sh 的
+# 10 个实体文件 (MANIFEST 的校验对象) —— 必须与 switch-mwv207.sh 的
 # REAL_FILES 完全一致, 否则安装侧会 cp 失败。
 REAL_FILES=(
     libEGL_mwv207.so.1.0.0
@@ -52,7 +52,7 @@ FROM_BUILD=(
     "libmwv207_dri.so:src/gallium/targets/dri/libmwv207_dri.so"
     "libmwv207_drv_video.so:src/gallium/targets/va/libmwv207_drv_video.so"
 )
-# 内部 SONAME 软链 (与 switch-mwv207-oss.sh 的 SONAME_LINKS 保持一致;
+# 内部 SONAME 软链 (与 switch-mwv207.sh 的 SONAME_LINKS 保持一致;
 # mwv207_dri.so 不在此列 —— 它由安装侧用 cp -l 建实体副本并打 $ORIGIN rpath)
 declare -A SONAME_LINKS=(
     [libEGL_mwv207.so.1]=libEGL_mwv207.so.1.0.0
@@ -177,5 +177,5 @@ info "DRI 内 GLSL 版本标记:"
 strings "$OUT/libmwv207_dri.so" | grep -oE 'OpenGL ES GLSL ES [0-9]+\.[0-9]+' | sort -u | sed 's/^/  /' || true
 
 info "完成: $OUT"
-info "下一步: 只读核对 ——  ./switch-mwv207-oss.sh check   (不会动系统)"
-info "        真正部署 ——  sudo ./switch-mwv207-oss.sh install"
+info "下一步: 只读核对 ——  ./switch-mwv207.sh umd check   (不会动系统)"
+info "        真正部署 ——  sudo ./switch-mwv207.sh umd install"
