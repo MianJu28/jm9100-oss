@@ -23,6 +23,7 @@ sudo ./switch-mwv207-oss.sh install    # 切换到开源栈 (自动快照+看门
 | 目录 | 功能 |
 |------|------|
 | `switch-mwv207-oss.sh` | 切换脚本 (根目录入口): check/install/rollback/verify/status/watchdog |
+| `switch-mwv207-kmd.sh` | KMD 切换脚本: check/build/status/install/rollback/verify + `--root` 假根演练 / `--dry-run` |
 | `reports/` | 阶段报告 14 份: 逐行分析 / 兼容性 / VA 硬解移植 / 全功能栈 / 切换脚本 / 性能调查 / 黑屏定案 / 运行态快照 / GLES 3.2 与鲁棒访问 / 16 位格式 / KMD 6.6 移植 |
 | `patches/` | 缺陷修复补丁集 0001-0012 (KMD 2 个 + UMD 4 个 + 硬解移植 1 个 + 10bit HEVC 黑屏修复 1 个 + GLES 3.2/鲁棒访问/16位格式 1 个 + 显存单位与 winsys O2/O3 1 个 + KMD 6.6 移植 1 个) |
 | `payload-24/` | Mesa 24.1.2 全功能栈载荷源 (GL+VA+VDPAU+OpenCL, MANIFEST 校验) —— **不含** GLES 3.2 等后续修复 |

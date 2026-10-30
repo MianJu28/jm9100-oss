@@ -131,3 +131,41 @@ make -C /lib/modules/6.6.155-arm64-desktop-hwe/build M=src/kernel-6.6 CONFIG_DRM
 
 步骤 A 完成：**已产出一个"6.6 兼容 + 保留 legacy ABI + 含我们全部 KMD 修复"的 `mwv207.ko`**，
 未安装、未加载。是否部署（步骤 B）待定。
+---
+
+## 9. 切换脚本与演练（2026-10-30）
+
+`switch-mwv207-kmd.sh` 已写好并通过演练 —— **全程零副作用，未加载、未安装任何模块**。
+
+命令：`check` / `build` / `status` / `install` / `rollback` / `verify`，
+另有 `--root <假根> rehearse`（假根演练）与 `--dry-run install`（只打印命令序列）。
+
+### 演练证明了四件事
+
+| 验证项 | 结果 |
+|---|---|
+| install 的落点 | 自建 `.ko` 正确落到 `.../updates/dkms/mwv207.ko`，`srcversion EC9AA08F…` |
+| rollback 的清除 | 删掉该副本后，假根回到"只有内建模块"的状态 |
+| 内建模块不变性 | 演练前后 md5 均为 `6c43aa45…`；备份副本与原件逐字节一致 |
+| depmod 优先级 | `depmod -b <假根> -n` 中 `mwv207` 的首个落点是 `updates/dkms/mwv207.ko`，且带 `softdep mwv207 pre: governor_performance` |
+
+**第 4 项是关键**：两个模块同名（`mwv207`），如果 depmod 挑的是 `/kernel/...` 那份，
+装了也白装。演练里用 `depmod -n`（只打印不写文件）证明了 `/updates` 优先。
+
+### 另外两条实测
+
+- `build` 复跑通过，vermagic 与目标内核逐字一致。唯一警告 `mwv207_drv.c:246 unused variable 'primary'` 是基线自带的。
+- 无 root 时 `install` 正确拒绝：`[FAIL] 需要 root`。
+
+### 只能在真机上验的（脚本留了判据 + 自动回滚）
+
+停 lightdm 后 refcnt 能否归零、`modprobe -r` 是否真成功、新模块 probe 是否成功、Xorg 是否点亮。
+任一步失败，脚本自动 `do_rollback`（删副本 → depmod → 重加载内建 → 起 lightdm → 核对内建 md5 未变）。
+
+### 部署前提
+
+本机**没有免密 sudo**，真正部署需要手动执行（输入密码）：
+```
+sudo ./switch-mwv207-kmd.sh install      # 9 步 + 自动回滚
+sudo ./switch-mwv207-kmd.sh rollback     # 随时恢复
+```
