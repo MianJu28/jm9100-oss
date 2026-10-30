@@ -22,6 +22,8 @@ REPO = os.path.normpath(os.path.join(ROOT, '..'))
 SRC_DIRS = [
     os.path.join(REPO, 'src', 'oh-mesa', 'User_source_code', 'mesa-24.1.2', 'src', 'gallium'),
     os.path.join(REPO, 'src', 'kernel'),
+    # 社区 6.6 移植（我们的 K 修复已搬进这棵树）：文档里的 KMD 行号多以它为准
+    os.path.join(REPO, 'src', 'kernel-6.6'),
     os.path.join(REPO, 'src', 'mesa'),
 ]
 # 厂商发布包内的 KMD 寄存器头（只读、外部数据，可能不存在）：存在时纳入校验，

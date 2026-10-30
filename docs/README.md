@@ -10,6 +10,7 @@
 
 | 文档 | 内容 |
 |---|---|
+| **[UNRESOLVED.md](UNRESOLVED.md)** | **未修复缺陷与未实现功能总清单（唯一索引，先看这个）** |
 | [00-ARCHITECTURE.md](api/00-ARCHITECTURE.md) | 系统分层、文件清单与职责、数据流、构建与加载 |
 | [01-WINSYS-KMD.md](api/01-WINSYS-KMD.md) | winsys/drm 层 API、BO/CS 生命周期、ioctl ABI（UMD 与 KMD 两套） |
 | [02-CORE-OBJECTS.md](api/02-CORE-OBJECTS.md) | screen/context 虚表、完整 capability 表、资源与格式、表面与镜像描述符 |
