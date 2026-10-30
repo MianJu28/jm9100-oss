@@ -84,6 +84,70 @@ K8/K9/K12 引自原报告，本树未复核（KMD 的 `irq.c`/`sched.c`/`ttm.c` 
 - 三个选项（A 保留声明并注明 / B 回退到只保留 R16_UNORM / C 继续追查），
   目前**尚未由用户决定**。
 
+### C4 遮挡查询结果失真（已修复 2026-10-31）
+
+- **现象**：`GL_SAMPLES_PASSED` 第 0 轮恒 `0`、之后恒 `0xFFFFFFFF`（应约等于被覆盖像素数）；
+  `GL_ANY_SAMPLES_PASSED` 恒 `0`。22.3.7 原栈同症状 → **非本轮引入**。
+- **根因**：`mwv207_get_query_result()` 用 `uint64_t *results` 按 **8 字节**步进累加
+  （`for (i = 0; i <= query->query_id; i++) count += results[i];`），
+  而硬件实际布局是**每槽 64 字节、槽内前 `cluster_count` 个 u32 才是各簇计数**
+  （BO 为 `bo_create(64*100)`，`ws->cluster_mask=0xf` → `cluster_count=4`，
+  4×1024=4096 与 64×64 全屏吻合）。原循环既步进错又用 `<=` 越界。
+- **修复**（`mwv207_query.c:246-261`，commit `b2ab2c9`）：
+
+  ```c
+  uint32_t *w = (uint32_t *)results;
+  for (int i = 0; i < query->query_id; i++) {
+     uint32_t *slot = w + i * 16;              /* 每槽 64 字节 = 16 个 u32 */
+     for (int c = 0; c < ctx->ws->cluster_count; c++)
+        count += slot[c];
+  }
+  ```
+
+- **破译依据**：反编译闭源 `libdrm_jmgpu.so` 的 `jmo_HARDWARE_SetQuery`(0xdbc00, size 0x960)
+  得到寄存器常量 `0x3824 / 0x3830 / 0x3860`，正是开源 `0xE09 / 0xE0C / 0xE18` 的 `<<2`，
+  对应厂商 `MWV207REG_OCCLUSION_ADDRESS / _DATA / _CONTROL`（`MODE` 取值含 `COUNT 0x0`、
+  `BOOLEAN 0x1`、`RENDER 0x6`…）。详见 `docs/reverse/05-OCCLUSION-QUERY.md`。
+  ⚠ 此前判"厂商库查不到"是 **grep 假象**：厂商头地址是**大写 5 位** `0x03824`，
+  早先按小写 4 位 `0x3824` 检索故零命中。
+- **实测**：`GL_SAMPLES_PASSED=4096`、`GL_ANY_SAMPLES_PASSED=1`，且计数随几何面积单调
+  （1/4 屏 120 < 半屏 496 < 全屏 2016）→ 证明硬件真在计数，非巧合值。
+
+### C5 条件渲染 SIGSEGV（已修复 2026-10-31，cap 回退）
+
+- **现象**：`glBeginConditionalRender()` 段错误，gdb 显示
+  `#0 0x0000000000000000 in ?? ()` / `#1 cso_set_render_condition (...)` at
+  `../src/gallium/auxiliary/cso_cache/cso_context.c:965`，`pc 0x0`。
+- **根因**：`mwv207_screen.c:135-136` 声明 `PIPE_CAP_CONDITIONAL_RENDER = 1`，
+  但驱动**从未赋值** `pipe_context::render_condition`（全树 grep **0 处**）；
+  调用链上 `src/mesa/main/condrender.c:44-88` 的 `BeginConditionalRender()` 无条件调用
+  `cso_set_render_condition()`，后者直接 `pipe->render_condition(...)` → 解引用 NULL。
+  `st->has_conditional_render`（`st_context.c:624`）**只**在 `src/mesa/main/blit.c:478`
+  用作守卫，不保护 GL 入口。对照：llvmpipe / softpipe 都实现了该钩子
+  （`lp_context.c:234`、`sp_context.c:233`）。
+- **修复**：`case PIPE_CAP_CONDITIONAL_RENDER:` 由 `return 1` 改 `return 0`
+  （`mwv207_screen.c`，commit `b2ab2c9`）。
+  - 代价：丢 `GL_NV_conditional_render` / `GL_ARB_conditional_render_inverted`
+    （本来也不可用，用了就崩）。
+  - 收益：不再崩溃；应用改得 `GL_INVALID_OPERATION`，不做错误的遮挡剔除。
+- **硬件其实支持**：`MWV207REG_OCCLUSION_CONTROL.MODE` 有
+  `BOOLEAN_CONDITIONAL 0x2` 与 `BOOLEAN_CONDITIONAL_EARLY 0x5`。
+  将来可照闭源 `jmo_3D_SetQuery` → `jmo_HARDWARE_SetQuery` 的写法实现
+  `render_condition` 钩子，再把 cap 打开。
+
+### C4/C5 的 A/B 对照（`tests/query/run-query-tests.sh`）
+
+| 检查项 | 修复栈（`/tmp/wt-build`） | 已安装栈（payload-24） |
+|---|---|---|
+| `GL_SAMPLES_PASSED` | **4096** ✅ | 0 ❌ |
+| `GL_ANY_SAMPLES_PASSED` | **1** ✅ | 0 ❌ |
+| 面积单调（1/4 < 半 < 全） | 120 < 496 < 2016 ✅ | 0 / 496 / 4294967295 ❌ |
+| condrender 退出码 | **0** ✅ | 139 (SIGSEGV) ❌ |
+
+> 注：worktree 产物 `libmwv207_dri.so` 的版本戳为 `24.1.2 (git-6cb20bd761)`，
+> 与系统 `/usr/local/lib/mwv207-oss/libGL.so.1`、`libEGL.so.1` **完全一致**，
+> 故修复栈一列是走真实系统 X/GLX 栈的端到端验证，不是孤立的 build 目录测试。
+
 ---
 
 ## D. 与寄存器文档的衔接
