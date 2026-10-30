@@ -1,0 +1,94 @@
+diff --git a/src/gallium/drivers/mwv207/mwv207_format.c b/src/gallium/drivers/mwv207/mwv207_format.c
+index 3a2df10..786fcab 100644
+--- a/src/gallium/drivers/mwv207/mwv207_format.c
++++ b/src/gallium/drivers/mwv207/mwv207_format.c
+@@ -131,6 +131,22 @@ struct mwv207_hardware_Info texture_infos[] = {
+ 
+    {PIPE_FORMAT_R16G16_UINT,        TX_FORMAT(0, 0x19),             SWIZZLE_SETS(SWIZZLE_RED, SWIZZLE_GREEN, SWIZZLE_ZERO, SWIZZLE_ALPHA)},
+    {PIPE_FORMAT_R16G16_SINT,        TX_FORMAT(0, 0x19),             SWIZZLE_SETS(SWIZZLE_RED, SWIZZLE_GREEN, SWIZZLE_ZERO, SWIZZLE_ALPHA)},
++   /* FIX(jm9100-oss): 16-bit normalized sampler formats.  Required by
++    * GL_ARB_ES3_compatibility (ETC2-emulation formats, st_extensions.c) which
++    * in turn gates ARB_ES3_1_compatibility / ARB_ES3_2_compatibility, and also
++    * by 10-bit P010/P016 video planes.  Codes taken from the vendor register
++    * enum MWV207REG_TX_EXT_CONFIG_FORMAT_*:
++    *   RG16_UNORM 0x34, RG16_SNORM 0x35, R16_SNORM 0x36.
++    * There is no R16_UNORM code in that enum, so R16_UNORM shares the 0x36
++    * ("16-bit single channel") code with R16_SNORM and is distinguished by
++    * texture_desc->int_format, which mwv207_get_texture_desc() derives from
++    * the pipe format's signedness (unsigned -> 0, signed 16-bit -> 2). */
++   {PIPE_FORMAT_R16_UNORM,          TX_FORMAT(0, 0x36),             SWIZZLE_SETS(SWIZZLE_RED, SWIZZLE_ZERO, SWIZZLE_ZERO, SWIZZLE_ONE)},
++   {PIPE_FORMAT_R16_SNORM,          TX_FORMAT(0, 0x36),             SWIZZLE_SETS(SWIZZLE_RED, SWIZZLE_ZERO, SWIZZLE_ZERO, SWIZZLE_ONE)},
++   {PIPE_FORMAT_R16G16_UNORM,       TX_FORMAT(0, 0x34),             SWIZZLE_SETS(SWIZZLE_RED, SWIZZLE_GREEN, SWIZZLE_ZERO, SWIZZLE_ONE)},
++   {PIPE_FORMAT_R16G16_SNORM,       TX_FORMAT(0, 0x35),             SWIZZLE_SETS(SWIZZLE_RED, SWIZZLE_GREEN, SWIZZLE_ZERO, SWIZZLE_ONE)},
++   {PIPE_FORMAT_R16G16B16A16_UNORM, TX_FORMAT(0, 0x32),             SWIZZLE_SETS(SWIZZLE_RED, SWIZZLE_GREEN, SWIZZLE_BLUE, SWIZZLE_ALPHA)},
++   {PIPE_FORMAT_R16G16B16A16_SNORM, TX_FORMAT(0, 0x33),             SWIZZLE_SETS(SWIZZLE_RED, SWIZZLE_GREEN, SWIZZLE_BLUE, SWIZZLE_ALPHA)},
+    {PIPE_FORMAT_R16G16_FLOAT,       TX_FORMAT(0, 0x8),             SWIZZLE_SETS(SWIZZLE_RED, SWIZZLE_GREEN, SWIZZLE_BLUE, SWIZZLE_ALPHA)},
+ 
+    {PIPE_FORMAT_R32G32_UINT,        TX_FORMAT(0, 0x24),         SWIZZLE_SETS(SWIZZLE_RED, SWIZZLE_GREEN, SWIZZLE_ZERO, SWIZZLE_ALPHA)},
+@@ -190,7 +206,12 @@ mwv207_get_texture_desc(enum pipe_format format, struct mwv207_texture_desc *tex
+          result = PIPE_ERROR_BAD_INPUT;
+    }
+ 
+-   if (desc->channel[0].type == UTIL_FORMAT_TYPE_SIGNED) {
++   /* FIX(jm9100-oss): TX_CONFIG2 INTEGER_SIGN_EXTENSION (bits 19:18) only applies
++    * to PURE INTEGER textures (SIGNED8/SIGNED16).  The old test fired on SNORM
++    * formats too, which set SIGNED16 on e.g. R16_SNORM/RG16_SNORM and made the
++    * sampler return 0 for them.  Keep it for UINT/SINT only. */
++   if (desc->channel[0].type == UTIL_FORMAT_TYPE_SIGNED &&
++       !desc->channel[0].normalized) {
+       if (desc->channel[0].size == 8)
+          texture_desc->int_format = 0x1;
+       else if (desc->channel[0].size == 16)
+@@ -429,6 +450,21 @@ static const struct mwv207_blit_Info blitInfos[] = {
+    {PIPE_FORMAT_S8_UINT_Z24_UNORM, 0x17,       BLT_SWIZZLE_EX(SWIZZLE_RED,   SWIZZLE_GREEN, SWIZZLE_BLUE,  SWIZZLE_ALPHA)},
+    {PIPE_FORMAT_X8Z24_UNORM,       0x17,       BLT_SWIZZLE_EX(SWIZZLE_RED,   SWIZZLE_GREEN, SWIZZLE_BLUE,  SWIZZLE_ALPHA)},
+    {PIPE_FORMAT_Z16_UNORM,         0x18,         BLT_SWIZZLE_EX(SWIZZLE_RED,   SWIZZLE_GREEN, SWIZZLE_BLUE,  SWIZZLE_ALPHA)},
++
++   /* FIX(jm9100-oss): 16-bit normalized formats for the BLT/image-layout space.
++    * mwv207_get_image_info() takes the resource's image format from
++    * mwv207_get_blit_desc(), NOT from texture_infos[].  Without entries here the
++    * fallback guesses by block size and lands on 0x24 (G8R8) for 2-byte and
++    * 0x6 (A8R8G8B8) for 4-byte formats, so e.g. RG16_UNORM was laid out and
++    * decoded as RGBA8 and sampled as 0.  Codes from the vendor register enum
++    * MWV207REG_BLT_SRC_CONFIG_FORMAT_*:
++    *   R16 = 0x27, R16G16 = 0x2F, R16G16B16A16 = 0x30. */
++   {PIPE_FORMAT_R16_UNORM,         0x27,       BLT_SWIZZLE_EX(SWIZZLE_RED,   SWIZZLE_GREEN, SWIZZLE_BLUE,  SWIZZLE_ALPHA)},
++   {PIPE_FORMAT_R16_SNORM,         0x27,       BLT_SWIZZLE_EX(SWIZZLE_RED,   SWIZZLE_GREEN, SWIZZLE_BLUE,  SWIZZLE_ALPHA)},
++   {PIPE_FORMAT_R16G16_UNORM,      0x2F,       BLT_SWIZZLE_EX(SWIZZLE_RED,   SWIZZLE_GREEN, SWIZZLE_BLUE,  SWIZZLE_ALPHA)},
++   {PIPE_FORMAT_R16G16_SNORM,      0x2F,       BLT_SWIZZLE_EX(SWIZZLE_RED,   SWIZZLE_GREEN, SWIZZLE_BLUE,  SWIZZLE_ALPHA)},
++   {PIPE_FORMAT_R16G16B16A16_UNORM, 0x30,      BLT_SWIZZLE_EX(SWIZZLE_RED,   SWIZZLE_GREEN, SWIZZLE_BLUE,  SWIZZLE_ALPHA)},
++   {PIPE_FORMAT_R16G16B16A16_SNORM, 0x30,      BLT_SWIZZLE_EX(SWIZZLE_RED,   SWIZZLE_GREEN, SWIZZLE_BLUE,  SWIZZLE_ALPHA)},
+ };
+ 
+ enum pipe_error
+diff --git a/src/gallium/drivers/mwv207/mwv207_resource.c b/src/gallium/drivers/mwv207/mwv207_resource.c
+index 018f0f7..2b46965 100644
+--- a/src/gallium/drivers/mwv207/mwv207_resource.c
++++ b/src/gallium/drivers/mwv207/mwv207_resource.c
+@@ -43,6 +43,26 @@ static bool mwv207_tile_supported_format(enum pipe_format format)
+    if (util_format_is_compressed(format))
+       return false;
+ 
++   /* FIX(jm9100-oss): the 16-bit normalized formats must stay LINEAR.
++    * mwv207_transfer_map()/unmap() move texel data through a linear staging
++    * resource and copy it into the tiled resource with a 2D blit
++    * (mwv207_blit_resource_box()).  For these formats the blit does not
++    * preserve the texel layout (the sampled result loses the red channel and
++    * the read-back comes back byte-swapped), while the untranslated CPU path
++    * used for LINEAR resources is exact.  16-bit normalized formats are rare
++    * enough that giving up super-tiling for them is the safe trade. */
++   switch (format) {
++   case PIPE_FORMAT_R16_UNORM:
++   case PIPE_FORMAT_R16_SNORM:
++   case PIPE_FORMAT_R16G16_UNORM:
++   case PIPE_FORMAT_R16G16_SNORM:
++   case PIPE_FORMAT_R16G16B16A16_UNORM:
++   case PIPE_FORMAT_R16G16B16A16_SNORM:
++      return false;
++   default:
++      break;
++   }
++
+    return true;
+ }
+ 

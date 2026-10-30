@@ -24,8 +24,11 @@ sudo ./switch-mwv207-oss.sh install    # 切换到开源栈 (自动快照+看门
 |------|------|
 | `switch-mwv207-oss.sh` | 切换脚本 (根目录入口): check/install/rollback/verify/status/watchdog |
 | `reports/` | 六份阶段报告: 逐行分析 / 兼容性 / VA 硬解移植 / 全功能栈 / 切换脚本 / 性能调查 |
-| `patches/` | 缺陷修复补丁集 0001-0008 (KMD 2 个 + UMD 4 个 + 硬解移植 1 个 + 10bit HEVC 黑屏修复 1 个) |
-| `payload-24/` | Mesa 24.1.2 全功能栈载荷源 (GL+VA+VDPAU+OpenCL, MANIFEST 校验) |
+| `patches/` | 缺陷修复补丁集 0001-0011 (KMD 2 个 + UMD 4 个 + 硬解移植 1 个 + 10bit HEVC 黑屏修复 1 个 + GLES 3.2/鲁棒访问/16位格式 1 个 + 显存单位与 winsys O2/O3 1 个) |
+| `payload-24/` | Mesa 24.1.2 全功能栈载荷源 (GL+VA+VDPAU+OpenCL, MANIFEST 校验) —— **不含** GLES 3.2 等后续修复 |
+| `payload-25/` | 由 `tools/make-payload.sh` 从 build-full 组装的 r2 载荷 (含 GLES 3.2 / 鲁棒访问 / 16位格式 / 显存修正), 待部署 |
+| `tools/` | `make-payload.sh`: 从构建树组装新载荷 (改 rpath/SONAME 自检/重算 MANIFEST/打印与上游 md5 差异) |
+| `docs/` | 驱动 API 与寄存器参考 (17 文件 / 约 1.77 万行): 架构 / winsys / 核心对象 / 绘制 / NIR / 视频 / 已知问题 / 可行性 / 寄存器四表 |
 | `tests/` | 硬件验证套件: run-all.sh / run-full-regression.sh + 源码与二进制 |
 | `compat-env/` | 兼容运行环境 (libva 2.22 deb + 解包根, 供旧 libva 系统临时定向) |
 | `src/` | 源码树: kernel (KMD 5.10 原始+修复) / mesa (22.3.7 修复版) / oh-mesa (OpenHarmony 金矿: 24.1.2 基线+6.6 内核 patch) |

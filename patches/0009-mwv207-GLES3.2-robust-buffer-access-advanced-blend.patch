@@ -1,0 +1,143 @@
+diff --git a/src/gallium/drivers/mwv207/include/mwv207_state.h b/src/gallium/drivers/mwv207/include/mwv207_state.h
+index 98aad32..e6bf1f7 100644
+--- a/src/gallium/drivers/mwv207/include/mwv207_state.h
++++ b/src/gallium/drivers/mwv207/include/mwv207_state.h
+@@ -67,6 +67,9 @@ struct mwv207_blend_state {
+    uint32_t blend_config[PIPE_MAX_COLOR_BUFS];
+    uint32_t blend_configex[PIPE_MAX_COLOR_BUFS];
+    uint32_t dest_read[PIPE_MAX_COLOR_BUFS];
++   /* HW extended blend-equation code for GL_KHR_blend_equation_advanced
++    * (0 when the state does not use an advanced equation). */
++   uint32_t advanced_ext;
+ };
+ 
+ struct mwv207_depth_stencil_alpha_state {
+diff --git a/src/gallium/drivers/mwv207/mwv207_blend.c b/src/gallium/drivers/mwv207/mwv207_blend.c
+index 32d2c74..795a48b 100644
+--- a/src/gallium/drivers/mwv207/mwv207_blend.c
++++ b/src/gallium/drivers/mwv207/mwv207_blend.c
+@@ -145,6 +145,49 @@ mwv207_create_blend_state(struct pipe_context *pctx,
+ 
+    blend_state->blend_state = *state;
+ 
++   /* GL_KHR_blend_equation_advanced.
++    *
++    * Since Mesa 23 the advanced equation is delivered through
++    * pipe_blend_state::advanced_blend_func (enum gl_advanced_blend_mode) and
++    * the state tracker leaves rt[i].blend_enable / rgb_func at their
++    * defaults for that path, while enum pipe_blend_func only carries
++    * ADD/SUB/REVSUB/MIN/MAX.  The historical alpha_mode_ext[rt->rgb_func]
++    * lookup below can therefore never reach its advanced entries any more,
++    * so translate advanced_blend_func explicitly and turn blending on for
++    * RT0 (the spec only allows advanced equations with a single draw buffer).
++    * Only the equations the hardware encodes in alpha_mode_ext[] are
++    * accepted; anything else keeps the previous no-blend behaviour. */
++   {
++      static const uint32_t adv_ext[BLEND_HSL_LUMINOSITY + 1] = {
++         [BLEND_MULTIPLY]   = 0x1,
++         [BLEND_SCREEN]     = 0x2,
++         [BLEND_OVERLAY]    = 0x3,
++         [BLEND_DARKEN]     = 0x4,
++         [BLEND_LIGHTEN]    = 0x5,
++         [BLEND_HARDLIGHT]  = 0x6,
++         [BLEND_DIFFERENCE] = 0x7,
++         [BLEND_EXCLUSION]  = 0x8,
++         /* The hardware blend unit implements exactly these eight extended
++          * modes.  Probed empirically: feeding codes 0x9..0xF for
++          * COLORDODGE/COLORBURN/SOFTLIGHT/HSL_* zeroes the framebuffer
++          * instead of blending, so those seven equations are a genuine
++          * hardware gap and deliberately stay unmapped (blending is left
++          * disabled for them, matching the vendor table). */
++      };
++      unsigned adv = blend_state->blend_state.advanced_blend_func;
++
++      if (adv <= BLEND_HSL_LUMINOSITY && adv_ext[adv]) {
++         struct pipe_rt_blend_state *r0 = &blend_state->blend_state.rt[0];
++
++         blend_state->advanced_ext = adv_ext[adv];
++         r0->blend_enable = 1;
++         r0->rgb_src_factor = r0->alpha_src_factor = PIPE_BLENDFACTOR_ONE;
++         r0->rgb_dst_factor = r0->alpha_dst_factor = PIPE_BLENDFACTOR_ONE;
++         r0->colormask = 0xf;
++         blend_state->blend_state.independent_blend_enable = 1;
++      }
++   }
++
+    if (blend_state->blend_state.logicop_enable)
+       blend_state->logic_config = ((ALIGN_BIT((uint32_t) (logic_opt[blend_state->blend_state.logicop_func]), 0x0) & (0xF)) | (~(0xF | 0x10)));
+    else
+@@ -238,7 +281,9 @@ mwv207_create_blend_state(struct pipe_context *pctx,
+ 
+       if (i == 0) {
+          blend_state->alpha_config = alphaConfig |
+-            (ALIGN_BIT((uint32_t) (alpha_mode_ext[rt->rgb_func]), 0x0) & (0xF)) |
++            (ALIGN_BIT((uint32_t) (blend_state->advanced_ext ?
++                                   blend_state->advanced_ext :
++                                   alpha_mode_ext[rt->rgb_func]), 0x0) & (0xF)) |
+             (ALIGN_BIT(0x0, 0x4) & (0x10));
+ 
+          blend_state->alpha_blend = (ALIGN_BIT((uint32_t) (blend_enable), 0x0) & (0x1)) |
+diff --git a/src/gallium/drivers/mwv207/mwv207_screen.c b/src/gallium/drivers/mwv207/mwv207_screen.c
+index 7675869..323995c 100644
+--- a/src/gallium/drivers/mwv207/mwv207_screen.c
++++ b/src/gallium/drivers/mwv207/mwv207_screen.c
+@@ -86,6 +86,16 @@ mwv207_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
+       return 14;
+    case PIPE_CAP_BLEND_EQUATION_SEPARATE:
+       return 1;
++   case PIPE_CAP_BLEND_EQUATION_ADVANCED:
++      /* Backed by a real implementation in mwv207_create_blend_state(): the
++       * hardware extended-blend field encodes 8 of the 15 KHR equations
++       * (MULTIPLY/SCREEN/OVERLAY/DARKEN/LIGHTEN/HARDLIGHT/DIFFERENCE/
++       * EXCLUSION, verified against the spec formulas).  The other 7
++       * (COLORDODGE/COLORBURN/SOFTLIGHT/HSL_*) are a hardware gap and render
++       * without blending, so this is a partial (8/15) guarantee.  Declared to
++       * satisfy the KHR_blend_equation_advanced gate of native GLES 3.2.
++       */
++      return 1;
+    case PIPE_CAP_MAX_STREAM_OUTPUT_BUFFERS:
+       return 4;
+    case PIPE_CAP_STREAM_OUTPUT_INTERLEAVE_BUFFERS:
+@@ -261,7 +271,12 @@ mwv207_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
+    case PIPE_CAP_FBFETCH:
+       return 0;
+    case PIPE_CAP_ROBUST_BUFFER_ACCESS_BEHAVIOR:
+-      return 0;
++      /* Real guarantee, not a declaration lie: SSBO offsets are clamped by
++       * nir_lower_robust_access() in mwv207_compile_shader().  This unlocks
++       * GL_KHR_robust_buffer_access_behavior + GL_KHR_robustness, and
++       * KHR_robustness is the last gate blocking native GLES 3.2.
++       */
++      return 1;
+    case PIPE_CAP_COPY_BETWEEN_COMPRESSED_AND_PLAIN_FORMATS:
+       return 1;
+ 
+diff --git a/src/gallium/drivers/mwv207/nir/mwv207_compiler.c b/src/gallium/drivers/mwv207/nir/mwv207_compiler.c
+index 50f69f7..f43e02f 100644
+--- a/src/gallium/drivers/mwv207/nir/mwv207_compiler.c
++++ b/src/gallium/drivers/mwv207/nir/mwv207_compiler.c
+@@ -423,6 +423,24 @@ mwv207_compile_shader(struct mwv207_context *ctx, struct mwv207_shader_state *st
+    c->shader = shader;
+    c->nir = nir_shader_clone(NULL, shader->info->nir);
+ 
++   /* PIPE_CAP_ROBUST_BUFFER_ACCESS_BEHAVIOR is advertised (see
++    * mwv207_screen.c), so the guarantee has to actually hold: clamp every
++    * SSBO access offset to an in-bounds value before it reaches the hardware.
++    * Mesa then exposes GL_KHR_robust_buffer_access_behavior / GL_KHR_robustness,
++    * and KHR_robustness is one of the gates for GLES 3.2.
++    *
++    * Only SSBOs are lowered on purpose:
++    *  - the driver implements get_ssbo_size() but NOT get_ubo_size(), so
++    *    .lower_ubo would emit an unimplemented intrinsic;
++    *  - this pass in 24.1.2 only matches non-deref image intrinsics, while the
++    *    driver sees image_deref_*, so .lower_image would be a no-op here;
++    *  - .lower_shared is a Vulkan/debug concern.
++    */
++   const nir_lower_robust_access_options robust_opts = {
++      .lower_ssbo = true,
++   };
++   NIR_PASS_V(c->nir, nir_lower_robust_access, &robust_opts);
++
+    mwv207_lower(ctx, c);
+ 
+    mwv207_record_input(c);

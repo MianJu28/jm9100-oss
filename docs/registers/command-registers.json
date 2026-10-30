@@ -1,0 +1,3242 @@
+{
+ "0x191": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 171,
+   "macro": "MWV207_EMIT",
+   "value": "0"
+  }
+ ],
+ "0x192": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 161,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (indexType), 0x0) & (0x3)) |\n         (ALIGN_BIT((uint32_t) (dinfo->primitive_restart), 0x8) & (0x100))"
+  },
+  {
+   "file": "mwv207_draw.c",
+   "line": 172,
+   "macro": "MWV207_EMIT",
+   "value": "0"
+  }
+ ],
+ "0x19d": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 166,
+   "macro": "MWV207_EMIT",
+   "value": "dinfo->restart_index"
+  },
+  {
+   "file": "mwv207_draw.c",
+   "line": 168,
+   "macro": "MWV207_EMIT",
+   "value": "restartIndex"
+  },
+  {
+   "file": "mwv207_draw.c",
+   "line": 173,
+   "macro": "MWV207_EMIT",
+   "value": "0"
+  }
+ ],
+ "0x1f0": [
+  {
+   "file": "mwv207_compute.c",
+   "line": 175,
+   "macro": "MWV207_EMIT",
+   "value": "0x00000003"
+  },
+  {
+   "file": "mwv207_draw.c",
+   "line": 98,
+   "macro": "MWV207_EMIT",
+   "value": "ctx->info.vertices_per_patch"
+  }
+ ],
+ "0x1f1": [
+  {
+   "file": "mwv207_shader.c",
+   "line": 246,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT(0x3, 0x0) & (0x3)) |\n         (ALIGN_BIT((uint32_t) (0), 0x8) & (0x7F00)) |\n         (ALIGN_BIT((uint32_t) (1), 0x10) & (0x7F0000))"
+  },
+  {
+   "file": "mwv207_shader.c",
+   "line": 257,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT(0x3, 0x0) & (0x3)) |\n         (ALIGN_BIT((uint32_t) (vs->infile.num_reg * 4), 0x8) & (0x7F00)) |\n         (ALIGN_BIT((uint32_t) (vs->infile.num_reg * 4 + 1), 0x10) & (0x7F0000))"
+  },
+  {
+   "file": "mwv207_shader.c",
+   "line": 266,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT(0x0, 0x0) & (0x3))"
+  }
+ ],
+ "0x1f2": [
+  {
+   "file": "mwv207_cmd.c",
+   "line": 51,
+   "macro": "MWV207_EMIT",
+   "value": "true"
+  },
+  {
+   "file": "mwv207_draw.c",
+   "line": 102,
+   "macro": "MWV207_EMIT",
+   "value": "true"
+  }
+ ],
+ "0x1f6": [
+  {
+   "file": "mwv207_cmd.c",
+   "line": 45,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (ENABLE), 0x1) & (0x2))"
+  }
+ ],
+ "0x201": [
+  {
+   "file": "mwv207_compute.c",
+   "line": 237,
+   "macro": "MWV207_EMIT",
+   "value": "0x00000001"
+  },
+  {
+   "file": "mwv207_shader.c",
+   "line": 361,
+   "macro": "MWV207_EMIT",
+   "value": "link.num_varyings_fixed + output_add"
+  }
+ ],
+ "0x202": [
+  {
+   "file": "mwv207_shader.c",
+   "line": 241,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (1), 0x0) & (0x3F)) |\n         (ALIGN_BIT((uint32_t) (1), 0x8) & (0x1F00)) |\n         (ALIGN_BIT((uint32_t) (1), 0x1F) & (0x80000000))"
+  },
+  {
+   "file": "mwv207_shader.c",
+   "line": 252,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (vs->infile.num_reg), 0x0) & (0x3F)) |\n         (ALIGN_BIT((uint32_t) (time_out), 0x8) & (0x1F00)) |\n         (ALIGN_BIT((uint32_t) (1), 0x1F) & (0x80000000))"
+  },
+  {
+   "file": "mwv207_shader.c",
+   "line": 262,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (vs->infile.num_reg), 0x0) & (0x3F)) |\n         (ALIGN_BIT((uint32_t) (time_out), 0x8) & (0x1F00))"
+  }
+ ],
+ "0x203": [
+  {
+   "file": "mwv207_shader.c",
+   "line": 305,
+   "macro": "MWV207_EMIT",
+   "value": "vs->num_temps"
+  }
+ ],
+ "0x20c": [
+  {
+   "file": "mwv207_compute.c",
+   "line": 236,
+   "macro": "MWV207_EMIT",
+   "value": "0x0f3f0000"
+  },
+  {
+   "file": "mwv207_shader.c",
+   "line": 318,
+   "macro": "MWV207_EMIT",
+   "value": "vs->vs_load_balancing"
+  }
+ ],
+ "0x219": [
+  {
+   "file": "mwv207_shader.c",
+   "line": 308,
+   "macro": "MWV207_EMIT",
+   "value": "(0x0 / 4)"
+  }
+ ],
+ "0x21a": [
+  {
+   "file": "mwv207_compute.c",
+   "line": 185,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT(0x1, 0x0) & (0x1))"
+  },
+  {
+   "file": "mwv207_shader.c",
+   "line": 310,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT(0x1, 0x0) & (0x1))"
+  },
+  {
+   "file": "mwv207_shader.c",
+   "line": 419,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT(0x1, 0x0) & (0x1))"
+  },
+  {
+   "file": "mwv207_shader.c",
+   "line": 544,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT(0x1, 0x0) & (0x1))"
+  },
+  {
+   "file": "mwv207_shader.c",
+   "line": 620,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT(0x1, 0x0) & (0x1))"
+  },
+  {
+   "file": "mwv207_shader.c",
+   "line": 675,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT(0x1, 0x0) & (0x1))"
+  }
+ ],
+ "0x21c": [
+  {
+   "file": "mwv207_shader.c",
+   "line": 294,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (vs->outfile.num_reg + vertex_num), 0x0) & (0x3F)) |\n       (ALIGN_BIT((uint32_t) (max_thread * (vs->outfile.num_reg + vertex_num)), 0x8) & (0x7FF00))"
+  }
+ ],
+ "0x21d": [
+  {
+   "file": "mwv207_shader.c",
+   "line": 312,
+   "macro": "MWV207_EMIT",
+   "value": "0"
+  }
+ ],
+ "0x21f": [
+  {
+   "file": "mwv207_compute.c",
+   "line": 206,
+   "macro": "MWV207_EMIT",
+   "value": "0"
+  },
+  {
+   "file": "mwv207_shader.c",
+   "line": 676,
+   "macro": "MWV207_EMIT",
+   "value": "0"
+  }
+ ],
+ "0x221": [
+  {
+   "file": "mwv207_cmd.c",
+   "line": 49,
+   "macro": "MWV207_EMIT",
+   "value": "0x0808"
+  }
+ ],
+ "0x223": [
+  {
+   "file": "mwv207_shader.c",
+   "line": 741,
+   "macro": "MWV207_EMIT",
+   "value": "0"
+  }
+ ],
+ "0x228": [
+  {
+   "file": "mwv207_compute.c",
+   "line": 219,
+   "macro": "MWV207_EMIT",
+   "value": "0"
+  },
+  {
+   "file": "mwv207_shader.c",
+   "line": 298,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (alloc_pages), 0x0) & (0x3F)) |\n      (ALIGN_BIT((uint32_t) (max_thread), 0xC) & (0xFF000)) |\n      (ALIGN_BIT((uint32_t) (res_window_size), 0x14) & (0x1FF00000))"
+  }
+ ],
+ "0x22a": [
+  {
+   "file": "mwv207_shader.c",
+   "line": 307,
+   "macro": "MWV207_EMIT",
+   "value": "0x10"
+  }
+ ],
+ "0x22c": [
+  {
+   "file": "mwv207_cmd.c",
+   "line": 153,
+   "macro": "MWV207_EMIT",
+   "value": "0x1F"
+  }
+ ],
+ "0x22f": [
+  {
+   "file": "mwv207_shader.c",
+   "line": 313,
+   "macro": "MWV207_EMIT",
+   "value": "(vs->code_size / 4)"
+  }
+ ],
+ "0x230": [
+  {
+   "file": "mwv207_shader.c",
+   "line": 269,
+   "macro": "MWV207_EMITS",
+   "value": "8"
+  }
+ ],
+ "0x238": [
+  {
+   "file": "mwv207_shader.c",
+   "line": 336,
+   "macro": "MWV207_EMITS",
+   "value": "8"
+  }
+ ],
+ "0x240": [
+  {
+   "file": "mwv207_compute.c",
+   "line": 243,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (3), 0x0) & (0x3)) |\n      (ALIGN_BIT(0x1, 0x18) & (0x7000000))"
+  }
+ ],
+ "0x247": [
+  {
+   "file": "mwv207_compute.c",
+   "line": 263,
+   "macro": "MWV207_EMIT",
+   "value": "thread"
+  }
+ ],
+ "0x248": [
+  {
+   "file": "mwv207_compute.c",
+   "line": 277,
+   "macro": "MWV207_EMIT",
+   "value": "0xbadabeeb"
+  }
+ ],
+ "0x249": [
+  {
+   "file": "mwv207_compute.c",
+   "line": 248,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (0), 0x0) & (0xFFFF)) |\n         (ALIGN_BIT((uint32_t) (63), 0x14) & (0x3F00000)) |\n         (ALIGN_BIT(0x0, 0x10) & (0x10000)) |\n         (ALIGN_BIT(0x0, 0x1C) & (0x30000000))"
+  },
+  {
+   "file": "mwv207_compute.c",
+   "line": 254,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (local_memory_pack_size), 0x0) & (0xFFFF)) |\n         (ALIGN_BIT((uint32_t) (63), 0x14) & (0x3F00000)) |\n         (ALIGN_BIT(0x0, 0x10) & (0x10000)) |\n         (ALIGN_BIT(0x1, 0x1C) & (0x30000000))"
+  }
+ ],
+ "0x24b": [
+  {
+   "file": "mwv207_compute.c",
+   "line": 265,
+   "macro": "MWV207_EMIT",
+   "value": "0"
+  }
+ ],
+ "0x24d": [
+  {
+   "file": "mwv207_compute.c",
+   "line": 266,
+   "macro": "MWV207_EMIT",
+   "value": "0"
+  }
+ ],
+ "0x24f": [
+  {
+   "file": "mwv207_compute.c",
+   "line": 267,
+   "macro": "MWV207_EMIT",
+   "value": "0"
+  }
+ ],
+ "0x250": [
+  {
+   "file": "mwv207_compute.c",
+   "line": 269,
+   "macro": "MWV207_EMIT",
+   "value": "ctx->info.grid[0] - 1"
+  }
+ ],
+ "0x251": [
+  {
+   "file": "mwv207_compute.c",
+   "line": 270,
+   "macro": "MWV207_EMIT",
+   "value": "ctx->info.grid[1] - 1"
+  }
+ ],
+ "0x252": [
+  {
+   "file": "mwv207_compute.c",
+   "line": 271,
+   "macro": "MWV207_EMIT",
+   "value": "ctx->info.grid[2] - 1"
+  }
+ ],
+ "0x253": [
+  {
+   "file": "mwv207_compute.c",
+   "line": 273,
+   "macro": "MWV207_EMIT",
+   "value": "info->block[0] - 1"
+  }
+ ],
+ "0x254": [
+  {
+   "file": "mwv207_compute.c",
+   "line": 274,
+   "macro": "MWV207_EMIT",
+   "value": "info->block[1] - 1"
+  }
+ ],
+ "0x255": [
+  {
+   "file": "mwv207_compute.c",
+   "line": 275,
+   "macro": "MWV207_EMIT",
+   "value": "info->block[2] - 1"
+  }
+ ],
+ "0x280": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 192,
+   "macro": "MWV207_EMIT",
+   "value": "fui(ctx->viewport.scale[0])"
+  }
+ ],
+ "0x281": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 193,
+   "macro": "MWV207_EMIT",
+   "value": "fui(ctx->viewport.scale[1])"
+  }
+ ],
+ "0x282": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 194,
+   "macro": "MWV207_EMIT",
+   "value": "fui(ctx->viewport.scale[2])"
+  }
+ ],
+ "0x283": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 195,
+   "macro": "MWV207_EMIT",
+   "value": "fui(ctx->viewport.translate[0])"
+  }
+ ],
+ "0x284": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 196,
+   "macro": "MWV207_EMIT",
+   "value": "fui(ctx->viewport.translate[1])"
+  }
+ ],
+ "0x285": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 197,
+   "macro": "MWV207_EMIT",
+   "value": "fui(ctx->viewport.translate[2])"
+  }
+ ],
+ "0x286": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 521,
+   "macro": "MWV207_EMIT",
+   "value": "rast_state->line_scale"
+  }
+ ],
+ "0x287": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 526,
+   "macro": "MWV207_EMIT",
+   "value": "fui(rast_state->base.point_size / 2.0f)"
+  }
+ ],
+ "0x28a": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 511,
+   "macro": "MWV207_EMIT",
+   "value": "0x1 | 0x10"
+  }
+ ],
+ "0x28b": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 201,
+   "macro": "MWV207_EMIT",
+   "value": "fui(1.0f / 8388607.0f)"
+  }
+ ],
+ "0x28c": [
+  {
+   "file": "mwv207_compute.c",
+   "line": 230,
+   "macro": "MWV207_EMIT",
+   "value": "0x00000300"
+  },
+  {
+   "file": "mwv207_shader.c",
+   "line": 702,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (link.num_varyings), 0x8) & (0xF00))"
+  }
+ ],
+ "0x28d": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 515,
+   "macro": "MWV207_EMIT",
+   "value": "rast_state->pa_config"
+  },
+  {
+   "file": "mwv207_shader.c",
+   "line": 664,
+   "macro": "MWV207_EMIT",
+   "value": "((ALIGN_BIT((uint32_t) (fs->usePointCoord), 0x4) & (0x10)) | (~(0x10 | 0x20)))"
+  }
+ ],
+ "0x28e": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 522,
+   "macro": "MWV207_EMIT",
+   "value": "rast_state->line_scale"
+  }
+ ],
+ "0x28f": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 523,
+   "macro": "MWV207_EMIT",
+   "value": "rast_state->line_scale"
+  }
+ ],
+ "0x2a0": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 200,
+   "macro": "MWV207_EMIT",
+   "value": "fui(clip_w)"
+  }
+ ],
+ "0x2a1": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 203,
+   "macro": "MWV207_EMITF",
+   "value": "0x00800000"
+  }
+ ],
+ "0x2a2": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 509,
+   "macro": "MWV207_EMIT",
+   "value": "0x40000000"
+  }
+ ],
+ "0x2a3": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 202,
+   "macro": "MWV207_EMIT",
+   "value": "0x00000000"
+  }
+ ],
+ "0x2a4": [
+  {
+   "file": "mwv207_compute.c",
+   "line": 188,
+   "macro": "MWV207_EMIT",
+   "value": "0x2"
+  },
+  {
+   "file": "mwv207_shader.c",
+   "line": 731,
+   "macro": "MWV207_EMITS",
+   "value": "4"
+  }
+ ],
+ "0x2aa": [
+  {
+   "file": "mwv207_compute.c",
+   "line": 238,
+   "macro": "MWV207_EMIT",
+   "value": "0"
+  },
+  {
+   "file": "mwv207_shader.c",
+   "line": 697,
+   "macro": "MWV207_EMIT",
+   "value": "link.num_varyings_fixed + 2"
+  },
+  {
+   "file": "mwv207_shader.c",
+   "line": 699,
+   "macro": "MWV207_EMIT",
+   "value": "link.num_varyings_fixed + 1"
+  }
+ ],
+ "0x300": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 243,
+   "macro": "MWV207_EMITF",
+   "value": "left << 16"
+  }
+ ],
+ "0x301": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 242,
+   "macro": "MWV207_EMITF",
+   "value": "top << 16"
+  }
+ ],
+ "0x302": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 244,
+   "macro": "MWV207_EMITF",
+   "value": "((right << 16) + fix_right)"
+  }
+ ],
+ "0x303": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 245,
+   "macro": "MWV207_EMITF",
+   "value": "((bottom << 16) + fix_bottom)"
+  }
+ ],
+ "0x304": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 538,
+   "macro": "MWV207_EMIT",
+   "value": "fui(rast_state->base.offset_scale)"
+  }
+ ],
+ "0x305": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 534,
+   "macro": "MWV207_EMIT",
+   "value": "fui((ctx->rast_state->base.offset_units * 2.0f / surface->peInfo.depth_normalize))"
+  }
+ ],
+ "0x306": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 530,
+   "macro": "MWV207_EMIT",
+   "value": "0x00000000"
+  }
+ ],
+ "0x308": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 246,
+   "macro": "MWV207_EMITF",
+   "value": "((right << 16) + 0xFFFF)"
+  }
+ ],
+ "0x309": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 247,
+   "macro": "MWV207_EMITF",
+   "value": "((bottom << 16) + 0xFFFF)"
+  }
+ ],
+ "0x380": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 528,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (ENABLE), 0x0) & (0x1))"
+  },
+  {
+   "file": "mwv207_shader.c",
+   "line": 735,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (true), 0x0) & (0x1)) |\n      (ALIGN_BIT((uint32_t) (half_attribute), 0x1) & (0x2))"
+  }
+ ],
+ "0x381": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 599,
+   "macro": "MWV207_EMIT",
+   "value": "0x0"
+  }
+ ],
+ "0x382": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 1007,
+   "macro": "MWV207_EMIT",
+   "value": "ra_control |\n            (ALIGN_BIT((uint32_t) (DISABLE), 0x2) & (0x4)) |\n            (ALIGN_BIT((uint32_t) (true), 0x1A) & (0x4000000)) |\n            (ALIGN_BIT((uint32_t) (true), 0x18) & (0x1000000))"
+  },
+  {
+   "file": "mwv207_draw.c",
+   "line": 1018,
+   "macro": "MWV207_EMIT",
+   "value": "ra_control |\n            (ALIGN_BIT(0x1, 0x1E) & (0xC0000000)) |\n            (ALIGN_BIT((uint32_t) (DISABLE), 0x1C) & (0x30000000)) |\n            (ALIGN_BIT((uint32_t) (use_w), 0x1A) & (0x4000000)) |\n            (ALIGN_BIT((uint32_t) (fs->useFragCoord), 0x18) & (0x1000000))"
+  }
+ ],
+ "0x383": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 606,
+   "macro": "MWV207_EMIT",
+   "value": "0x00000000"
+  }
+ ],
+ "0x388": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 657,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (ctx->zsa->func), 0xC) & (0x7000))"
+  }
+ ],
+ "0x38d": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 493,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) ((rtMaxLayers != 0)), 0x4) & (0x10))"
+  }
+ ],
+ "0x390": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 600,
+   "macro": "MWV207_EMIT",
+   "value": "0x4a6e2688"
+  }
+ ],
+ "0x390 + 1": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 601,
+   "macro": "MWV207_EMIT",
+   "value": "0x888864a2"
+  }
+ ],
+ "0x390 + 2": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 602,
+   "macro": "MWV207_EMIT",
+   "value": "0x88ac88ea"
+  }
+ ],
+ "0x390 + 3": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 603,
+   "macro": "MWV207_EMIT",
+   "value": "0x888888c6"
+  }
+ ],
+ "0x401": [
+  {
+   "file": "mwv207_shader.c",
+   "line": 661,
+   "macro": "MWV207_EMIT",
+   "value": "output_reg[0]"
+  }
+ ],
+ "0x402": [
+  {
+   "file": "mwv207_compute.c",
+   "line": 212,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (3), 0x0) & (0x3F)) |\n       (ALIGN_BIT((uint32_t) (31), 0x8) & (0x1F00)) |\n       (ALIGN_BIT((uint32_t) (false), 0x18) & (0x1000000))"
+  },
+  {
+   "file": "mwv207_shader.c",
+   "line": 707,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (link.num_varyings + 1 + msaa_extra_input), 0x0) & (0x3F)) |\n      (ALIGN_BIT((uint32_t) (31), 0x8) & (0x1F00)) |\n      (ALIGN_BIT((uint32_t) (false), 0x18) & (0x1000000))"
+  }
+ ],
+ "0x403": [
+  {
+   "file": "mwv207_compute.c",
+   "line": 186,
+   "macro": "MWV207_EMIT",
+   "value": "cs->num_temps"
+  },
+  {
+   "file": "mwv207_shader.c",
+   "line": 670,
+   "macro": "MWV207_EMIT",
+   "value": "fs_input + msaa_extra_temp"
+  }
+ ],
+ "0x404": [
+  {
+   "file": "mwv207_compute.c",
+   "line": 217,
+   "macro": "MWV207_EMIT",
+   "value": "0x00000f00"
+  },
+  {
+   "file": "mwv207_draw.c",
+   "line": 421,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (ENABLE), 0x0) & (0x1))"
+  },
+  {
+   "file": "mwv207_draw.c",
+   "line": 424,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (color_count - 1), 0x8) & (0xF00))"
+  }
+ ],
+ "0x409": [
+  {
+   "file": "mwv207_compute.c",
+   "line": 204,
+   "macro": "MWV207_EMIT",
+   "value": "0"
+  },
+  {
+   "file": "mwv207_shader.c",
+   "line": 673,
+   "macro": "MWV207_EMIT",
+   "value": "(0x400 / 4)"
+  }
+ ],
+ "0x40b": [
+  {
+   "file": "mwv207_shader.c",
+   "line": 662,
+   "macro": "MWV207_EMIT",
+   "value": "output_reg[1]"
+  }
+ ],
+ "0x40c": [
+  {
+   "file": "mwv207_compute.c",
+   "line": 233,
+   "macro": "MWV207_EMIT",
+   "value": "0"
+  },
+  {
+   "file": "mwv207_draw.c",
+   "line": 428,
+   "macro": "MWV207_EMIT",
+   "value": "output_config"
+  }
+ ],
+ "0x40d": [
+  {
+   "file": "mwv207_compute.c",
+   "line": 234,
+   "macro": "MWV207_EMIT",
+   "value": "0"
+  },
+  {
+   "file": "mwv207_draw.c",
+   "line": 429,
+   "macro": "MWV207_EMITS",
+   "value": "2"
+  }
+ ],
+ "0x410": [
+  {
+   "file": "mwv207_shader.c",
+   "line": 739,
+   "macro": "MWV207_EMIT",
+   "value": "0x00000000"
+  }
+ ],
+ "0x412": [
+  {
+   "file": "mwv207_compute.c",
+   "line": 241,
+   "macro": "MWV207_EMIT",
+   "value": "0"
+  },
+  {
+   "file": "mwv207_shader.c",
+   "line": 752,
+   "macro": "MWV207_EMIT",
+   "value": "0"
+  }
+ ],
+ "0x415": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 630,
+   "macro": "MWV207_EMIT",
+   "value": "((ALIGN_BIT((uint32_t) (coverage_invert), 0x10) & (0x10000)) | (~(0x10000 | 0x80000))) &\n      ((ALIGN_BIT((uint32_t) (sample_mask), 0x14) & (0x1F00000)) | (~(0x1F00000 | 0x8000000))) &\n      ((ALIGN_BIT((uint32_t) (coverage_enable), 0x1C) & (0x10000000)) | (~(0x10000000 | 0x80000000)))"
+  },
+  {
+   "file": "mwv207_draw.c",
+   "line": 968,
+   "macro": "MWV207_EMIT",
+   "value": "((ALIGN_BIT((uint32_t) (ctx->blend_state->blend_state.alpha_to_coverage), 0xC) & (0x1000)) | (~(0x1000 | 0x8000)))"
+  }
+ ],
+ "0x416": [
+  {
+   "file": "mwv207_compute.c",
+   "line": 203,
+   "macro": "MWV207_EMIT",
+   "value": "0"
+  },
+  {
+   "file": "mwv207_shader.c",
+   "line": 672,
+   "macro": "MWV207_EMIT",
+   "value": "0x0"
+  }
+ ],
+ "0x418 + 0": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 581,
+   "macro": "MWV207_EMIT",
+   "value": "0x6e80e680"
+  }
+ ],
+ "0x418 + 1": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 582,
+   "macro": "MWV207_EMIT",
+   "value": "0x2ac42a4c"
+  }
+ ],
+ "0x418 + 2": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 583,
+   "macro": "MWV207_EMIT",
+   "value": "0x15fb5d3b"
+  }
+ ],
+ "0x418 + 3": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 584,
+   "macro": "MWV207_EMIT",
+   "value": "0x9d7391f7"
+  }
+ ],
+ "0x418 + 4": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 585,
+   "macro": "MWV207_EMIT",
+   "value": "0x08e691f7"
+  }
+ ],
+ "0x418 + 5": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 586,
+   "macro": "MWV207_EMIT",
+   "value": "0x4ca25d3b"
+  }
+ ],
+ "0x418 + 6": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 587,
+   "macro": "MWV207_EMIT",
+   "value": "0xbf512a4c"
+  }
+ ],
+ "0x418 + 7": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 588,
+   "macro": "MWV207_EMIT",
+   "value": "0x37d9e680"
+  }
+ ],
+ "0x420": [
+  {
+   "file": "mwv207_compute.c",
+   "line": 189,
+   "macro": "MWV207_EMIT",
+   "value": "0x2"
+  },
+  {
+   "file": "mwv207_shader.c",
+   "line": 732,
+   "macro": "MWV207_EMITS",
+   "value": "4"
+  }
+ ],
+ "0x424": [
+  {
+   "file": "mwv207_compute.c",
+   "line": 207,
+   "macro": "MWV207_EMIT",
+   "value": "(cs->code_size / 4)"
+  },
+  {
+   "file": "mwv207_shader.c",
+   "line": 677,
+   "macro": "MWV207_EMIT",
+   "value": "(fs->code_size / 4)"
+  }
+ ],
+ "0x425": [
+  {
+   "file": "mwv207_compute.c",
+   "line": 210,
+   "macro": "MWV207_EMIT",
+   "value": "(cs->code_size / 4 - 1)"
+  },
+  {
+   "file": "mwv207_shader.c",
+   "line": 680,
+   "macro": "MWV207_EMIT",
+   "value": "(fs->code_size / 4 - 1)"
+  }
+ ],
+ "0x426": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 491,
+   "macro": "MWV207_EMIT",
+   "value": "rtMaxLayers"
+  }
+ ],
+ "0x427": [
+  {
+   "file": "mwv207_compute.c",
+   "line": 192,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (max_local_memory_size >> 10), 0x0) & (0x7F)) |\n         (ALIGN_BIT((uint32_t) (0), 0x8) & (0xFF00)) |\n         (ALIGN_BIT((uint32_t) (0), 0x10) & (0xFFF0000))"
+  },
+  {
+   "file": "mwv207_compute.c",
+   "line": 197,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (max_local_memory_size >> 10), 0x0) & (0x7F)) |\n         (ALIGN_BIT((uint32_t) (work_group_count_per_shader_group), 0x8) & (0xFF00)) |\n         (ALIGN_BIT((uint32_t) (align(max_running_work_groups, 2) * 2 - 1), 0x10) & (0xFFF0000))"
+  }
+ ],
+ "0x440": [
+  {
+   "file": "mwv207_compute.c",
+   "line": 226,
+   "macro": "MWV207_EMIT",
+   "value": "0"
+  },
+  {
+   "file": "mwv207_shader.c",
+   "line": 584,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT(0x1, 0x0) & (0x1)) |\n         (ALIGN_BIT((uint32_t) (0), 0x4) & (0x3F0)) |\n         (ALIGN_BIT((uint32_t) (gs->num_temps), 0xC) & (0x7F000)) |\n         (ALIGN_BIT((uint32_t) (input_start), 0x14) & (0x300000)) |\n         (ALIGN_BIT((uint32_t) (gs->gs_use_restart), 0x18) & (0x1000000)) |\n         (ALIGN_BIT((uint32_t) (state->nir->info.gs.active_stream_mask != 1), 0x19) & (0x2000000)) |\n         (ALIGN_BIT((uint32_t) (gs->gs_use_primitive_id), 0x1A) & (0x4000000)) |\n         (ALIGN_BIT((uint32_t) (gs->gs_use_invocation_id), 0x1B) & (0x8000000)) |\n         (ALIGN_BIT((uint32_t) (0x0), 0x1C) & (0x30000000))"
+  },
+  {
+   "file": "mwv207_shader.c",
+   "line": 627,
+   "macro": "MWV207_EMIT",
+   "value": "0"
+  }
+ ],
+ "0x441": [
+  {
+   "file": "mwv207_shader.c",
+   "line": 595,
+   "macro": "MWV207_EMIT",
+   "value": "mwv207_gs_type[state->nir->info.gs.output_primitive]"
+  }
+ ],
+ "0x442": [
+  {
+   "file": "mwv207_shader.c",
+   "line": 598,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (state->nir->info.gs.invocations), 0x0) & (0x7F)) |\n         (ALIGN_BIT((uint32_t) (state->nir->info.gs.vertices_out), 0x10) & (0x1FF0000))"
+  }
+ ],
+ "0x443": [
+  {
+   "file": "mwv207_shader.c",
+   "line": 621,
+   "macro": "MWV207_EMIT",
+   "value": "0"
+  }
+ ],
+ "0x444": [
+  {
+   "file": "mwv207_shader.c",
+   "line": 622,
+   "macro": "MWV207_EMIT",
+   "value": "(gs->code_size / 4)"
+  }
+ ],
+ "0x446": [
+  {
+   "file": "mwv207_shader.c",
+   "line": 750,
+   "macro": "MWV207_EMIT",
+   "value": "0"
+  }
+ ],
+ "0x447": [
+  {
+   "file": "mwv207_shader.c",
+   "line": 625,
+   "macro": "MWV207_EMIT",
+   "value": "(gs->code_size / 4 - 1)"
+  }
+ ],
+ "0x448": [
+  {
+   "file": "mwv207_shader.c",
+   "line": 602,
+   "macro": "MWV207_EMIT",
+   "value": "0"
+  }
+ ],
+ "0x450": [
+  {
+   "file": "mwv207_compute.c",
+   "line": 227,
+   "macro": "MWV207_EMIT",
+   "value": "0"
+  },
+  {
+   "file": "mwv207_shader.c",
+   "line": 611,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (max_thread), 0x8) & (0xFF00)) |\n         (ALIGN_BIT((uint32_t) (ctx->info.alloc_page[PIPE_SHADER_GEOMETRY]), 0x0) & (0x3F)) |\n         (ALIGN_BIT((uint32_t) (ctx->info.alloc_page[PIPE_SHADER_GEOMETRY]), 0x15) & (0x7E00000))"
+  },
+  {
+   "file": "mwv207_shader.c",
+   "line": 628,
+   "macro": "MWV207_EMIT",
+   "value": "0"
+  }
+ ],
+ "0x451": [
+  {
+   "file": "mwv207_shader.c",
+   "line": 604,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (outputs_num << 2), 0x0) & (0xFF)) |\n         (ALIGN_BIT((uint32_t) (thread_size), 0x8) & (0x1FF00)) |\n         (ALIGN_BIT((uint32_t) (thread_size * max_thread), 0x14) & (0xFFF00000))"
+  }
+ ],
+ "0x452": [
+  {
+   "file": "mwv207_shader.c",
+   "line": 609,
+   "macro": "MWV207_EMIT",
+   "value": "group_size"
+  }
+ ],
+ "0x453": [
+  {
+   "file": "mwv207_vertex.c",
+   "line": 362,
+   "macro": "MWV207_EMIT",
+   "value": "(offset / 4)"
+  }
+ ],
+ "0x455": [
+  {
+   "file": "mwv207_shader.c",
+   "line": 618,
+   "macro": "MWV207_EMIT",
+   "value": "0x30"
+  }
+ ],
+ "0x457": [
+  {
+   "file": "mwv207_compute.c",
+   "line": 228,
+   "macro": "MWV207_EMIT",
+   "value": "0xff"
+  },
+  {
+   "file": "mwv207_shader.c",
+   "line": 616,
+   "macro": "MWV207_EMIT",
+   "value": "max_thread"
+  },
+  {
+   "file": "mwv207_shader.c",
+   "line": 629,
+   "macro": "MWV207_EMIT",
+   "value": "0x000000ff"
+  }
+ ],
+ "0x500": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 480,
+   "macro": "MWV207_EMIT",
+   "value": "((ALIGN_BIT(0x0, 0x0) & (0x3)) | (~(0x3 | 0x8))) &\n         ((ALIGN_BIT((uint32_t) (DISABLE), 0x14) & (0x100000)) | (~(0x100000 | 0x200000))) &\n         ((ALIGN_BIT((uint32_t) (DISABLE), 0x10) & (0x10000)) | (~(0x10000 | 0x20000))) &\n         ((ALIGN_BIT(0x1, 0x18) & (0x1000000)) | (~(0x1000000 | 0x2000000))) &\n         ((ALIGN_BIT(0x1, 0x12) & (0x40000)) | (~(0x40000 | 0x80000))) &\n         ((ALIGN_BIT((uint32_t) (0x7), 0x8) & (0x700)) | (~(0x700 | 0x800)))"
+  },
+  {
+   "file": "mwv207_draw.c",
+   "line": 997,
+   "macro": "MWV207_EMIT",
+   "value": "surface->peInfo.depth_config & ctx->zsa->depth_config &\n               ((ALIGN_BIT(0x0, 0x18) & (0x1000000)) | (~(0x1000000 | 0x2000000))) &\n               ((ALIGN_BIT((uint32_t) ((ctx->fb_state.nr_cbufs == 0)), 0x14) & (0x100000)) | (~(0x100000 | 0x200000))) &\n               ((ALIGN_BIT((uint32_t) (DISABLE), 0x10) & (0x10000)) | (~(0x10000 | 0x20000)))"
+  },
+  {
+   "file": "mwv207_draw.c",
+   "line": 1002,
+   "macro": "MWV207_EMIT",
+   "value": "surface->peInfo.depth_config & ctx->zsa->depth_config &\n               ((ALIGN_BIT((uint32_t) ((ctx->fb_state.nr_cbufs == 0)), 0x14) & (0x100000)) | (~(0x100000 | 0x200000))) &\n               ((ALIGN_BIT(0x1, 0x18) & (0x1000000)) | (~(0x1000000 | 0x2000000)))"
+  }
+ ],
+ "0x5002": [
+  {
+   "file": "mwv207_blit.c",
+   "line": 248,
+   "macro": "MWV207_EMIT",
+   "value": "config"
+  },
+  {
+   "file": "mwv207_blit.c",
+   "line": 407,
+   "macro": "MWV207_EMIT",
+   "value": "levelInfo->config"
+  },
+  {
+   "file": "mwv207_blit.c",
+   "line": 499,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (src_level->stride), 0x0) & (0x1FFFFF)) |\n         (ALIGN_BIT((uint32_t) (src_blit_desc.format), 0x15) & (0x7E00000)) |\n         (ALIGN_BIT((uint32_t) (src_msaa_mode), 0x1B) & (0x18000000))"
+  },
+  {
+   "file": "mwv207_blit.c",
+   "line": 510,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (src_level->stride), 0x0) & (0x1FFFFF)) |\n         (ALIGN_BIT((uint32_t) (src_blit_desc.format), 0x15) & (0x7E00000)) |\n         (ALIGN_BIT((uint32_t) ((src->mode == MWV207_SUPERTILED)), 0x1D) & (0x20000000)) |\n         (ALIGN_BIT((uint32_t) ((src->mode == MWV207_SUPERTILED)), 0x1E) & (0x40000000))"
+  },
+  {
+   "file": "mwv207_blit.c",
+   "line": 519,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (src_level->stride), 0x0) & (0x1FFFFF)) |\n         (ALIGN_BIT((uint32_t) (src_blit_desc.format), 0x15) & (0x7E00000)) |\n         (ALIGN_BIT((uint32_t) (src_msaa_mode), 0x1B) & (0x18000000)) |\n         (ALIGN_BIT((uint32_t) ((src->mode == MWV207_SUPERTILED)), 0x1D) & (0x20000000)) |\n         (ALIGN_BIT((uint32_t) ((src->mode == MWV207_SUPERTILED)), 0x1E) & (0x40000000))"
+  },
+  {
+   "file": "mwv207_blit.c",
+   "line": 651,
+   "macro": "MWV207_EMIT",
+   "value": "src_level->config"
+  }
+ ],
+ "0x5003": [
+  {
+   "file": "mwv207_blit.c",
+   "line": 249,
+   "macro": "MWV207_EMIT",
+   "value": "src_configex"
+  },
+  {
+   "file": "mwv207_blit.c",
+   "line": 408,
+   "macro": "MWV207_EMIT",
+   "value": "src_configex |\n      (ALIGN_BIT((uint32_t) (fast_clear), 0x0) & (0x1))"
+  },
+  {
+   "file": "mwv207_blit.c",
+   "line": 503,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) ((util_format_get_blocksize(src->base.format) == 8)), 0x13) & (0x80000)) |\n         (ALIGN_BIT((uint32_t) (src_blit_desc.srgb), 0x8) & (0x100)) |\n         (ALIGN_BIT((uint32_t) ((CACHE_MODE == 0x1)), 0x11) & (0x20000))"
+  },
+  {
+   "file": "mwv207_blit.c",
+   "line": 515,
+   "macro": "MWV207_EMIT",
+   "value": "src_configex |\n         (ALIGN_BIT((uint32_t) (src_blit_desc.srgb), 0x8) & (0x100))"
+  },
+  {
+   "file": "mwv207_blit.c",
+   "line": 525,
+   "macro": "MWV207_EMIT",
+   "value": "src_configex |\n         (ALIGN_BIT((uint32_t) (src_blit_desc.srgb), 0x8) & (0x100))"
+  },
+  {
+   "file": "mwv207_blit.c",
+   "line": 652,
+   "macro": "MWV207_EMIT",
+   "value": "src_configex"
+  }
+ ],
+ "0x5004": [
+  {
+   "file": "mwv207_blit.c",
+   "line": 169,
+   "macro": "MWV207_EMIT",
+   "value": "0"
+  },
+  {
+   "file": "mwv207_blit.c",
+   "line": 649,
+   "macro": "MWV207_EMIT",
+   "value": "0"
+  }
+ ],
+ "0x5005": [
+  {
+   "file": "mwv207_blit.c",
+   "line": 127,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (src_startx), 0x0) & (0xFFFF)) |\n               (ALIGN_BIT((uint32_t) (src_starty), 0x10) & (0xFFFF0000))"
+  },
+  {
+   "file": "mwv207_blit.c",
+   "line": 284,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (0), 0x0) & (0xFFFF)) |\n         (ALIGN_BIT((uint32_t) (0), 0x10) & (0xFFFF0000))"
+  }
+ ],
+ "0x5006": [
+  {
+   "file": "mwv207_blit.c",
+   "line": 654,
+   "macro": "MWV207_EMIT",
+   "value": "0"
+  }
+ ],
+ "0x5008": [
+  {
+   "file": "mwv207_blit.c",
+   "line": 170,
+   "macro": "MWV207_EMIT",
+   "value": "0"
+  },
+  {
+   "file": "mwv207_blit.c",
+   "line": 655,
+   "macro": "MWV207_EMIT",
+   "value": "0"
+  }
+ ],
+ "0x5009": [
+  {
+   "file": "mwv207_blit.c",
+   "line": 253,
+   "macro": "MWV207_EMIT",
+   "value": "config"
+  },
+  {
+   "file": "mwv207_blit.c",
+   "line": 399,
+   "macro": "MWV207_EMIT",
+   "value": "levelInfo->config"
+  },
+  {
+   "file": "mwv207_blit.c",
+   "line": 550,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (dst_level->stride), 0x0) & (0x1FFFFF)) |\n      (ALIGN_BIT((uint32_t) (dst_blit_desc.format), 0x15) & (0x7E00000)) |\n      (ALIGN_BIT((uint32_t) (dst_msaa_mode), 0x1B) & (0x18000000)) |\n      (ALIGN_BIT((uint32_t) ((dst->mode == MWV207_SUPERTILED)), 0x1D) & (0x20000000)) |\n      (ALIGN_BIT((uint32_t) ((dst->mode == MWV207_SUPERTILED)), 0x1E) & (0x40000000))"
+  },
+  {
+   "file": "mwv207_blit.c",
+   "line": 656,
+   "macro": "MWV207_EMIT",
+   "value": "src_level->config"
+  }
+ ],
+ "0x500a": [
+  {
+   "file": "mwv207_blit.c",
+   "line": 254,
+   "macro": "MWV207_EMIT",
+   "value": "dst_configex"
+  },
+  {
+   "file": "mwv207_blit.c",
+   "line": 400,
+   "macro": "MWV207_EMIT",
+   "value": "dst_configex |\n      (ALIGN_BIT((uint32_t) (fast_clear), 0x0) & (0x1)) |\n      (ALIGN_BIT((uint32_t) (dst->sample_info.is_msaa ? ENABLE : DISABLE), 0x1E) & (0x40000000))"
+  },
+  {
+   "file": "mwv207_blit.c",
+   "line": 556,
+   "macro": "MWV207_EMIT",
+   "value": "dst_configex |\n      (ALIGN_BIT((uint32_t) (dst_blit_desc.srgb), 0x8) & (0x100)) |\n      (ALIGN_BIT(0x1, 0x16) & (0x400000)) |\n      (ALIGN_BIT((uint32_t) (info.flip_y), 0x13) & (0x80000))"
+  },
+  {
+   "file": "mwv207_blit.c",
+   "line": 657,
+   "macro": "MWV207_EMIT",
+   "value": "src_level->dst_configex"
+  }
+ ],
+ "0x500b": [
+  {
+   "file": "mwv207_blit.c",
+   "line": 131,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (dst_startx), 0x0) & (0xFFFF)) |\n               (ALIGN_BIT((uint32_t) (dst_starty), 0x10) & (0xFFFF0000))"
+  },
+  {
+   "file": "mwv207_blit.c",
+   "line": 288,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (0), 0x0) & (0xFFFF)) |\n         (ALIGN_BIT((uint32_t) (0), 0x10) & (0xFFFF0000))"
+  }
+ ],
+ "0x500c": [
+  {
+   "file": "mwv207_blit.c",
+   "line": 135,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (task_width), 0x0) & (0xFFFF)) |\n               (ALIGN_BIT((uint32_t) (task_height), 0x10) & (0xFFFF0000))"
+  },
+  {
+   "file": "mwv207_blit.c",
+   "line": 292,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (extra_size / sizeof(uint32_t)), 0x0) & (0xFFFF)) |\n         (ALIGN_BIT((uint32_t) (1), 0x10) & (0xFFFF0000))"
+  },
+  {
+   "file": "mwv207_blit.c",
+   "line": 662,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (src_level->width), 0x0) & (0xFFFF)) |\n      (ALIGN_BIT((uint32_t) (src_level->height), 0x10) & (0xFFFF0000))"
+  }
+ ],
+ "0x500d": [
+  {
+   "file": "mwv207_blit.c",
+   "line": 434,
+   "macro": "MWV207_EMITS",
+   "value": "2"
+  },
+  {
+   "file": "mwv207_blit.c",
+   "line": 544,
+   "macro": "MWV207_EMIT",
+   "value": "src->ts.clear_values[0]"
+  }
+ ],
+ "0x500f": [
+  {
+   "file": "mwv207_blit.c",
+   "line": 433,
+   "macro": "MWV207_EMITS",
+   "value": "2"
+  },
+  {
+   "file": "mwv207_blit.c",
+   "line": 797,
+   "macro": "MWV207_EMITS",
+   "value": "2"
+  }
+ ],
+ "0x501": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 198,
+   "macro": "MWV207_EMIT",
+   "value": "fui(0.0f)"
+  }
+ ],
+ "0x5011": [
+  {
+   "file": "mwv207_blit.c",
+   "line": 258,
+   "macro": "MWV207_EMITS",
+   "value": "2"
+  },
+  {
+   "file": "mwv207_blit.c",
+   "line": 425,
+   "macro": "MWV207_EMITS",
+   "value": "2"
+  }
+ ],
+ "0x5013": [
+  {
+   "file": "mwv207_blit.c",
+   "line": 259,
+   "macro": "MWV207_EMIT",
+   "value": "0xFFFFFFFF"
+  },
+  {
+   "file": "mwv207_blit.c",
+   "line": 426,
+   "macro": "MWV207_EMITS",
+   "value": "2"
+  }
+ ],
+ "0x5015": [
+  {
+   "file": "mwv207_blit.c",
+   "line": 180,
+   "macro": "MWV207_EMIT",
+   "value": "(uint32_t)copy_size"
+  }
+ ],
+ "0x5016": [
+  {
+   "file": "mwv207_blit.c",
+   "line": 588,
+   "macro": "MWV207_EMIT",
+   "value": "~0U"
+  },
+  {
+   "file": "mwv207_blit.c",
+   "line": 640,
+   "macro": "MWV207_EMIT",
+   "value": "~0U"
+  }
+ ],
+ "0x5017": [
+  {
+   "file": "mwv207_blit.c",
+   "line": 589,
+   "macro": "MWV207_EMIT",
+   "value": "~0U"
+  },
+  {
+   "file": "mwv207_blit.c",
+   "line": 641,
+   "macro": "MWV207_EMIT",
+   "value": "~0U"
+  }
+ ],
+ "0x5018": [
+  {
+   "file": "include/mwv207_cmd.h",
+   "line": 166,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (op), 0x0) & (0x7)) |\n      (ALIGN_BIT((uint32_t) (DISABLE), 0x4) & (0x10))"
+  }
+ ],
+ "0x5019": [
+  {
+   "file": "mwv207_blit.c",
+   "line": 256,
+   "macro": "MWV207_EMIT",
+   "value": "blit_config"
+  },
+  {
+   "file": "mwv207_blit.c",
+   "line": 397,
+   "macro": "MWV207_EMIT",
+   "value": "levelInfo->blit_config"
+  },
+  {
+   "file": "mwv207_blit.c",
+   "line": 496,
+   "macro": "MWV207_EMIT",
+   "value": "blit_config"
+  },
+  {
+   "file": "mwv207_blit.c",
+   "line": 638,
+   "macro": "MWV207_EMIT",
+   "value": "blit_config"
+  },
+  {
+   "file": "mwv207_blit.c",
+   "line": 795,
+   "macro": "MWV207_EMIT",
+   "value": "general_config"
+  }
+ ],
+ "0x501a": [
+  {
+   "file": "mwv207_blit.c",
+   "line": 817,
+   "macro": "MWV207_EMIT",
+   "value": "tile_count"
+  }
+ ],
+ "0x502": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 199,
+   "macro": "MWV207_EMIT",
+   "value": "fui(1.0f)"
+  }
+ ],
+ "0x5027": [
+  {
+   "file": "mwv207_blit.c",
+   "line": 537,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (0x40), 0x0) & (0xFFFF)) |\n      (ALIGN_BIT((uint32_t) (0x40), 0x10) & (0xFFFF0000))"
+  },
+  {
+   "file": "mwv207_blit.c",
+   "line": 670,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (0x40), 0x0) & (0xFFFF)) |\n      (ALIGN_BIT((uint32_t) (0x40), 0x10) & (0xFFFF0000))"
+  }
+ ],
+ "0x5028": [
+  {
+   "file": "mwv207_blit.c",
+   "line": 533,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (4), 0x0) & (0xFFFF)) |\n      (ALIGN_BIT((uint32_t) (4), 0x10) & (0xFFFF0000))"
+  },
+  {
+   "file": "mwv207_blit.c",
+   "line": 666,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (4), 0x0) & (0xFFFF)) |\n      (ALIGN_BIT((uint32_t) (4), 0x10) & (0xFFFF0000))"
+  }
+ ],
+ "0x502b": [
+  {
+   "file": "include/mwv207_cmd.h",
+   "line": 163,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (ENABLE), 0x1) & (0x2)) |\n      (ALIGN_BIT((uint32_t) (ENABLE), 0x0) & (0x1))"
+  },
+  {
+   "file": "include/mwv207_cmd.h",
+   "line": 169,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (ENABLE), 0x1) & (0x2)) |\n      (ALIGN_BIT((uint32_t) (ENABLE), 0x0) & (0x1))"
+  }
+ ],
+ "0x502c": [
+  {
+   "file": "mwv207_blit.c",
+   "line": 685,
+   "macro": "MWV207_EMIT",
+   "value": "((ALIGN_BIT((uint32_t) (info.src_info.level_count), 0x0) & (0xF)) | (~(0xF | 0x10))) &\n      ((ALIGN_BIT((uint32_t) (1), 0x5) & (0x20)) | (~(0x20 | 0x40)))"
+  }
+ ],
+ "0x502e": [
+  {
+   "file": "include/mwv207_cmd.h",
+   "line": 127,
+   "macro": "MWV207_EMIT",
+   "value": "\\\n      (ALIGN_BIT(0x1, 0x0) & (0x1))"
+  },
+  {
+   "file": "include/mwv207_cmd.h",
+   "line": 133,
+   "macro": "MWV207_EMIT",
+   "value": "\\\n      (ALIGN_BIT(0x0, 0x0) & (0x1))"
+  },
+  {
+   "file": "include/mwv207_cmd.h",
+   "line": 141,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT(0x1, 0x0) & (0x1))"
+  },
+  {
+   "file": "include/mwv207_cmd.h",
+   "line": 156,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT(0x0, 0x0) & (0x1))"
+  }
+ ],
+ "0x502f": [
+  {
+   "file": "mwv207_blit.c",
+   "line": 530,
+   "macro": "MWV207_EMIT",
+   "value": "src_blit_desc.swizzle |\n      (dst_blit_desc.swizzle << 0xC)"
+  },
+  {
+   "file": "mwv207_blit.c",
+   "line": 659,
+   "macro": "MWV207_EMIT",
+   "value": "src_blit_desc.swizzle |\n      (dst_blit_desc.swizzle << 0xC)"
+  }
+ ],
+ "0x503": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 476,
+   "macro": "MWV207_EMIT",
+   "value": "fui(surface->peInfo.depth_normalize)"
+  },
+  {
+   "file": "mwv207_draw.c",
+   "line": 487,
+   "macro": "MWV207_EMIT",
+   "value": "0"
+  }
+ ],
+ "0x505": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 473,
+   "macro": "MWV207_EMIT",
+   "value": "surface->stride"
+  }
+ ],
+ "0x506": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 1027,
+   "macro": "MWV207_EMIT",
+   "value": "ctx->zsa->stencil_op[ctx->rast_state->base.front_ccw]"
+  }
+ ],
+ "0x507": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 1029,
+   "macro": "MWV207_EMIT",
+   "value": "ctx->zsa->stencil_config[ctx->rast_state->base.front_ccw] |\n         ctx->stencil_ref.stencil_reference[ctx->rast_state->base.front_ccw]"
+  }
+ ],
+ "0x508": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 647,
+   "macro": "MWV207_EMIT",
+   "value": "ctx->zsa->alpha_config"
+  }
+ ],
+ "0x509": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 763,
+   "macro": "MWV207_EMIT",
+   "value": "color_8"
+  }
+ ],
+ "0x50a": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 692,
+   "macro": "MWV207_EMIT",
+   "value": "ctx->blend_state->alpha_blend"
+  }
+ ],
+ "0x50b": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 333,
+   "macro": "MWV207_EMIT",
+   "value": "surface->peInfo.pixel_config"
+  },
+  {
+   "file": "mwv207_draw.c",
+   "line": 432,
+   "macro": "MWV207_EMIT",
+   "value": "((ALIGN_BIT((uint32_t) (0x0), 0x8) & (0xF00)) | (~(0xF00 | 0x1000))) &\n         ((ALIGN_BIT((uint32_t) (0x1), 0x6) & (0x40)) | (~(0x40 | 0x80))) &\n         ((ALIGN_BIT((uint32_t) (0x1), 0x10) & (0x10000)) | (~(0x10000 | 0x20000)))"
+  },
+  {
+   "file": "mwv207_draw.c",
+   "line": 694,
+   "macro": "MWV207_EMIT",
+   "value": "((ALIGN_BIT((uint32_t) (colormask), 0x8) & (0xF00)) | (~(0xF00 | 0x1000))) &\n            ((ALIGN_BIT((uint32_t) (dst_read), 0x10) & (0x10000)) | (~(0x10000 | 0x20000)))"
+  }
+ ],
+ "0x50c0 + i - 1": [
+  {
+   "file": "mwv207_blit.c",
+   "line": 682,
+   "macro": "MWV207_EMIT",
+   "value": "lod_stride"
+  }
+ ],
+ "0x50ce": [
+  {
+   "file": "mwv207_blit.c",
+   "line": 124,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) ((1 << set_count)), 0x0) & (0xFF))"
+  },
+  {
+   "file": "mwv207_blit.c",
+   "line": 151,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (used_cluster_mask), 0x0) & (0xFF))"
+  },
+  {
+   "file": "mwv207_blit.c",
+   "line": 174,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) ((1 << set_count)), 0x0) & (0xFF))"
+  },
+  {
+   "file": "mwv207_blit.c",
+   "line": 191,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (ctx->ws->cluster_mask), 0x0) & (0xFF))"
+  },
+  {
+   "file": "mwv207_blit.c",
+   "line": 811,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) ((1 << set_count)), 0x0) & (0xFF))"
+  },
+  {
+   "file": "mwv207_blit.c",
+   "line": 828,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (ctx->ws->cluster_mask), 0x0) & (0xFF))"
+  },
+  {
+   "file": "include/mwv207_cmd.h",
+   "line": 129,
+   "macro": "MWV207_EMIT",
+   "value": "\\\n      (ALIGN_BIT((uint32_t) (ctx->ws->cluster_mask), 0x0) & (0xFF))"
+  },
+  {
+   "file": "include/mwv207_cmd.h",
+   "line": 145,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (cluster_mask), 0x0) & (0xFF))"
+  }
+ ],
+ "0x50cf": [
+  {
+   "file": "mwv207_blit.c",
+   "line": 565,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (info.dst_box.y), 0x0) & (0xFFFF)) |\n         (ALIGN_BIT((uint32_t) ((info.dst_box.y + info.dst_box.height)), 0x10) & (0xFFFF0000))"
+  }
+ ],
+ "0x50d": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 332,
+   "macro": "MWV207_EMIT",
+   "value": "surface->stride"
+  }
+ ],
+ "0x515": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 660,
+   "macro": "MWV207_EMIT",
+   "value": "0"
+  }
+ ],
+ "0x5180 + i": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 134,
+   "macro": "MWV207_EMIT",
+   "value": "0"
+  }
+ ],
+ "0x5190 + i": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 136,
+   "macro": "MWV207_EMIT",
+   "value": "stride[i]"
+  }
+ ],
+ "0x51a0 + i": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 116,
+   "macro": "MWV207_EMIT",
+   "value": "element.base.instance_divisor"
+  }
+ ],
+ "0x5248 + (ctx->info.pixel_record[i] - 1)": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 717,
+   "macro": "MWV207_EMIT",
+   "value": "((ALIGN_BIT((uint32_t) (newrtcm), 0x4) & (0xF0)) | (~(0xF0 | 0x800)))"
+  }
+ ],
+ "0x5248 + (render_num - 1)": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 701,
+   "macro": "MWV207_EMIT",
+   "value": "((ALIGN_BIT((uint32_t) (colormask), 0x4) & (0xF0)) | (~(0xF0 | 0x800)))&\n            ((ALIGN_BIT((uint32_t) (dst_read), 0x8) & (0x100)) | (~(0x100 | 0x200)))"
+  }
+ ],
+ "0x5250 + (ctx->info.pixel_record[i] - 1)": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 652,
+   "macro": "MWV207_EMIT",
+   "value": "ctx->zsa->alpha_config"
+  }
+ ],
+ "0x5250 + (i - 1)": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 649,
+   "macro": "MWV207_EMIT",
+   "value": "ctx->zsa->alpha_config"
+  }
+ ],
+ "0x5258 + (ctx->info.pixel_record[i] - 1)": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 715,
+   "macro": "MWV207_EMIT",
+   "value": "ctx->blend_state->blend_config[i]"
+  }
+ ],
+ "0x5258 + (render_num - 1)": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 698,
+   "macro": "MWV207_EMIT",
+   "value": "ctx->blend_state->blend_config[i]"
+  }
+ ],
+ "0x5260 + (ctx->info.pixel_record[i] - 1)": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 776,
+   "macro": "MWV207_EMIT",
+   "value": "colorLow"
+  }
+ ],
+ "0x5260 + (i - 1)": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 772,
+   "macro": "MWV207_EMIT",
+   "value": "colorLow"
+  }
+ ],
+ "0x5268 + (ctx->info.pixel_record[i] - 1)": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 777,
+   "macro": "MWV207_EMIT",
+   "value": "colorHigh"
+  }
+ ],
+ "0x5268 + (i - 1)": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 773,
+   "macro": "MWV207_EMIT",
+   "value": "colorHigh"
+  }
+ ],
+ "0x528": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 655,
+   "macro": "MWV207_EMIT",
+   "value": "ctx->zsa->alpha_reference"
+  },
+  {
+   "file": "mwv207_draw.c",
+   "line": 1032,
+   "macro": "MWV207_EMIT",
+   "value": "ctx->stencil_ref.stencil_back_reference[ctx->rast_state->base.front_ccw]"
+  }
+ ],
+ "0x5280": [
+  {
+   "file": "mwv207_shader.c",
+   "line": 420,
+   "macro": "MWV207_EMIT",
+   "value": "0"
+  }
+ ],
+ "0x5281": [
+  {
+   "file": "mwv207_shader.c",
+   "line": 421,
+   "macro": "MWV207_EMIT",
+   "value": "(tcs->code_size / 4)"
+  }
+ ],
+ "0x5283": [
+  {
+   "file": "mwv207_shader.c",
+   "line": 744,
+   "macro": "MWV207_EMIT",
+   "value": "0"
+  }
+ ],
+ "0x5284": [
+  {
+   "file": "mwv207_shader.c",
+   "line": 424,
+   "macro": "MWV207_EMIT",
+   "value": "(tcs->code_size / 4 - 1)"
+  }
+ ],
+ "0x5285": [
+  {
+   "file": "mwv207_compute.c",
+   "line": 221,
+   "macro": "MWV207_EMIT",
+   "value": "0"
+  },
+  {
+   "file": "mwv207_shader.c",
+   "line": 391,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (tcs_vertices_out), 0x0) & (0x3F)) |\n         (ALIGN_BIT((uint32_t) (remap), 0x8) & (0x300)) |\n         (ALIGN_BIT((uint32_t) (tcs->num_temps), 0xC) & (0x7F000)) |\n         (ALIGN_BIT((uint32_t) (link.num_varyings_fixed), 0x14) & (0x3F00000))"
+  },
+  {
+   "file": "mwv207_shader.c",
+   "line": 426,
+   "macro": "MWV207_EMIT",
+   "value": "0"
+  }
+ ],
+ "0x5286": [
+  {
+   "file": "mwv207_compute.c",
+   "line": 222,
+   "macro": "MWV207_EMIT",
+   "value": "0"
+  },
+  {
+   "file": "mwv207_shader.c",
+   "line": 412,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (max_patch), 0xC) & (0xFF000)) |\n         (ALIGN_BIT((uint32_t) (ctx->info.alloc_page[PIPE_SHADER_TESS_CTRL]), 0x0) & (0x3F)) |\n         (ALIGN_BIT((uint32_t) (ctx->info.alloc_page[PIPE_SHADER_TESS_CTRL]), 0x14) & (0x3F00000))"
+  },
+  {
+   "file": "mwv207_shader.c",
+   "line": 427,
+   "macro": "MWV207_EMIT",
+   "value": "0"
+  }
+ ],
+ "0x5287": [
+  {
+   "file": "mwv207_shader.c",
+   "line": 404,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (control_point_size), 0x0) & (0x3F)) |\n         (ALIGN_BIT((uint32_t) (patch_offset), 0x8) & (0x7FF00)) |\n         (ALIGN_BIT((uint32_t) (patch_size), 0x14) & (0x7FF00000)) |\n         (ALIGN_BIT((uint32_t) (0x1), 0x1F) & (0x80000000))"
+  }
+ ],
+ "0x5288": [
+  {
+   "file": "mwv207_shader.c",
+   "line": 402,
+   "macro": "MWV207_EMITS",
+   "value": "8"
+  }
+ ],
+ "0x529": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 269,
+   "macro": "MWV207_EMIT",
+   "value": "((ALIGN_BIT(0x1, 0x8) & (0x300)) | (~(0x300 | 0x80)))"
+  },
+  {
+   "file": "mwv207_draw.c",
+   "line": 272,
+   "macro": "MWV207_EMIT",
+   "value": "((ALIGN_BIT(0x3, 0x8) & (0x300)) | (~(0x300 | 0x80)))"
+  },
+  {
+   "file": "mwv207_draw.c",
+   "line": 339,
+   "macro": "MWV207_EMIT",
+   "value": "surface->peInfo.pe_config"
+  },
+  {
+   "file": "mwv207_draw.c",
+   "line": 477,
+   "macro": "MWV207_EMIT",
+   "value": "surface->peInfo.pe_config"
+  },
+  {
+   "file": "mwv207_draw.c",
+   "line": 608,
+   "macro": "MWV207_EMIT",
+   "value": "pe_config"
+  },
+  {
+   "file": "mwv207_draw.c",
+   "line": 674,
+   "macro": "MWV207_EMIT",
+   "value": "ctx->blend_state->logic_config"
+  }
+ ],
+ "0x5290": [
+  {
+   "file": "mwv207_shader.c",
+   "line": 410,
+   "macro": "MWV207_EMIT",
+   "value": "max_patch * patch_size"
+  }
+ ],
+ "0x5291": [
+  {
+   "file": "mwv207_vertex.c",
+   "line": 351,
+   "macro": "MWV207_EMIT",
+   "value": "(offset / 4)"
+  }
+ ],
+ "0x5293": [
+  {
+   "file": "mwv207_shader.c",
+   "line": 417,
+   "macro": "MWV207_EMIT",
+   "value": "0x20"
+  }
+ ],
+ "0x52a": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 723,
+   "macro": "MWV207_EMIT",
+   "value": "0x6e4ca280"
+  },
+  {
+   "file": "mwv207_draw.c",
+   "line": 726,
+   "macro": "MWV207_EMIT",
+   "value": "0xffffffff"
+  }
+ ],
+ "0x52b": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 724,
+   "macro": "MWV207_EMIT",
+   "value": "0x5d7f91b3"
+  },
+  {
+   "file": "mwv207_draw.c",
+   "line": 727,
+   "macro": "MWV207_EMIT",
+   "value": "0xffffffff"
+  }
+ ],
+ "0x52c": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 765,
+   "macro": "MWV207_EMIT",
+   "value": "colorLow"
+  }
+ ],
+ "0x52c0": [
+  {
+   "file": "mwv207_shader.c",
+   "line": 503,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (mode), 0x0) & (0x3)) |\n         (ALIGN_BIT((uint32_t) (spacing), 0x4) & (0x30)) |\n         (ALIGN_BIT((uint32_t) (topolog), 0x8) & (0x300)) |\n         (ALIGN_BIT((uint32_t) (64), 0xC) & (0x7F000)) |\n         (ALIGN_BIT((uint32_t) (32), 0x14) & (0x7F00000)) |\n         (ALIGN_BIT((uint32_t) (false), 0x1C) & (0x10000000))"
+  }
+ ],
+ "0x52c1": [
+  {
+   "file": "mwv207_shader.c",
+   "line": 545,
+   "macro": "MWV207_EMIT",
+   "value": "0"
+  }
+ ],
+ "0x52c2": [
+  {
+   "file": "mwv207_shader.c",
+   "line": 546,
+   "macro": "MWV207_EMIT",
+   "value": "(tes->code_size / 4)"
+  }
+ ],
+ "0x52c4": [
+  {
+   "file": "mwv207_shader.c",
+   "line": 747,
+   "macro": "MWV207_EMIT",
+   "value": "0"
+  }
+ ],
+ "0x52c5": [
+  {
+   "file": "mwv207_shader.c",
+   "line": 549,
+   "macro": "MWV207_EMIT",
+   "value": "(tes->code_size / 4 - 1)"
+  }
+ ],
+ "0x52c6": [
+  {
+   "file": "mwv207_compute.c",
+   "line": 223,
+   "macro": "MWV207_EMIT",
+   "value": "0"
+  },
+  {
+   "file": "mwv207_shader.c",
+   "line": 522,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT(0x1, 0x0) & (0x1)) |\n         (ALIGN_BIT((uint32_t) (out_nums), 0x4) & (0x3F0)) |\n         (ALIGN_BIT((uint32_t) (tes->num_temps), 0xC) & (0x7F000))"
+  },
+  {
+   "file": "mwv207_shader.c",
+   "line": 551,
+   "macro": "MWV207_EMIT",
+   "value": "0"
+  }
+ ],
+ "0x52c7": [
+  {
+   "file": "mwv207_compute.c",
+   "line": 224,
+   "macro": "MWV207_EMIT",
+   "value": "0"
+  },
+  {
+   "file": "mwv207_shader.c",
+   "line": 533,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (ctx->info.alloc_page[PIPE_SHADER_TESS_EVAL]), 0x0) & (0x3F)) |\n         (ALIGN_BIT((uint32_t) (ctx->info.max_thread[PIPE_SHADER_TESS_EVAL]), 0xC) & (0xFF000)) |\n         (ALIGN_BIT((uint32_t) (ctx->info.max_thread[PIPE_SHADER_TESS_EVAL] / 4), 0x14) & (0x1FF00000))"
+  },
+  {
+   "file": "mwv207_shader.c",
+   "line": 552,
+   "macro": "MWV207_EMIT",
+   "value": "0"
+  }
+ ],
+ "0x52c8": [
+  {
+   "file": "mwv207_shader.c",
+   "line": 529,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (out_nums), 0x0) & (0x3F)) |\n         (ALIGN_BIT((uint32_t) (out_nums * 64), 0x8) & (0x7FF00))"
+  }
+ ],
+ "0x52c9": [
+  {
+   "file": "mwv207_vertex.c",
+   "line": 357,
+   "macro": "MWV207_EMIT",
+   "value": "(offset / 4)"
+  }
+ ],
+ "0x52cb": [
+  {
+   "file": "mwv207_shader.c",
+   "line": 542,
+   "macro": "MWV207_EMIT",
+   "value": "0x28"
+  }
+ ],
+ "0x52cd": [
+  {
+   "file": "mwv207_compute.c",
+   "line": 225,
+   "macro": "MWV207_EMIT",
+   "value": "0"
+  },
+  {
+   "file": "mwv207_shader.c",
+   "line": 538,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (ctx->info.patchs[0x1]), 0x0) & (0xFF)) |\n         (ALIGN_BIT((uint32_t) (ctx->info.alloc_page[PIPE_SHADER_TESS_EVAL]), 0x8) & (0x3F00))"
+  },
+  {
+   "file": "mwv207_shader.c",
+   "line": 553,
+   "macro": "MWV207_EMIT",
+   "value": "0"
+  }
+ ],
+ "0x52d": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 766,
+   "macro": "MWV207_EMIT",
+   "value": "colorHigh"
+  }
+ ],
+ "0x52d0": [
+  {
+   "file": "mwv207_shader.c",
+   "line": 527,
+   "macro": "MWV207_EMITS",
+   "value": "8"
+  }
+ ],
+ "0x52e": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 1035,
+   "macro": "MWV207_EMIT",
+   "value": "ctx->zsa->stencil_back_config[ctx->rast_state->base.front_ccw]"
+  }
+ ],
+ "0x52f": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 609,
+   "macro": "MWV207_EMIT",
+   "value": "pe_config_ex"
+  }
+ ],
+ "0x530": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 690,
+   "macro": "MWV207_EMIT",
+   "value": "ctx->blend_state->alpha_config"
+  }
+ ],
+ "0x5310": [
+  {
+   "file": "mwv207_sampler.c",
+   "line": 608,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (ENABLE), 0x0) & (0x1))"
+  }
+ ],
+ "0x5311": [
+  {
+   "file": "mwv207_cmd.c",
+   "line": 156,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT(0x0, 0x1C) & (0xF0000000))"
+  }
+ ],
+ "0x5580": [
+  {
+   "file": "mwv207_compute.c",
+   "line": 184,
+   "macro": "MWV207_EMIT",
+   "value": "0x00000002"
+  },
+  {
+   "file": "mwv207_shader.c",
+   "line": 316,
+   "macro": "MWV207_EMIT",
+   "value": "0x00000002"
+  },
+  {
+   "file": "mwv207_shader.c",
+   "line": 667,
+   "macro": "MWV207_EMIT",
+   "value": "0x00000002"
+  }
+ ],
+ "0x5581": [
+  {
+   "file": "mwv207_shader.c",
+   "line": 317,
+   "macro": "MWV207_EMIT",
+   "value": "(vs->code_size / 4 - 1)"
+  }
+ ],
+ "0x5582": [
+  {
+   "file": "mwv207_compute.c",
+   "line": 220,
+   "macro": "MWV207_EMIT",
+   "value": "0"
+  },
+  {
+   "file": "mwv207_shader.c",
+   "line": 303,
+   "macro": "MWV207_EMIT",
+   "value": "alloc_pages"
+  }
+ ],
+ "0x594": [
+  {
+   "file": "mwv207_cmd.c",
+   "line": 87,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (ENABLE), 0x0) & (0x1))"
+  },
+  {
+   "file": "mwv207_cmd.c",
+   "line": 147,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (ENABLE), 0x0) & (0x1))"
+  }
+ ],
+ "0x595": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 325,
+   "macro": "MWV207_EMIT",
+   "value": "memory_config"
+  },
+  {
+   "file": "mwv207_draw.c",
+   "line": 466,
+   "macro": "MWV207_EMIT",
+   "value": "memory_config"
+  }
+ ],
+ "0x596": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 314,
+   "macro": "MWV207_EMIT",
+   "value": "0"
+  }
+ ],
+ "0x598": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 319,
+   "macro": "MWV207_EMIT",
+   "value": "tsInfo->clear_values[0]"
+  }
+ ],
+ "0x599": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 455,
+   "macro": "MWV207_EMIT",
+   "value": "0"
+  }
+ ],
+ "0x59b": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 460,
+   "macro": "MWV207_EMIT",
+   "value": "tsInfo->clear_values[0]"
+  }
+ ],
+ "0x5af": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 320,
+   "macro": "MWV207_EMIT",
+   "value": "tsInfo->clear_values[1]"
+  }
+ ],
+ "0x5c8 + 7": [
+  {
+   "file": "mwv207_sampler.c",
+   "line": 604,
+   "macro": "MWV207_EMIT",
+   "value": "0xcccccccd"
+  }
+ ],
+ "0x5e00 + i": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 108,
+   "macro": "MWV207_EMIT",
+   "value": "element.attribue_config"
+  }
+ ],
+ "0x5e8 + ba_index": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 403,
+   "macro": "MWV207_EMIT",
+   "value": "surface->peInfo.memory_config_ex"
+  },
+  {
+   "file": "mwv207_draw.c",
+   "line": 405,
+   "macro": "MWV207_EMIT",
+   "value": "0"
+  }
+ ],
+ "0x5e8 + render_num": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 358,
+   "macro": "MWV207_EMIT",
+   "value": "surface->peInfo.memory_config_ex"
+  },
+  {
+   "file": "mwv207_draw.c",
+   "line": 360,
+   "macro": "MWV207_EMIT",
+   "value": "0"
+  }
+ ],
+ "0x5e80 + i": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 110,
+   "macro": "MWV207_EMIT",
+   "value": "element.weight"
+  }
+ ],
+ "0x5ea0 + i": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 112,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (element.fetch_break), 0xB) & (0x800)) |\n         (ALIGN_BIT((uint32_t) (element.fetch_size), 0x0) & (0x1FF))"
+  }
+ ],
+ "0x5f0 + ba_index": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 394,
+   "macro": "MWV207_EMIT",
+   "value": "0"
+  }
+ ],
+ "0x5f0 + render_num": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 349,
+   "macro": "MWV207_EMIT",
+   "value": "0"
+  }
+ ],
+ "0x6101": [
+  {
+   "file": "mwv207_cmd.c",
+   "line": 41,
+   "macro": "MWV207_EMIT",
+   "value": "0x1"
+  }
+ ],
+ "0x680 + ba_index": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 399,
+   "macro": "MWV207_EMIT",
+   "value": "tsInfo->clear_values[0]"
+  }
+ ],
+ "0x680 + render_num": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 354,
+   "macro": "MWV207_EMIT",
+   "value": "tsInfo->clear_values[0]"
+  }
+ ],
+ "0x688 + ba_index": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 400,
+   "macro": "MWV207_EMIT",
+   "value": "tsInfo->clear_values[1]"
+  }
+ ],
+ "0x688 + render_num": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 355,
+   "macro": "MWV207_EMIT",
+   "value": "tsInfo->clear_values[1]"
+  }
+ ],
+ "0x690 + render_num": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 343,
+   "macro": "MWV207_EMIT",
+   "value": "tileCount"
+  }
+ ],
+ "0x6b": [
+  {
+   "file": "mwv207_cmd.c",
+   "line": 43,
+   "macro": "MWV207_EMIT",
+   "value": "0x0fffffff"
+  }
+ ],
+ "0x6d0": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 461,
+   "macro": "MWV207_EMIT",
+   "value": "tsInfo->clear_values[1]"
+  }
+ ],
+ "0x7000": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 517,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (rast_state->tfb_control), 0x0) & (0x1)) |\n      (ALIGN_BIT((uint32_t) (0), 0x4) & (0x30))"
+  }
+ ],
+ "0x7001": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 814,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT(0x2, 0x0) & (0x7))"
+  },
+  {
+   "file": "mwv207_draw.c",
+   "line": 869,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT(0x4, 0x0) & (0x7))"
+  },
+  {
+   "file": "mwv207_draw.c",
+   "line": 872,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT(0x1, 0x0) & (0x7))"
+  },
+  {
+   "file": "mwv207_query.c",
+   "line": 119,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT(0x4, 0x0) & (0x7))"
+  },
+  {
+   "file": "mwv207_query.c",
+   "line": 137,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT(0x1, 0x0) & (0x7))"
+  },
+  {
+   "file": "mwv207_query.c",
+   "line": 214,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT(0x2, 0x0) & (0x7))"
+  }
+ ],
+ "0x7003": [
+  {
+   "file": "mwv207_cmd.c",
+   "line": 160,
+   "macro": "MWV207_EMIT",
+   "value": "true"
+  }
+ ],
+ "0x7004": [
+  {
+   "file": "mwv207_query.c",
+   "line": 123,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT(0x4, 0x0) & (0x7)) |\n                        (ALIGN_BIT(0x1, 0x8) & (0xF00))"
+  },
+  {
+   "file": "mwv207_query.c",
+   "line": 128,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT(0x1, 0x0) & (0x7)) |\n                     (ALIGN_BIT(0x1, 0x8) & (0xF00))"
+  },
+  {
+   "file": "mwv207_query.c",
+   "line": 147,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT(0x4, 0x0) & (0x7)) |\n                     (ALIGN_BIT(0x0, 0x8) & (0xF00))"
+  },
+  {
+   "file": "mwv207_query.c",
+   "line": 151,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT(0x1, 0x0) & (0x7)) |\n                     (ALIGN_BIT(0x0, 0x8) & (0xF00))"
+  },
+  {
+   "file": "mwv207_query.c",
+   "line": 209,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT(0x2, 0x0) & (0x7)) |\n                  (ALIGN_BIT(0x1, 0x8) & (0xF00))"
+  },
+  {
+   "file": "mwv207_query.c",
+   "line": 219,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT(0x2, 0x0) & (0x7)) |\n                  (ALIGN_BIT(0x0, 0x8) & (0xF00))"
+  }
+ ],
+ "0x7020": [
+  {
+   "file": "mwv207_query.c",
+   "line": 136,
+   "macro": "MWV207_EMIT",
+   "value": "0"
+  }
+ ],
+ "0x7020 + i": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 865,
+   "macro": "MWV207_EMIT",
+   "value": "target->buffer_size"
+  }
+ ],
+ "0x7030": [
+  {
+   "file": "mwv207_query.c",
+   "line": 135,
+   "macro": "MWV207_EMIT",
+   "value": "0"
+  }
+ ],
+ "0x7030 + i": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 864,
+   "macro": "MWV207_EMIT",
+   "value": "stride"
+  }
+ ],
+ "0x7040": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 856,
+   "macro": "MWV207_EMIT",
+   "value": "tfb_des_count"
+  }
+ ],
+ "0x7200 + tfb_des_count": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 839,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (output.output_buffer), 0x0) & (0x3)) |\n               (ALIGN_BIT((uint32_t) (true), 0x4) & (0x10)) |\n               (ALIGN_BIT((uint32_t) (offset_components), 0x14) & (0x300000))"
+  },
+  {
+   "file": "mwv207_draw.c",
+   "line": 847,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (output.output_buffer), 0x0) & (0x3)) |\n            (ALIGN_BIT((uint32_t) (output.register_index), 0x8) & (0x1F00)) |\n            (ALIGN_BIT((uint32_t) (output.start_component), 0x10) & (0x30000)) |\n            (ALIGN_BIT((uint32_t) (output.num_components), 0x14) & (0x300000))"
+  }
+ ],
+ "0xe00": [
+  {
+   "file": "mwv207_cmd.c",
+   "line": 37,
+   "macro": "MWV207_EMIT",
+   "value": "0"
+  }
+ ],
+ "0xe02": [
+  {
+   "file": "mwv207_cmd.c",
+   "line": 110,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (0x1), 0x0) & (0x1F)) |\n         (ALIGN_BIT((uint32_t) (0x7), 0x8) & (0x1F00))"
+  },
+  {
+   "file": "mwv207_cmd.c",
+   "line": 163,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (0x1), 0x0) & (0x1F)) |\n         (ALIGN_BIT((uint32_t) (0x7), 0x8) & (0x1F00))"
+  },
+  {
+   "file": "mwv207_cmd.c",
+   "line": 183,
+   "macro": "MWV207_EMIT",
+   "value": "value"
+  },
+  {
+   "file": "mwv207_compute.c",
+   "line": 177,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (0x1), 0x0) & (0x1F)) |\n      (ALIGN_BIT((uint32_t) (0x7), 0x8) & (0x1F00))"
+  },
+  {
+   "file": "mwv207_compute.c",
+   "line": 278,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (0x1), 0x0) & (0x1F)) |\n      (ALIGN_BIT((uint32_t) (0x7), 0x8) & (0x1F00))"
+  },
+  {
+   "file": "mwv207_draw.c",
+   "line": 816,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT(0x3, 0x1C) & (0x30000000)) |\n         (ALIGN_BIT((uint32_t) (0x1), 0x0) & (0x1F)) |\n         (ALIGN_BIT((uint32_t) (0x7), 0x8) & (0x1F00))"
+  },
+  {
+   "file": "mwv207_draw.c",
+   "line": 909,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (0x5), 0x0) & (0x1F)) |\n      (ALIGN_BIT((uint32_t) (0x7), 0x8) & (0x1F00))"
+  },
+  {
+   "file": "include/mwv207_cmd.h",
+   "line": 149,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (0x1), 0x0) & (0x1F)) |\n      (ALIGN_BIT((uint32_t) (0x10), 0x8) & (0x1F00))"
+  }
+ ],
+ "0xe03": [
+  {
+   "file": "mwv207_cmd.c",
+   "line": 80,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (ENABLE), 0x1) & (0x2)) |\n      (ALIGN_BIT((uint32_t) (ENABLE), 0x0) & (0x1)) |\n      (ALIGN_BIT((uint32_t) (ENABLE), 0x5) & (0x20)) |\n      (ALIGN_BIT((uint32_t) (ENABLE), 0xB) & (0x800)) |\n      (ALIGN_BIT((uint32_t) (ENABLE), 0xA) & (0x400))"
+  },
+  {
+   "file": "mwv207_cmd.c",
+   "line": 141,
+   "macro": "MWV207_EMIT",
+   "value": "flush_state"
+  },
+  {
+   "file": "mwv207_cmd.c",
+   "line": 144,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (ENABLE), 0x4) & (0x10))"
+  },
+  {
+   "file": "mwv207_compute.c",
+   "line": 285,
+   "macro": "MWV207_EMIT",
+   "value": "0xc23"
+  },
+  {
+   "file": "mwv207_draw.c",
+   "line": 305,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (ENABLE), 0x1) & (0x2))"
+  },
+  {
+   "file": "mwv207_draw.c",
+   "line": 388,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (ENABLE), 0x1) & (0x2))"
+  },
+  {
+   "file": "mwv207_draw.c",
+   "line": 448,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (ENABLE), 0x0) & (0x1))"
+  },
+  {
+   "file": "mwv207_draw.c",
+   "line": 685,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (ENABLE), 0x1) & (0x2))"
+  },
+  {
+   "file": "mwv207_draw.c",
+   "line": 811,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (ENABLE), 0xE) & (0x4000))"
+  },
+  {
+   "file": "mwv207_draw.c",
+   "line": 905,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (ENABLE), 0x4) & (0x10))"
+  },
+  {
+   "file": "mwv207_draw.c",
+   "line": 934,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (ENABLE), 0x0) & (0x1))"
+  },
+  {
+   "file": "mwv207_sampler.c",
+   "line": 512,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (ENABLE), 0x5) & (0x20)) |\n      (ALIGN_BIT((uint32_t) (ENABLE), 0xB) & (0x800)) |\n      (ALIGN_BIT((uint32_t) (ENABLE), 0xA) & (0x400))"
+  },
+  {
+   "file": "mwv207_sampler.c",
+   "line": 517,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (ENABLE), 0xC) & (0x1000)) |\n      (ALIGN_BIT((uint32_t) (ENABLE), 0xD) & (0x2000))"
+  },
+  {
+   "file": "mwv207_sampler.c",
+   "line": 628,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (ENABLE), 0x4) & (0x10))"
+  }
+ ],
+ "0xe05": [
+  {
+   "file": "mwv207_cmd.c",
+   "line": 53,
+   "macro": "MWV207_EMIT",
+   "value": "0x1"
+  }
+ ],
+ "0xe06": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 590,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (sample_mode), 0x0) & (0x3)) |\n      (ALIGN_BIT((uint32_t) (sample_enable_bits), 0x4) & (0xF0)) |\n      (ALIGN_BIT(0x0, 0xC) & (0x7000)) |\n      (ALIGN_BIT(0x0, 0x10) & (0x30000)) |\n      (ALIGN_BIT((uint32_t) (3), 0x14) & (0x300000)) |\n      (ALIGN_BIT((uint32_t) (DISABLE), 0x18) & (0x1000000)) |\n      (ALIGN_BIT((uint32_t) (ENABLE), 0x1C) & (0x10000000))"
+  }
+ ],
+ "0xe07": [
+  {
+   "file": "mwv207_compute.c",
+   "line": 231,
+   "macro": "MWV207_EMIT",
+   "value": "0x22"
+  },
+  {
+   "file": "mwv207_shader.c",
+   "line": 729,
+   "macro": "MWV207_EMIT",
+   "value": "component_count"
+  }
+ ],
+ "0xe0c": [
+  {
+   "file": "mwv207_query.c",
+   "line": 195,
+   "macro": "MWV207_EMIT",
+   "value": "0x01df5e76"
+  }
+ ],
+ "0xe13": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 513,
+   "macro": "MWV207_EMIT",
+   "value": "0x0"
+  }
+ ],
+ "0xe18": [
+  {
+   "file": "mwv207_query.c",
+   "line": 93,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT(0x7, 0x0) & (0x7))"
+  },
+  {
+   "file": "mwv207_query.c",
+   "line": 96,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT(0x6, 0x0) & (0x7))"
+  }
+ ],
+ "0xe1b": [
+  {
+   "file": "mwv207_query.c",
+   "line": 112,
+   "macro": "MWV207_EMIT",
+   "value": "time_stamp_low"
+  },
+  {
+   "file": "mwv207_query.c",
+   "line": 205,
+   "macro": "MWV207_EMIT",
+   "value": "time_stamp_low"
+  }
+ ],
+ "0xe22": [
+  {
+   "file": "mwv207_compute.c",
+   "line": 239,
+   "macro": "MWV207_EMIT",
+   "value": "0x007f0000"
+  },
+  {
+   "file": "mwv207_shader.c",
+   "line": 362,
+   "macro": "MWV207_EMIT",
+   "value": "0x7f000000 |\n       (ALIGN_BIT((uint32_t) (render_arrary_ofs), 0x10) & (0x7F0000)) |\n       (ALIGN_BIT((uint32_t) (pcoord_varying_comp_ofs), 0x8) & (0x7F00)) |\n       (ALIGN_BIT((uint32_t) (point_size_ops), 0x0) & (0x7F))"
+  }
+ ],
+ "0xe23": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 474,
+   "macro": "MWV207_EMIT",
+   "value": "surface->size"
+  },
+  {
+   "file": "mwv207_draw.c",
+   "line": 488,
+   "macro": "MWV207_EMIT",
+   "value": "0"
+  }
+ ],
+ "0xe26": [
+  {
+   "file": "mwv207_query.c",
+   "line": 111,
+   "macro": "MWV207_EMIT",
+   "value": "time_stamp_high"
+  },
+  {
+   "file": "mwv207_query.c",
+   "line": 204,
+   "macro": "MWV207_EMIT",
+   "value": "time_stamp_high"
+  }
+ ],
+ "0xe27": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 907,
+   "macro": "MWV207_EMIT",
+   "value": "draw_count++"
+  }
+ ],
+ "0xe28": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 334,
+   "macro": "MWV207_EMIT",
+   "value": "surface->size"
+  }
+ ],
+ "0xe28 + ba_index": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 412,
+   "macro": "MWV207_EMIT",
+   "value": "surface->size"
+  }
+ ],
+ "0xe28 + render_num": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 368,
+   "macro": "MWV207_EMIT",
+   "value": "surface->size"
+  }
+ ],
+ "0xe30": [
+  {
+   "file": "mwv207_shader.c",
+   "line": 733,
+   "macro": "MWV207_EMITS",
+   "value": "16"
+  }
+ ],
+ "0xe42": [
+  {
+   "file": "mwv207_cmd.c",
+   "line": 47,
+   "macro": "MWV207_EMIT",
+   "value": "0x2"
+  }
+ ],
+ "0xe80": [
+  {
+   "file": "mwv207_cmd.c",
+   "line": 39,
+   "macro": "MWV207_EMIT",
+   "value": "0x10000000"
+  }
+ ],
+ "0xf00": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 912,
+   "macro": "MWV207_EMIT",
+   "value": "(ALIGN_BIT((uint32_t) (0x5), 0x0) & (0x1F)) |\n      (ALIGN_BIT((uint32_t) (0x7), 0x8) & (0x1F00))"
+  }
+ ],
+ "0xffff": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 308,
+   "macro": "MWV207_EMIT",
+   "value": "0x00000000"
+  },
+  {
+   "file": "mwv207_draw.c",
+   "line": 449,
+   "macro": "MWV207_EMIT",
+   "value": "0x00000000"
+  }
+ ],
+ "<STALL>": [
+  {
+   "file": "mwv207_cmd.c",
+   "line": 114,
+   "value": "(ALIGN_BIT((uint32_t) (0x1), 0x0) & (0x1F)) |\n         (ALIGN_BIT((uint32_t) (0x7), 0x8) & (0x1F00))"
+  },
+  {
+   "file": "mwv207_cmd.c",
+   "line": 167,
+   "value": "(ALIGN_BIT((uint32_t) (0x1), 0x0) & (0x1F)) |\n         (ALIGN_BIT((uint32_t) (0x7), 0x8) & (0x1F00))"
+  },
+  {
+   "file": "mwv207_cmd.c",
+   "line": 184,
+   "value": "value"
+  },
+  {
+   "file": "mwv207_compute.c",
+   "line": 180,
+   "value": "(ALIGN_BIT((uint32_t) (0x1), 0x0) & (0x1F)) |\n      (ALIGN_BIT((uint32_t) (0x7), 0x8) & (0x1F00))"
+  },
+  {
+   "file": "mwv207_compute.c",
+   "line": 281,
+   "value": "(ALIGN_BIT((uint32_t) (0x1), 0x0) & (0x1F)) |\n      (ALIGN_BIT((uint32_t) (0x7), 0x8) & (0x1F00))"
+  },
+  {
+   "file": "mwv207_draw.c",
+   "line": 820,
+   "value": "(ALIGN_BIT(0x3, 0x1C) & (0x30000000)) |\n         (ALIGN_BIT((uint32_t) (0x1), 0x0) & (0x1F)) |\n         (ALIGN_BIT((uint32_t) (0x7), 0x8) & (0x1F00))"
+  },
+  {
+   "file": "include/mwv207_cmd.h",
+   "line": 86,
+   "value": "value"
+  },
+  {
+   "file": "include/mwv207_cmd.h",
+   "line": 152,
+   "value": "(ALIGN_BIT((uint32_t) (0x1), 0x0) & (0x1F)) |\n      (ALIGN_BIT((uint32_t) (0x10), 0x8) & (0x1F00))"
+  }
+ ],
+ "<computed:(0x5240 + (ctx->info.pixel_record[i] - 1))>": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 963,
+   "value": "surface->peInfo.pixel_config_ex | ctx->blend_state->blend_configex[i]"
+  }
+ ],
+ "<computed:(0x5240 + (render_num - 1))>": [
+  {
+   "file": "mwv207_draw.c",
+   "line": 959,
+   "value": "surface->peInfo.pixel_config_ex | ctx->blend_state->blend_configex[i]"
+  }
+ ],
+ "<computed:base>": [
+  {
+   "file": "mwv207_vertex.c",
+   "line": 442,
+   "value": "4"
+  },
+  {
+   "file": "mwv207_vertex.c",
+   "line": 561,
+   "value": "4"
+  }
+ ],
+ "<computed:reg>": [
+  {
+   "file": "mwv207_cmd.c",
+   "line": 231,
+   "value": "offset"
+  },
+  {
+   "file": "mwv207_cmd.c",
+   "line": 250,
+   "value": "0"
+  },
+  {
+   "file": "include/mwv207_cmd.h",
+   "line": 92,
+   "value": "value"
+  },
+  {
+   "file": "include/mwv207_cmd.h",
+   "line": 98,
+   "value": "value"
+  },
+  {
+   "file": "include/mwv207_cmd.h",
+   "line": 104,
+   "value": "count"
+  },
+  {
+   "file": "include/mwv207_cmd.h",
+   "line": 112,
+   "value": "count"
+  }
+ ],
+ "<computed:sampler_regs[config_id].sampler_anisval + index>": [
+  {
+   "file": "mwv207_sampler.c",
+   "line": 575,
+   "value": "tex_desc->cube ? 0 : sampler_desc->sampler_anisval"
+  },
+  {
+   "file": "mwv207_sampler.c",
+   "line": 595,
+   "value": "tex_desc->cube ? 0 : sampler_desc->sampler_anisval"
+  }
+ ],
+ "<computed:sampler_regs[config_id].sampler_ctrl0 + index>": [
+  {
+   "file": "mwv207_sampler.c",
+   "line": 567,
+   "value": "sampler_ctrl0"
+  },
+  {
+   "file": "mwv207_sampler.c",
+   "line": 587,
+   "value": "sampler_ctrl0"
+  }
+ ],
+ "<computed:sampler_regs[config_id].sampler_ctrl1 + index>": [
+  {
+   "file": "mwv207_sampler.c",
+   "line": 569,
+   "value": "sampler_ctrl1"
+  },
+  {
+   "file": "mwv207_sampler.c",
+   "line": 589,
+   "value": "sampler_ctrl1"
+  }
+ ],
+ "<computed:sampler_regs[config_id].sampler_lod_bias + index>": [
+  {
+   "file": "mwv207_sampler.c",
+   "line": 573,
+   "value": "sampler_desc->sampler_lod_bias"
+  },
+  {
+   "file": "mwv207_sampler.c",
+   "line": 593,
+   "value": "sampler_desc->sampler_lod_bias"
+  }
+ ],
+ "<computed:sampler_regs[config_id].sampler_lod_config + index>": [
+  {
+   "file": "mwv207_sampler.c",
+   "line": 571,
+   "value": "sampler_desc->sampler_lod_config"
+  },
+  {
+   "file": "mwv207_sampler.c",
+   "line": 591,
+   "value": "sampler_desc->sampler_lod_config"
+  }
+ ],
+ "<computed:sampler_regs[config_id].tex_command>": [
+  {
+   "file": "mwv207_sampler.c",
+   "line": 616,
+   "value": "(ALIGN_BIT(0x2, 0x1C) & (0xF0000000)) |\n            (ALIGN_BIT((uint32_t) (i + stage_offset), 0x0) & (0x7F))"
+  },
+  {
+   "file": "mwv207_sampler.c",
+   "line": 621,
+   "value": "(ALIGN_BIT(0x2, 0x1C) & (0xF0000000)) |\n               (ALIGN_BIT((uint32_t) (ctx->info.tex_record[stage][i] + stage_offset), 0x0) & (0x7F))"
+  }
+ ],
+ "<computed:sampler_regs[config_id].tex_control + index>": [
+  {
+   "file": "mwv207_sampler.c",
+   "line": 580,
+   "value": "0"
+  },
+  {
+   "file": "mwv207_sampler.c",
+   "line": 600,
+   "value": "0"
+  }
+ ]
+}

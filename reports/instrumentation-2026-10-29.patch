@@ -1,0 +1,1768 @@
+diff --git a/src/gallium/drivers/mwv207/mwv207_blend.c b/src/gallium/drivers/mwv207/mwv207_blend.c
+index 32d2c74..4c08ea1 100644
+--- a/src/gallium/drivers/mwv207/mwv207_blend.c
++++ b/src/gallium/drivers/mwv207/mwv207_blend.c
+@@ -292,6 +292,8 @@ mwv207_bind_blend_state(struct pipe_context *pctx, void *state)
+    }
+ 
+    if (ctx->info.dsbi.is_dual) {
++      /* MWV207_NODUAL: experiment — keep original blend config instead of zeroing */
++      if (!getenv("MWV207_NODUAL")) {
+       for (int i = 0; i < PIPE_MAX_COLOR_BUFS; ++i) {
+          if (i == 0)
+             ctx->blend_state->alpha_blend = (ALIGN_BIT((uint32_t) (!ctx->info.dsbi.is_dual), 0x0) & (0x1));
+@@ -299,6 +301,9 @@ mwv207_bind_blend_state(struct pipe_context *pctx, void *state)
+          ctx->blend_state->blend_config[i] = 0 |
+             (ALIGN_BIT((uint32_t) (!ctx->info.dsbi.is_dual), 0x0) & (0x1));
+       }
++      } else {
++         fprintf(stderr, "[MWV207_NODUAL] dual blend zeroing skipped\n");
++      }
+    }
+    ctx->dirty |= MWV207_DIRTY_BLEND;
+ }
+diff --git a/src/gallium/drivers/mwv207/mwv207_blit.c b/src/gallium/drivers/mwv207/mwv207_blit.c
+index 561d51d..20001b8 100644
+--- a/src/gallium/drivers/mwv207/mwv207_blit.c
++++ b/src/gallium/drivers/mwv207/mwv207_blit.c
+@@ -24,6 +24,7 @@
+ * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
+ * OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ */
++#include <execinfo.h>
+ #include "util/u_blitter.h"
+ #include "util/u_surface.h"
+ #include "util/u_pack_color.h"
+@@ -376,7 +377,7 @@ mwv207_clear_image(struct mwv207_context *ctx, struct mwv207_clear_info info)
+       uint32_t index = info.tex_info.first_level * dst->base.array_size + info.tex_info.first_layer;
+       tile_offset = ts->layer_offset * index;
+ 
+-      if (clear_masks[0] == 0xFFFFFFFF && clear_masks[1] == 0xFFFFFFFF) {
++      if (clear_masks[0] == 0xFFFFFFFF && clear_masks[1] == 0xFFFFFFFF && !getenv("MWV207_NOFASTCLEAR")) {
+          ts->clear_values[0] = clear_values[0];
+          ts->clear_values[1] = clear_values[1];
+          fast_clear = true;
+@@ -384,6 +385,9 @@ mwv207_clear_image(struct mwv207_context *ctx, struct mwv207_clear_info info)
+          dst->linear_output = false;
+          src_configex |= levelInfo->src_compress;
+          dst_configex |= levelInfo->dst_compress;
++         if (getenv("MWV207_TSDBG"))
++            fprintf(stderr, "[TSDBG] fastclear enable %s %ux%u\n",
++                    util_format_name(dst->base.format), dst->base.width0, dst->base.height0);
+       } else if (dst->ts.enable)
+          mwv207_disable_tile(ctx, dst);
+    }
+@@ -474,8 +478,18 @@ mwv207_copy_layer(struct mwv207_context *ctx, struct mwv207_region_info info)
+ 
+    if (src->ts.bo && !info.src_info.first_level && src->ts.enable) {
+       src_tile_offset = src->ts.layer_offset * info.src_info.first_layer;
++      /* A self-copy (src == dst) is how mwv207_disable_tile() decompresses a
++       * compressed tile back into its backing store. In that case the tile
++       * status clear value must NOT be used as the blit source: doing so
++       * overwrites the whole resource with the last clear colour (which is
++       * what turns Firefox's chrome band permanently black). */
+       fast_clear = (src_tile_offset == 0);
+       src_configex |= (ALIGN_BIT((uint32_t) (fast_clear), 0x0) & (0x1));
++      if (getenv("MWV207_SELFBLIT"))
++         fprintf(stderr, "[SELFBLIT] %s %ux%u src=%p dst=%p self=%d fast_clear=%d tsclr=%08x\n",
++                 util_format_name(src->base.format), src->base.width0, src->base.height0,
++                 (void *)src, (void *)dst, (int)(src == dst), (int)fast_clear,
++                 src->ts.clear_values[0]);
+    }
+ 
+    mwv207_get_blit_desc(info.src_format, &src_blit_desc);
+@@ -841,11 +855,55 @@ mwv207_disable_tile(struct mwv207_context *ctx, struct mwv207_resource *res)
+    if (res->mode == MWV207_LINEAR)
+       return;
+ 
++   uint32_t dg_pre = 0, nzp_pre = 0;
++   const char *dg = getenv("MWV207_TILEDBG");
++   uint32_t nz_bytes = res->level_infos[0].stride * res->base.height0;
++   if (dg && res->bo) {
++      ctx->ws->bo_wait(ctx->ws, res->bo, 0x7fffffffffffffffULL);
++      uint8_t *p = ctx->ws->bo_map(ctx->ws, res->bo);
++      if (p) {
++         dg_pre = *(uint32_t *)(p + (uint64_t)res->offset);
++         uint8_t *b = p + (uint64_t)res->offset;
++         for (uint32_t i = 0; i < nz_bytes; i += 512u)
++            if (b[i]) nzp_pre++;
++         ctx->ws->bo_unmap(ctx->ws, res->bo);
++      }
++   }
++
+    if (res->ts.compressed)
+       mwv207_blit_self_image(ctx, res);
+    else
+       mwv207_till_fill(ctx, res);
+ 
++   if (dg) {
++      uint32_t dg_post = 0, nzp_post = 0, real_post = 0, tot_post = 0;
++      if (res->bo) {
++         ctx->ws->bo_wait(ctx->ws, res->bo, 0x7fffffffffffffffULL);
++         uint8_t *p = ctx->ws->bo_map(ctx->ws, res->bo);
++         if (p) {
++            dg_post = *(uint32_t *)(p + (uint64_t)res->offset);
++            uint8_t *b = p + (uint64_t)res->offset;
++            for (uint32_t i = 0; i < nz_bytes; i += 512u)
++               if (b[i]) nzp_post++;
++            /* Real-content probe: count 32-bit words that are neither the fast-clear
++             * colour nor zero. If this is 0 the tile holds nothing but its clear value. */
++            for (uint32_t i = 0; i + 4u <= nz_bytes; i += 4096u) {
++               uint32_t w;
++               memcpy(&w, b + i, 4);
++               tot_post++;
++               if (w != 0u && w != res->ts.clear_values[0]) real_post++;
++            }
++            ctx->ws->bo_unmap(ctx->ws, res->bo);
++         }
++      }
++      fprintf(stderr, "[TILEDBG] res=%p %s %ux%u mode=%d comp=%d pre=%08x post=%08x"
++              " nzbytes=%u nz_pre=%u nz_post=%u real_post=%u/%u tsclr=%08x,%08x\n",
++              (void *)res, util_format_name(res->base.format), res->base.width0, res->base.height0,
++              (int)res->mode, (int)res->ts.compressed, dg_pre, dg_post,
++              nz_bytes, nzp_pre, nzp_post, real_post, tot_post,
++              res->ts.clear_values[0], res->ts.clear_values[1]);
++   }
++
+    res->ts.enable = false;
+    res->src_dirty = true;
+ }
+@@ -988,11 +1046,137 @@ mwv207_clear_render_target(struct pipe_context *pctx,
+    struct mwv207_clear_info clear_info;
+    res->src_dirty = true;
+ 
++   if (getenv("MWV207_CLEARBT") && res->base.width0 == 1280 && res->base.height0 == 929) {
++      void *bt[16];
++      int nb = backtrace(bt, 16);
++      fprintf(stderr, "[CLEARBT] rect=%u,%u %ux%u rgba=%g,%g,%g,%g\n", dstx, dsty, width, height,
++              color->f[0], color->f[1], color->f[2], color->f[3]);
++      backtrace_symbols_fd(bt, nb, 2);
++   }
++   if (getenv("MWV207_DRAWTL") && res->base.width0 == 1280 && res->base.height0 == 929) {
++      extern int mwv207_windraw_idx;
++      fprintf(stderr, "[TL] CLEAR at_d=%d bo=%p rect=%u,%u %ux%u rgba=%g,%g,%g,%g\n",
++              mwv207_windraw_idx, (void*)res, dstx, dsty, width, height,
++              color->f[0], color->f[1], color->f[2], color->f[3]);
++   }
++   if (getenv("MWV207_WINCLR") && res->base.width0 == 1280 && res->base.height0 == 929) {
++      extern int mwv207_windraw_idx;
++      uint32_t p0=0,p40=0,p80=0,p2=0;
++      if (res->bo) {
++         ctx->ws->bo_wait(ctx->ws, res->bo, 0x7fffffffffffffffULL);
++         uint8_t *bm = ctx->ws->bo_map(ctx->ws, res->bo);
++         if (bm) {
++            uint32_t st = res->level_infos[0].stride;
++            uint8_t *base = bm + (uint64_t)res->offset;
++            p0  = *(uint32_t *)(base + 0  * st + 640*4);
++            p2  = *(uint32_t *)(base + 2  * st + 640*4);
++            p40 = *(uint32_t *)(base + 40 * st + 640*4);
++            p80 = *(uint32_t *)(base + 80 * st + 640*4);
++            ctx->ws->bo_unmap(ctx->ws, res->bo);
++         }
++      }
++      fprintf(stderr, "[WINCLR] at_d=%d bo=%p mode=%d lin=%d rect=%u,%u %ux%u rgba=%g,%g,%g,%g"
++              " PRE row0=%08x row2=%08x row40=%08x row80=%08x ts_en=%d\n",
++              mwv207_windraw_idx, (void*)res, res->mode, res->linear_output,
++              dstx, dsty, width, height,
++              color->f[0], color->f[1], color->f[2], color->f[3],
++              p0, p2, p40, p80, res->ts.enable);
++   }
++   if (getenv("MWV207_CLR2") && res->base.width0 == 1024 && res->base.height0 == 512) {
++      uint32_t nzb = 0;
++      uint32_t nbytes = res->level_infos[0].stride * res->base.height0;
++      if (res->bo) {
++         ctx->ws->bo_wait(ctx->ws, res->bo, 0x7fffffffffffffffULL);
++         uint8_t *bm = ctx->ws->bo_map(ctx->ws, res->bo);
++         if (bm) {
++            uint8_t *bb = bm + (uint64_t)res->offset;
++            for (uint32_t i = 0; i < nbytes; i += 512u) if (bb[i]) nzb++;
++            ctx->ws->bo_unmap(ctx->ws, res->bo);
++         }
++      }
++      fprintf(stderr, "[CLR2] PRE res=%p bo=%p %s %ux%u rect=%u,%u %ux%u rgba=%g,%g,%g,%g"
++              " nz=%u/%u ts_en=%d ts_cmp=%d mode=%d\n",
++              (void*)res, (void*)res->bo, util_format_name(res->base.format),
++              res->base.width0, res->base.height0, dstx, dsty, width, height,
++              color->f[0], color->f[1], color->f[2], color->f[3],
++              nzb, nbytes/512u, (int)res->ts.enable, (int)res->ts.compressed, (int)res->mode);
++   }
++   if (getenv("MWV207_FBTRACE")) {
++      fprintf(stderr, "[MWV207_CLEAR] %s %ux%u rect=%u,%u %ux%u rgba=%g,%g,%g,%g\n",
++              util_format_name(res->base.format), res->base.width0, res->base.height0,
++              dstx, dsty, width, height,
++              color->f[0], color->f[1], color->f[2], color->f[3]);
++   }
++
++   if (getenv("MWV207_CLR2") && res->base.width0 == 1024 && res->base.height0 == 512)
++      fprintf(stderr, "[CLR2-TAG] res=%p bo=%p enter rgba=%g,%g,%g,%g ts_en0=%d\n",
++              (void*)res, (void*)res->bo, color->f[0], color->f[1], color->f[2], color->f[3],
++              (int)res->ts.enable);
++
++   if (getenv("MWV207_NOTILECLR") && res->base.width0 == 1024 && res->base.height0 == 512 &&
++       color->f[0] == 0.0f && color->f[1] == 0.0f && color->f[2] == 0.0f && color->f[3] == 0.0f) {
++      static int ntileclr = 0;
++      fprintf(stderr, "[NOTILECLR] #%d bo=%p res=%p rect=%u,%u %ux%u -- skipped\n",
++              ntileclr++, (void*)res->bo, (void*)res, dstx, dsty, width, height);
++      return;
++   }
++   if (getenv("MWV207_SVSTOP") && res->base.width0 == 1024 && res->base.height0 == 512) {
++      const char *svs = getenv("MWV207_SVSTOP");
++      static void *watch1 = NULL;
++      if (!watch1) watch1 = (void*)(uintptr_t)strtoull(svs, NULL, 0);
++      if ((void*)res == watch1 || (void*)res->bo == watch1) {
++         fprintf(stderr, "[SVSTOP] CLEAR bo=%p res=%p rect=%u,%u %ux%u rgba=%g,%g,%g,%g\n",
++                 (void*)res->bo, (void*)res, dstx, dsty, width, height,
++                 color->f[0], color->f[1], color->f[2], color->f[3]);
++         if (getenv("MWV207_SVSTOP_SKIP")) {
++            fprintf(stderr, "[SVSTOP] SKIPPED\n");
++            return;
++         }
++      }
++   }
++   if (getenv("MWV207_NOCLR") && res->base.width0 == 1280 && res->base.height0 == 929 &&
++       dstx == 0 && dsty == 0 && width >= 1280 && height >= 929 &&
++       color->f[0] == 0.0f && color->f[1] == 0.0f && color->f[2] == 0.0f) {
++      fprintf(stderr, "[NOCLR] skipped full-window clear to %g,%g,%g,%g\n",
++              color->f[0], color->f[1], color->f[2], color->f[3]);
++      return;
++   }
++
++   if (getenv("MWV207_SEQ") && res->base.width0 == 1280 && res->base.height0 == 929) {
++      extern int mwv207_windraw_idx;
++      fprintf(stderr, "[CLEARSEQ] at_draw=%d rect=%u,%u %ux%u rgba=%g,%g,%g,%g bo=%p\n",
++              mwv207_windraw_idx, dstx, dsty, width, height,
++              color->f[0], color->f[1], color->f[2], color->f[3], (void*)res);
++      ctx->ws->bo_wait(ctx->ws, res->bo, 0x7fffffffffffffffULL);
++      uint8_t *b = ctx->ws->bo_map(ctx->ws, res->bo);
++      if (b) {
++         uint32_t st = res->level_infos[0].stride;
++         uint32_t *q = (uint32_t *)(b + (uint64_t)res->offset + (uint64_t)40 * st + 640 * 4);
++         uint32_t *q2 = (uint32_t *)(b + (uint64_t)res->offset + (uint64_t)300 * st + 640 * 4);
++         fprintf(stderr, "[SEQ] CLEAR-PRE  bo=%p tb40=%08x ct300=%08x rgba=%g,%g,%g,%g rect=%u,%u %ux%u\n",
++                 (void *)res, *q, *q2, color->f[0], color->f[1], color->f[2], color->f[3],
++                 dstx, dsty, width, height);
++         ctx->ws->bo_unmap(ctx->ws, res->bo);
++      }
++   }
++
+    if (util_format_get_blocksize(res->base.format) >= 8) {
+       util_clear_render_target(pctx, dst, color, dstx, dsty, width, height);
+ 
+       if (res->res_128_bit)
+          mwv207_split_128bit(pctx, dst->texture, PIPE_FORMAT_NONE);
++
++      if (getenv("MWV207_SEQ") && res->base.width0 == 1280 && res->base.height0 == 929) {
++         ctx->ws->bo_wait(ctx->ws, res->bo, 0x7fffffffffffffffULL);
++         uint8_t *b = ctx->ws->bo_map(ctx->ws, res->bo);
++         if (b) {
++            uint32_t st = res->level_infos[0].stride;
++            uint32_t *q = (uint32_t *)(b + (uint64_t)res->offset + (uint64_t)40 * st + 640 * 4);
++            uint32_t *q2 = (uint32_t *)(b + (uint64_t)res->offset + (uint64_t)300 * st + 640 * 4);
++            fprintf(stderr, "[SEQ] CLEAR-POST bo=%p tb40=%08x ct300=%08x\n", (void *)res, *q, *q2);
++            ctx->ws->bo_unmap(ctx->ws, res->bo);
++         }
++      }
+       return;
+    }
+ 
+@@ -1037,10 +1221,25 @@ mwv207_clear_depth_stencil(struct pipe_context *pctx,
+    clear_info.depth = depth;
+    clear_info.stencil = stencil;
+ 
++   if (getenv("MWV207_DEPTHDBG"))
++      fprintf(stderr, "[DEPTHCLR] %s %ux%u lvl=%u lay=%u-%u rect=%u,%u %ux%u depth=%.6f stencil=%u flags=%x ts_bo=%p ts_en=%d ts_cmp=%d tsclr=%08x,%08x\n",
++              util_format_name(res->base.format), res->base.width0, res->base.height0,
++              surface->info.first_level, surface->info.first_layer, surface->info.last_layer,
++              dstx, dsty, width, height, depth, stencil, clear_flags,
++              (void *)res->ts.bo, (int)res->ts.enable, (int)res->ts.compressed,
++              res->ts.clear_values[0], res->ts.clear_values[1]);
++
+    for (uint32_t num_layer = surface->info.first_layer; num_layer <= surface->info.last_layer; num_layer++) {
+       clear_info.tex_info.first_layer = num_layer;
+       mwv207_clear_image(ctx, clear_info);
+    }
++
++   if (getenv("MWV207_DEPTHDBG"))
++      fprintf(stderr, "[DEPTHCLR-POST] %s ts_bo=%p ts_en=%d ts_cmp=%d tsclr=%08x,%08x fast_clear_used=%s\n",
++              util_format_name(res->base.format), (void *)res->ts.bo,
++              (int)res->ts.enable, (int)res->ts.compressed,
++              res->ts.clear_values[0], res->ts.clear_values[1],
++              res->ts.enable ? "yes" : "no");
+ }
+ 
+ static void
+diff --git a/src/gallium/drivers/mwv207/mwv207_cmd.c b/src/gallium/drivers/mwv207/mwv207_cmd.c
+index 55be057..c3f6b14 100644
+--- a/src/gallium/drivers/mwv207/mwv207_cmd.c
++++ b/src/gallium/drivers/mwv207/mwv207_cmd.c
+@@ -340,6 +340,8 @@ mwv207_end_record(struct mwv207_cmd *cmd, uint32_t **end)
+ static bool
+ check_cmd(struct mwv207_cmd *cmd)
+ {
++   if (getenv("MWV207_SUBMITEACH"))
++      return false;
+    if (cmd->size < (cmd->offset + 4096))
+       return false;
+    if (cmd->nr_bos > 64)
+diff --git a/src/gallium/drivers/mwv207/mwv207_context.c b/src/gallium/drivers/mwv207/mwv207_context.c
+index c2f0b6c..b46e007 100644
+--- a/src/gallium/drivers/mwv207/mwv207_context.c
++++ b/src/gallium/drivers/mwv207/mwv207_context.c
+@@ -34,6 +34,7 @@
+ #include "indices/u_primconvert.h"
+ 
+ #include "mwv207_context.h"
++#include "util/format/u_format.h"
+ #include "video-codec/mwv207_video_codec.h"
+ #include "mwv207_shader.h"
+ #include "mwv207_blit.h"
+@@ -78,6 +79,40 @@ mwv207_flush(struct pipe_context *pctx,
+ 
+    mwv207_submit(ctx, pfence ? &out_fence_fd : NULL, true);
+ 
++   if (getenv("MWV207_FDUMP")) {
++      static int nf = 0;
++      for (int i = 0; i < ctx->fb_state.nr_cbufs; i++) {
++         if (!ctx->fb_state.cbufs[i]) continue;
++         struct mwv207_resource *r = mwv207_resource(ctx->fb_state.cbufs[i]->texture);
++         if (r->base.width0 != 1280 || r->base.height0 != 929) continue;
++         ctx->ws->bo_wait(ctx->ws, r->bo, 0x7fffffffffffffffULL);
++         uint8_t *b = ctx->ws->bo_map(ctx->ws, r->bo);
++         if (!b) continue;
++         uint32_t st = r->level_infos[0].stride;
++         char fn[128];
++         snprintf(fn, sizeof fn, "/tmp/ffx/fd_%02d_%d.raw", nf, i);
++         FILE *f = fopen(fn, "wb");
++         if (f) { fwrite(b + (uint64_t)r->offset, 1, (size_t)st * 929, f); fclose(f); }
++         uint32_t *q = (uint32_t *)(b + (uint64_t)r->offset + 40ULL * st + 640 * 4);
++         uint32_t *q2 = (uint32_t *)(b + (uint64_t)r->offset + 300ULL * st + 640 * 4);
++         uint32_t f1 = *(uint32_t *)(b + (uint64_t)r->offset);
++         uint32_t t1 = *q, t1b = *q2;
++         if (getenv("MWV207_FDELAY")) {
++            usleep(200000);
++            ctx->ws->bo_wait(ctx->ws, r->bo, 0x7fffffffffffffffULL);
++         }
++         fprintf(stderr, "[FDUMP] %02d cbuf%d res=%p hdl=%d bo=%p %s %ux%u stride=%u linear=%p ts=%d "
++                 "first=%08x tb40=%08x ct300=%08x then=%08x,%08x,%08x\n",
++                 nf, i, (void *)r, (int)r->bo->handle, (void *)r->bo,
++                 util_format_name(r->base.format), r->base.width0, r->base.height0,
++                 st, (void *)r->linear, r->ts.enable,
++                 f1, t1, t1b,
++                 *(uint32_t *)(b + (uint64_t)r->offset), *q, *q2);
++         ctx->ws->bo_unmap(ctx->ws, r->bo);
++      }
++      nf++;
++   }
++
+    for (int i = 0; i < ctx->fb_state.nr_cbufs; i++) {
+       struct mwv207_surface *surface;
+ 
+diff --git a/src/gallium/drivers/mwv207/mwv207_draw.c b/src/gallium/drivers/mwv207/mwv207_draw.c
+index f4c6224..a407e20 100644
+--- a/src/gallium/drivers/mwv207/mwv207_draw.c
++++ b/src/gallium/drivers/mwv207/mwv207_draw.c
+@@ -24,6 +24,7 @@
+ * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
+ * OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ */
++#include <stdio.h>
+ #include "util/u_draw.h"
+ #include "util/u_prim.h"
+ #include "util/half_float.h"
+@@ -39,6 +40,9 @@
+ #include "mwv207_blit.h"
+ #include "util/u_blitter.h"
+ 
++uint32_t g_mwv_scissor[4];
++static uint32_t pre_px = 0xdeadbeefu;
++
+ static const uint32_t prim_mode[] = {
+ 
+    0x1,
+@@ -72,6 +76,8 @@ static const uint32_t prim_mode[] = {
+    0xD,
+ };
+ 
++int mwv207_windraw_idx = -1;
++
+ static void
+ mwv207_config_vertex(struct mwv207_context *ctx,
+                      const struct pipe_draw_info *dinfo,
+@@ -189,6 +195,38 @@ mwv207_config_viewport(struct mwv207_context *ctx)
+    float clip_w = MAX2(ctx->viewport.scale[0], ctx->viewport.scale[1]);
+    clip_w = clip_w / (2.0f * 8388607.0f - 8192.0f);
+ 
++   /* [VPFLIP] Firefox's WR composite uses a negative-height viewport
++    * (scale.y < 0). Emitting an unflipped scale makes the Y flip disappear,
++    * so if the black band turns into vertically mirrored content the
++    * negative scale is the culprit. */
++   {
++      static int vpflip = -1;
++      if (vpflip < 0)
++         vpflip = getenv("MWV207_VPFLIP") ? 1 : 0;
++      if (vpflip && ctx->viewport.scale[1] < 0.0f) {
++         float sy = -ctx->viewport.scale[1];
++         static int nvp = 0;
++         if (nvp++ < 8)
++            fprintf(stderr, "[VPFLIP] #%d scale=(%g,%g) -> (%g,%g) translate=(%g,%g)\n",
++                    nvp, ctx->viewport.scale[0], ctx->viewport.scale[1],
++                    ctx->viewport.scale[0], sy,
++                    ctx->viewport.translate[0], ctx->viewport.translate[1]);
++         MWV207_EMIT(cmd_buf, 0x280,  fui(ctx->viewport.scale[0]));
++         MWV207_EMIT(cmd_buf, 0x281,  fui(sy));
++         MWV207_EMIT(cmd_buf, 0x282,  fui(ctx->viewport.scale[2]));
++         MWV207_EMIT(cmd_buf, 0x283, fui(ctx->viewport.translate[0]));
++         MWV207_EMIT(cmd_buf, 0x284, fui(ctx->viewport.translate[1]));
++         MWV207_EMIT(cmd_buf, 0x285, fui(ctx->viewport.translate[2]));
++         MWV207_EMIT(cmd_buf, 0x501, fui(0.0f));
++         MWV207_EMIT(cmd_buf, 0x502,  fui(1.0f));
++         MWV207_EMIT(cmd_buf, 0x2A0,   fui(clip_w));
++         MWV207_EMIT(cmd_buf, 0x28B, fui(1.0f / 8388607.0f));
++         MWV207_EMIT(cmd_buf, 0x2A3, 0x00000000);
++         MWV207_EMITF(cmd_buf, 0x2A1, 0x00800000);
++         mwv207_end_record(ctx->cmd, &cmd_buf);
++         return;
++      }
++   }
+    MWV207_EMIT(cmd_buf, 0x280,  fui(ctx->viewport.scale[0]));
+    MWV207_EMIT(cmd_buf, 0x281,  fui(ctx->viewport.scale[1]));
+    MWV207_EMIT(cmd_buf, 0x282,  fui(ctx->viewport.scale[2]));
+@@ -239,6 +277,21 @@ mwv207_config_scissor(struct mwv207_context *ctx)
+    if (bottom == 8192)
+       fix_bottom = -0x111;
+ 
++   if (getenv("MWV207_FORCESCISSOR")) {
++      left = 0;
++      top = 0;
++      right = ctx->fb_state.width;
++      bottom = ctx->fb_state.height;
++   }
++
++   if (getenv("MWV207_FBTRACE"))
++      fprintf(stderr, "[MWV207_SCISSOR] fb=%ux%u emitted=%u,%u..%u,%u rast_scissor=%d\n",
++              ctx->fb_state.width, ctx->fb_state.height,
++              left, top, right, bottom,
++              ctx->rast_state ? (int)ctx->rast_state->base.scissor : -1);
++
++   g_mwv_scissor[0] = left; g_mwv_scissor[1] = top; g_mwv_scissor[2] = right; g_mwv_scissor[3] = bottom;
++
+    MWV207_EMITF(cmd_buf, 0x301, top << 16);
+    MWV207_EMITF(cmd_buf, 0x300, left << 16);
+    MWV207_EMITF(cmd_buf, 0x302, ((right << 16) + fix_right));
+@@ -901,8 +954,39 @@ mwv207_config_draw(struct mwv207_context *ctx,
+ 
+    mwv207_begin_record(ctx->cmd, &cmd_buf);
+ 
+-   if (ctx->info.texture_dirty)
++   /* MWV207_DRAWFLUSH: force cache maintenance before every draw.
++    * 1=CACHE_ALL 2=CACHE_TEXTURE_ALL 3=COLOR|TEXTURE_ALL 4=CACHE_COLOR
++    * 5=CACHE_TEXTURE_DATA 6=SH_L1|COLOR|TS|TEXTURE_ALL
++    */
++   {
++      static int dfm = -1;
++      if (dfm < 0) dfm = getenv("MWV207_DRAWFLUSH") ? atoi(getenv("MWV207_DRAWFLUSH")) : 0;
++      if (dfm) {
++         uint32_t dmask = 0;
++         if (dfm == 1) dmask = CACHE_ALL;
++         else if (dfm == 2) dmask = CACHE_TEXTURE_ALL;
++         else if (dfm == 3) dmask = CACHE_COLOR | CACHE_TEXTURE_ALL;
++         else if (dfm == 4) dmask = CACHE_COLOR;
++         else if (dfm == 5) dmask = CACHE_TEXTURE_DATA;
++         else if (dfm == 6) dmask = CACHE_SH_L1 | CACHE_COLOR | CACHE_TS | CACHE_TEXTURE_ALL;
++         else if (dfm == 7) dmask = CACHE_WRITABLE;
++         else if (dfm == 8) dmask = CACHE_WRITABLE | CACHE_TEXTURE_ALL;
++         else if (dfm == 9) dmask = CACHE_WRITABLE | CACHE_TEXTURE_ALL | CACHE_DEPTH;
++         if (dmask) {
++            static int ndf = 0;
++            if (ndf++ < 5)
++               fprintf(stderr, "[DRAWFLUSH] draw #%d mask=%08x\n", ndf, dmask);
++            mwv207_flush_cache(&cmd_buf, (enum cache_mask) dmask);
++         }
++      }
++   }
++
++   if (ctx->info.texture_dirty || getenv("MWV207_ALWAYSTEXDIRTY")) {
++      static int natd = 0;
++      if (getenv("MWV207_ALWAYSTEXDIRTY") && natd++ < 5)
++         fprintf(stderr, "[ALWAYSTEXDIRTY] draw #%d emit 0xE03 bit4 (texture_dirty was %d)\n", natd, (int)ctx->info.texture_dirty);
+       MWV207_EMIT(cmd_buf, 0xE03, (ALIGN_BIT((uint32_t) (ENABLE), 0x4) & (0x10)));
++   }
+ 
+    MWV207_EMIT(cmd_buf, 0xE27, draw_count++);
+ 
+@@ -921,12 +1005,21 @@ mwv207_config_draw(struct mwv207_context *ctx,
+       mwv207_add_relocs(ctx, &cmd_buf, 0x0,
+          buffer->bo, buffer->offset + dindirect->offset, 0x0);
+    } else {
++      uint32_t iec = dinfo->instance_count;
++      { static int inst1_env = -1;
++        if (inst1_env < 0) inst1_env = getenv("MWV207_INST1_AS0") ? 1 : 0;
++        if (inst1_env && iec == 1) {
++           static int nrep = 0;
++           if (nrep++ < 40)
++              fprintf(stderr, "[INST1] instance_count==1 -> emitting 0 (draw #%d count=%u indirect=0)\n", nrep, count);
++           iec = 0;
++        } }
+       *cmd_buf++ = (ALIGN_BIT(0xC, 0x1B) & (0xF8000000)) |
+          (ALIGN_BIT((uint32_t) (draw_mode), 0x14) & (0x700000)) |
+-         (ALIGN_BIT((uint32_t) ((dinfo->instance_count & 0xffff)), 0x0) & (0xFFFF)) |
++         (ALIGN_BIT((uint32_t) ((iec & 0xffff)), 0x0) & (0xFFFF)) |
+          (ALIGN_BIT((uint32_t) (prim_mode[dinfo->mode]), 0x10) & (0xF0000));
+       *cmd_buf++ = (ALIGN_BIT((uint32_t) (count), 0x0) & (0xFFFFFF)) |
+-         (ALIGN_BIT((uint32_t) ((dinfo->instance_count >> 16)), 0x18) & (0xFF000000));
++         (ALIGN_BIT((uint32_t) ((iec >> 16)), 0x18) & (0xFF000000));
+       *cmd_buf++ = offset;
+       *cmd_buf++ = 0;
+    }
+@@ -1085,6 +1178,20 @@ mwv207_update_shader(struct mwv207_context *ctx)
+             ctx->info.tg4_lower = true;
+       }
+ 
++   /* MWV207_NORTTS: decompress the render target before every draw instead of
++    * only when linear output is requested.  Firefox's picture-cache tiles stay
++    * in their fast-cleared (tile-status) state while they are drawn into, and
++    * nothing in the current code ever decompresses them on the render path. */
++   if (getenv("MWV207_NORTTS")) {
++      for (int i = 0; i < ctx->fb_state.nr_cbufs; i++) {
++         if (!ctx->fb_state.cbufs[i])
++            continue;
++         res = mwv207_resource(ctx->fb_state.cbufs[i]->texture);
++         if (res->ts.enable)
++            mwv207_disable_tile(ctx, res);
++      }
++   }
++
+    if (ctx->info.linear_outmode) {
+       for (int i = 0; i < ctx->fb_state.nr_cbufs; i++) {
+          if (!ctx->fb_state.cbufs[i])
+@@ -1288,10 +1395,860 @@ mwv207_draw_vbo(struct pipe_context *pctx,
+       return;
+    }
+ 
++   {
++      const char *da = getenv("MWV207_DIFFAT");
++      static int ndiff = 0;
++      extern int mwv207_windraw_idx;
++      if (da) {
++         struct pipe_framebuffer_state *fb = &ctx->fb_state;
++         struct mwv207_surface *s = fb->cbufs[0] ? mwv207_surface(fb->cbufs[0]) : NULL;
++         if (s && fb->width == 1280 && fb->height == 929 &&
++             (atoi(da) < 0 || ndiff == atoi(da))) {
++            struct mwv207_resource *r = mwv207_resource(s->base.texture);
++            if (!r || !r->bo) { goto diff_pre_done; }
++            ctx->ws->bo_wait(ctx->ws, r->bo, 0x7fffffffffffffffULL);
++            uint8_t *b = ctx->ws->bo_map(ctx->ws, r->bo);
++            if (b) {
++               uint32_t st = r->level_infos[0].stride;
++               mwv207_windraw_idx = ndiff;
++               {
++                  const char *sl = getenv("MWV207_SHOT");
++                  if (sl && (atoi(sl) < 0 || ndiff == atoi(sl))) {
++                     char pn[80]; snprintf(pn,sizeof pn,"/tmp/ffx/shot_%03d_pre.raw", ndiff);
++                     FILE *f = fopen(pn, "wb");
++                     if (f) { fwrite(b + (uint64_t)r->offset, 1, (size_t)st * 929, f); fclose(f); }
++                  }
++               }
++               if (ndiff >= 20 && ndiff <= 30) {
++                  char pn[64]; snprintf(pn,sizeof pn,"/tmp/ffx/pre_%02d.raw", ndiff);
++                  FILE *f = fopen(pn, "wb");
++                  if (f) { fwrite(b + (uint64_t)r->offset, 1, (size_t)st * 929, f); fclose(f); }
++               }
++               fprintf(stderr, "[DIFF] draw=%d PRE_DONE bo=%p stride=%u\n", ndiff, (void*)r, st);
++               ctx->ws->bo_unmap(ctx->ws, r->bo);
++            }
++            ndiff++;
++         }
++diff_pre_done: ;
++      }
++   }
++
++   {
++      static int npre = 0;
++      extern int mwv207_windraw_idx;
++      if (getenv("MWV207_DRAWTL")) {
++         struct pipe_framebuffer_state *pfb = &ctx->fb_state;
++         struct mwv207_surface *ps0 = pfb->cbufs[0] ? mwv207_surface(pfb->cbufs[0]) : NULL;
++         if (ps0 && pfb->width == 1280 && pfb->height == 929)
++            mwv207_windraw_idx = npre;
++      }
++      npre++;
++   }
++
++   /* MWV207_SKIPEMPTY: skip draws on 1024x512 RT whose tex0 (2048x2048 atlas) is empty */
++   if (getenv("MWV207_SKIPEMPTY")) {
++      struct pipe_framebuffer_state *kfb = &ctx->fb_state;
++      struct mwv207_surface *ks0 = kfb->cbufs[0] ? mwv207_surface(kfb->cbufs[0]) : NULL;
++      struct mwv207_resource *krt = ks0 ? mwv207_resource(ks0->base.texture) : NULL;
++      struct pipe_sampler_view *kv0 = ctx->sampler_views[PIPE_SHADER_FRAGMENT][0];
++      struct mwv207_resource *ktex = kv0 ? mwv207_resource(kv0->texture) : NULL;
++      if (krt && krt->base.width0 == 1024 && krt->base.height0 == 512 &&
++          ktex && ktex->base.width0 == 2048 && ktex->base.height0 == 2048 && ktex->bo) {
++         ctx->ws->bo_wait(ctx->ws, ktex->bo, 0x7fffffffffffffffULL);
++         uint8_t *kb = ctx->ws->bo_map(ctx->ws, ktex->bo);
++         if (kb) {
++            uint32_t kst = ktex->level_infos[0].stride;
++            uint32_t knz = 0;
++            for (uint32_t q = 0; q < (uint32_t)kst * ktex->base.height0 && q < (64u<<20); q += 4096u)
++               if (kb[(uint64_t)ktex->offset + q]) knz++;
++            ctx->ws->bo_unmap(ctx->ws, ktex->bo);
++            static int nskip = 0;
++            if (knz == 0) {
++               fprintf(stderr, "[SKIPEMPTY] skipped draw #%d (empty 2048x2048 atlas)\n", nskip++);
++               return;
++            }
++         }
++      }
++   }
+    mwv207_config_render_piepline(ctx, dinfo, drawid_offset, indirect, draws, num_draws);
+ 
++   /* MWV207_EACH: after every draw to the 1280x929 window back buffer, force a
++    * submit, wait, and count how many pixels in the chrome band / tile region
++    * still hold the poison pattern.  Tells us whether a draw landed at all. */
++   if (getenv("MWV207_EACH")) {
++      static int nd = 0;
++      struct pipe_framebuffer_state *efb = &ctx->fb_state;
++      struct mwv207_surface *es_ = efb->cbufs[0] ? mwv207_surface(efb->cbufs[0]) : NULL;
++      struct mwv207_resource *er = es_ ? mwv207_resource(es_->base.texture) : NULL;
++      if (er && er->bo && efb->width == 1280 && efb->height == 929) {
++         mwv207_submit(ctx, NULL, true);
++         ctx->ws->bo_wait(ctx->ws, er->bo, 0x7fffffffffffffffULL);
++         uint8_t *eb = ctx->ws->bo_map(ctx->ws, er->bo);
++         if (eb) {
++            uint32_t est = er->level_infos[0].stride;
++            uint8_t *base = eb + (uint64_t)er->offset;
++            unsigned nzero = 0, npois = 0, nother = 0, ntot = 0;
++            uint32_t s40 = 0, s300 = 0;
++            for (unsigned yy = 0; yy < 86; yy += 2)
++               for (unsigned xx = 0; xx < 1024; xx += 16) {
++                  uint8_t *q = base + (uint64_t)yy * est + xx * 4;
++                  ntot++;
++                  if (!q[0] && !q[1] && !q[2] && !q[3]) nzero++;
++                  else if ((q[0] == q[1] && q[1] == q[2] && q[3] == 0xff) &&
++                           q[0] >= 0x40 && q[0] != 0x48 && q[0] != 0x27) npois++;
++                  else nother++;
++               }
++            s40  = *(uint32_t *)(base + 40ULL  * est + 640 * 4);
++            s300 = *(uint32_t *)(base + 300ULL * est + 640 * 4);
++            fprintf(stderr, "[EACH] d=%d sc=%u,%u..%u,%u n=%u inst=%u zero=%u pois=%u other=%u/%u r40=%08x r300=%08x\n",
++                    nd++, g_mwv_scissor[0], g_mwv_scissor[1], g_mwv_scissor[2], g_mwv_scissor[3],
++                    draws[0].count, dinfo->instance_count, nzero, npois, nother, ntot, s40, s300);
++            ctx->ws->bo_unmap(ctx->ws, er->bo);
++         }
++      }
++   }
++
++   if (getenv("MWV207_DRAWTL")) {
++      struct pipe_framebuffer_state *tfb = &ctx->fb_state;
++      struct mwv207_surface *ts0 = tfb->cbufs[0] ? mwv207_surface(tfb->cbufs[0]) : NULL;
++      if (ts0 && tfb->width == 1280 && tfb->height == 929) {
++         struct mwv207_resource *tr0 = mwv207_resource(ts0->base.texture);
++         if (tr0->bo) {
++            ctx->ws->bo_wait(ctx->ws, tr0->bo, 0x7fffffffffffffffULL);
++            uint8_t *tb = ctx->ws->bo_map(ctx->ws, tr0->bo);
++            if (tb) {
++               uint32_t tst = tr0->level_infos[0].stride;
++               uint32_t *tq  = (uint32_t *)(tb + (uint64_t)tr0->offset + (uint64_t)40 * tst + 640u * 4);
++               uint32_t *tq2 = (uint32_t *)(tb + (uint64_t)tr0->offset + (uint64_t)300 * tst + 640u * 4);
++               struct pipe_sampler_view *sv0 = ctx->sampler_views[PIPE_SHADER_FRAGMENT][0];
++               struct mwv207_resource *tres = sv0 ? mwv207_resource(sv0->texture) : NULL;
++               uint32_t tz = 0, tn = 0;
++               if (tres && tres->bo) {
++                  uint8_t *tbz = ctx->ws->bo_map(ctx->ws, tres->bo);
++                  if (tbz) {
++                     uint32_t tsz = tres->level_infos[0].stride * tres->base.height0;
++                     for (uint32_t i = 0; i < tsz && i < 4u*1024u*1024u; i += 4)
++                        if (tbz[(uint64_t)tres->offset + i]) { tn++; break; }
++                     tz = 1;
++                     ctx->ws->bo_unmap(ctx->ws, tres->bo);
++                  }
++               }
++               {
++                  const char *td = getenv("MWV207_TEXDUMP");
++                  int tlo = -1, thi = -1;
++                  if (td) { if (strchr(td,'-')) sscanf(td, "%d-%d", &tlo, &thi); else tlo = thi = atoi(td); }
++                  if (td && (tlo < 0 || (mwv207_windraw_idx >= tlo && mwv207_windraw_idx <= thi)) && tres && tres->bo) {
++                     uint32_t tw = tres->base.width0, th = tres->base.height0, tst2 = tres->level_infos[0].stride;
++                     char tfn[96]; snprintf(tfn, sizeof tfn, "/tmp/ffx/texdump_%03d.raw", mwv207_windraw_idx);
++                     FILE *f = fopen(tfn, "wb");
++                     if (f) { fprintf(stdout, "[TEXDUMP] d=%d w=%u h=%u st=%u\n", mwv207_windraw_idx, tw, th, tst2); fflush(stdout);
++                              fwrite(tb + (uint64_t)tres->offset, 1, (size_t)tst2 * th, f); fclose(f); }
++                     fprintf(stderr, "[TEXDUMP] d=%d w=%u h=%u st=%u fmt=%s\n", mwv207_windraw_idx, tw, th, tst2, util_format_name(sv0->texture->format));
++                  }
++               }
++               {
++                  const char *sl = getenv("MWV207_SHOT");
++                  int slo = -1, shi = -1;
++                  if (sl) { if (strchr(sl,'-')) sscanf(sl, "%d-%d", &slo, &shi); else slo = shi = atoi(sl); }
++                  if (sl && (slo < 0 || (mwv207_windraw_idx >= slo && mwv207_windraw_idx <= shi))) {
++                     char pn[80]; snprintf(pn,sizeof pn,"/tmp/ffx/shot_%03d_post.raw", mwv207_windraw_idx);
++                     FILE *f = fopen(pn, "wb");
++                     if (f) { fwrite(tb + (uint64_t)tr0->offset, 1, (size_t)tst * 929, f); fclose(f); }
++                  }
++               }
++               extern unsigned g_mwv_scissor[4];
++               fprintf(stderr, "[TL] d=%d bo=%p a40=%08x a300=%08x sc=%u,%u..%u,%u vp=%g,%g %gx%g tex=%p %s %ux%u st=%u nonz=%u ben=%d src=%d dst=%d cnt=%u inst=%u mode=%u\n",
++                       mwv207_windraw_idx, (void *)tr0, *tq, *tq2,
++                       g_mwv_scissor[0], g_mwv_scissor[1], g_mwv_scissor[2], g_mwv_scissor[3],
++                       ctx->viewport.translate[0], ctx->viewport.translate[1],
++                       ctx->viewport.scale[0], ctx->viewport.scale[1],
++                       (void *)tres,
++                       sv0 ? util_format_name(sv0->texture->format) : "-",
++                       sv0 ? sv0->texture->width0 : 0, sv0 ? sv0->texture->height0 : 0,
++                       tres ? tres->level_infos[0].stride : 0, tn,
++                       ctx->blend_state ? (int)ctx->blend_state->blend_state.rt[0].blend_enable : -1,
++                       ctx->blend_state ? (int)ctx->blend_state->blend_state.rt[0].rgb_src_factor : -1,
++                       ctx->blend_state ? (int)ctx->blend_state->blend_state.rt[0].rgb_dst_factor : -1,
++                       draws->count, dinfo->instance_count, (unsigned)dinfo->mode);
++               ctx->ws->bo_unmap(ctx->ws, tr0->bo);
++            }
++         }
++      }
++   }
++
++   if (getenv("MWV207_FBTRACE")) {
++      struct pipe_framebuffer_state *fb = &ctx->fb_state;
++      struct mwv207_surface *s = fb->cbufs[0] ? mwv207_surface(fb->cbufs[0]) : NULL;
++      fprintf(stderr, "[MWV207_DRAW] fb=%p %s %ux%u scissor=%u,%u..%u,%u vp=%g,%g %gx%g count=%u inst=%u mode=%u tex0=%p %s\n",
++              s ? (void *)mwv207_resource(s->base.texture) : NULL,
++              s ? util_format_name(mwv207_resource(s->base.texture)->base.format) : "none",
++              fb->width, fb->height,
++              g_mwv_scissor[0], g_mwv_scissor[1], g_mwv_scissor[2], g_mwv_scissor[3],
++              ctx->viewport.translate[0], ctx->viewport.translate[1],
++              ctx->viewport.scale[0], ctx->viewport.scale[1],
++              draws[0].count, dinfo->instance_count, dinfo->mode,
++              ctx->sampler_views[PIPE_SHADER_FRAGMENT][0]
++                 ? (void *)mwv207_resource(ctx->sampler_views[PIPE_SHADER_FRAGMENT][0]->texture) : NULL,
++              ctx->sampler_views[PIPE_SHADER_FRAGMENT][0]
++                 ? util_format_name(ctx->sampler_views[PIPE_SHADER_FRAGMENT][0]->texture->format) : "-");
++   }
++
++   /* MWV207_TILE: track 1024x512 resources used as both RT and sampler */
++   if (getenv("MWV207_TILE")) {
++      static int ntd = 0;
++      struct pipe_framebuffer_state *tfb2 = &ctx->fb_state;
++      struct mwv207_surface *ts2 = tfb2->cbufs[0] ? mwv207_surface(tfb2->cbufs[0]) : NULL;
++      struct mwv207_resource *trt = ts2 ? mwv207_resource(ts2->base.texture) : NULL;
++      if (trt && trt->bo && trt->base.width0 == 1024 && trt->base.height0 == 512) {
++         if (getenv("MWV207_TILESUB")) mwv207_submit(ctx, NULL, true);
++         ctx->ws->bo_wait(ctx->ws, trt->bo, 0x7fffffffffffffffULL);
++         uint8_t *tb2 = ctx->ws->bo_map(ctx->ws, trt->bo);
++         if (tb2) {
++            uint32_t st2 = trt->level_infos[0].stride;
++            uint32_t nz = 0;
++            uint8_t pvs = (uint8_t)(0x40 + (trt->bo->handle * 7u) % 0xb0);
++            uint32_t nself = 0, nx = 0;
++            for (uint32_t i = 0; i < st2 * 512u; i += 4096u) {
++               uint8_t *pp2 = tb2 + (uint64_t)trt->offset + i;
++               if (pp2[0] || pp2[1] || pp2[2] || pp2[3]) { nz++; nx++; }
++               if (pp2[0] == pvs && pp2[1] == pvs && pp2[2] == pvs) nself++;
++            }
++            if (!getenv("MWV207_NODUMP")) {
++               char pn[80]; snprintf(pn, sizeof pn, "/tmp/ffx/rt1024_%03d.raw", ntd);
++               FILE *f = fopen(pn, "wb");
++               if (f) { fwrite(tb2 + (uint64_t)trt->offset, 1, (size_t)st2 * 512, f); fclose(f); }
++            }
++            {
++               /* Does this RT have a linear shadow?  If so the DRI3 export /
++                * sampler may look at the shadow while draws land in the
++                * supertiled BO (or vice versa) - a classic "two views of one
++                * resource" split. */
++               struct mwv207_resource *tl = trt->linear ? mwv207_resource(trt->linear) : NULL;
++               unsigned lself = 0, lnx = 0;
++               if (tl && tl->bo) {
++                  ctx->ws->bo_wait(ctx->ws, tl->bo, 0x7fffffffffffffffULL);
++                  uint8_t *lb = ctx->ws->bo_map(ctx->ws, tl->bo);
++                  if (lb) {
++                     uint32_t lst = tl->level_infos[0].stride;
++                     for (uint32_t i = 0; i < lst * 512u; i += 4096u) {
++                        uint8_t *lp = lb + (uint64_t)tl->offset + i;
++                        if (lp[0] || lp[1] || lp[2] || lp[3]) lnx++;
++                        if (lp[0] == pvs && lp[1] == pvs && lp[2] == pvs) lself++;
++                     }
++                     ctx->ws->bo_unmap(ctx->ws, tl->bo);
++                  }
++               }
++               fprintf(stderr, "[TILE] d=%d RTres=%p RTbo=%p hdl=%u nzfrag=%u nsamp=%u selfpois=%u/%u st=%u src_dirty=%d ts_en=%d ts_cmp=%d lout=%d lin=%p linbo=%p linnz=%u linself=%u rc=%p rb=%p\n",
++                       ntd, (void *)trt, (void *)trt->bo, trt->bo->handle, nz, nx, nself, nx ? nx : 0, st2,
++                       (int)trt->src_dirty, (int)trt->ts.enable, (int)trt->ts.compressed,
++                       (int)trt->linear_output, (void *)tl, tl ? (void *)tl->bo : NULL, lnx, lself,
++                       (void *)trt->rg, (void *)trt->ba);
++            }
++            /* MWV207_TILEBLND: print blend+vertex state on tile draws */
++            if (ctx->blend_state)
++               fprintf(stderr, "[TILEBLND] d=%d en=%d rgb_f=%d rgb_src=%d rgb_dst=%d a_f=%d a_src=%d a_dst=%d mask=%x ab=%08x bc=%08x bex=%08x\n",
++                       ntd, (int)ctx->blend_state->blend_state.rt[0].blend_enable,
++                       ctx->blend_state->blend_state.rt[0].rgb_func,
++                       ctx->blend_state->blend_state.rt[0].rgb_src_factor,
++                       ctx->blend_state->blend_state.rt[0].rgb_dst_factor,
++                       ctx->blend_state->blend_state.rt[0].alpha_func,
++                       ctx->blend_state->blend_state.rt[0].alpha_src_factor,
++                       ctx->blend_state->blend_state.rt[0].alpha_dst_factor,
++                       ctx->blend_state->blend_state.rt[0].colormask,
++                       ctx->blend_state->alpha_blend,
++                       ctx->blend_state->blend_config[0],
++                       ctx->blend_state->blend_configex[0]);
++            else
++               fprintf(stderr, "[TILEBLND] d=%d bs=NULL\n", ntd);
++            /* MWV207_TILEVTX: print vertex buffer binding state */
++            fprintf(stderr, "[TILEVTX] d=%d velems=%u vbs=%u",
++                    ntd,
++                    ctx->element_state ? ctx->element_state->num_elements : 0,
++                    ctx->num_vertex_buffers);
++            for (unsigned vi = 0; vi < ctx->num_vertex_buffers && vi < 4; vi++) {
++               const struct pipe_vertex_buffer *pvb = &ctx->vertex_buffer[vi];
++               fprintf(stderr, " vb%u{buf=%p off=%u}",
++                       vi, (void *)(pvb ? pvb->buffer.resource : NULL),
++                       pvb ? (unsigned)pvb->buffer_offset : 0);
++            }
++            fprintf(stderr, "\n");
++            /* MWV207_TILEDEPTH: print depth/stencil state for tile draws (never logged before) */
++            {
++               struct mwv207_surface *zs_s = tfb2->zsbuf ? mwv207_surface(tfb2->zsbuf) : NULL;
++               struct mwv207_resource *zs_r = zs_s ? mwv207_resource(zs_s->base.texture) : NULL;
++               fprintf(stderr,
++                  "[TILEDEPTH] d=%d zsa=%d dfunc=%d zwr=%d dmode=%u dcfg=%08x earlyz=%d "
++                  "zres=%p fmt=%s ts_bo=%p ts_en=%d ts_cmp=%d tsclr=%08x,%08x "
++                  "reg500=%08x reg503=%08x\n",
++                  ntd,
++                  ctx->zsa ? (int)ctx->zsa->base.depth_enabled : -1,
++                  ctx->zsa ? (int)ctx->zsa->base.depth_func : -1,
++                  ctx->zsa ? (int)ctx->zsa->base.depth_writemask : -1,
++                  ctx->zsa ? ctx->zsa->mode : 0,
++                  ctx->zsa ? ctx->zsa->depth_config : 0,
++                  ctx->zsa ? (int)ctx->zsa->early_z : -1,
++                  (void *)zs_r,
++                  zs_r ? util_format_name(zs_r->base.format) : "none",
++                  zs_r ? (void *)zs_r->ts.bo : NULL,
++                  zs_r ? (int)zs_r->ts.enable : -1,
++                  zs_r ? (int)zs_r->ts.compressed : -1,
++                  zs_r ? zs_r->ts.clear_values[0] : 0,
++                  zs_r ? zs_r->ts.clear_values[1] : 0,
++                  zs_s ? zs_s->peInfo.depth_config : 0,
++                  zs_s ? (uint32_t)zs_s->peInfo.depth_normalize : 0);
++            }
++            /* MWV207_TILETEX: dump the draw's sampler view 0 texture content */
++            {
++               struct pipe_sampler_view *tv0 = ctx->sampler_views[PIPE_SHADER_FRAGMENT][0];
++               struct mwv207_resource *tres2 = tv0 ? mwv207_resource(tv0->texture) : NULL;
++               if (tres2 && tres2->bo) {
++                  ctx->ws->bo_wait(ctx->ws, tres2->bo, 0x7fffffffffffffffULL);
++                  uint8_t *tb3 = ctx->ws->bo_map(ctx->ws, tres2->bo);
++                  if (tb3) {
++                     uint32_t tst3 = tres2->level_infos[0].stride;
++                     uint32_t tnh3 = tres2->base.height0 ? tres2->base.height0 : 1;
++                     uint32_t nz3 = 0;
++                     uint32_t tsz3 = (size_t)tst3 * tnh3;
++                     for (uint32_t q = 0; q < tsz3 && q < (8u<<20); q += 4096u)
++                        if (tb3[(uint64_t)tres2->offset + q]) nz3++;
++                     fprintf(stderr, "[TILETEX] tex=%p %s %ux%u st=%u nzfrag=%u first=%08x\n",
++                             (void *)tres2, util_format_name(tv0->texture->format),
++                             tres2->base.width0, tnh3, tst3, nz3,
++                             *(uint32_t *)(tb3 + (uint64_t)tres2->offset));
++                     ctx->ws->bo_unmap(ctx->ws, tres2->bo);
++                  }
++               }
++            }
++            ctx->ws->bo_unmap(ctx->ws, trt->bo);
++         }
++         ntd++;
++      }
++   }
++
++   /* MWV207_SVDUMP: dump sampler view 0 texture content (correct BO) */
++   if (getenv("MWV207_SVDUMP")) {
++      static int nsv = 0;
++      const char *sl = getenv("MWV207_SVDUMP");
++      int slo = -1, shi = -1;
++      if (sl) { if (strchr(sl,'-')) sscanf(sl, "%d-%d", &slo, &shi); else slo = shi = atoi(sl); }
++      struct pipe_framebuffer_state *sfb = &ctx->fb_state;
++      struct mwv207_surface *ss = sfb->cbufs[0] ? mwv207_surface(sfb->cbufs[0]) : NULL;
++      struct mwv207_resource *srt = ss ? mwv207_resource(ss->base.texture) : NULL;
++      if (srt && srt->bo && sfb->width == 1280 && sfb->height == 929 &&
++          (slo < 0 || (nsv >= slo && nsv <= shi))) {
++         struct pipe_sampler_view *v = ctx->sampler_views[PIPE_SHADER_FRAGMENT][0];
++         struct mwv207_resource *vres = v ? mwv207_resource(v->texture) : NULL;
++         if (vres && vres->bo) {
++            ctx->ws->bo_wait(ctx->ws, vres->bo, 0x7fffffffffffffffULL);
++            uint8_t *vb2 = ctx->ws->bo_map(ctx->ws, vres->bo);
++            if (vb2) {
++               uint32_t vw = vres->base.width0, vh = vres->base.height0;
++               uint32_t vst = vres->level_infos[0].stride;
++               char pn[96]; snprintf(pn, sizeof pn, "/tmp/ffx/sv_%03d.raw", nsv);
++               FILE *f = fopen(pn, "wb");
++               if (f) { fwrite(vb2 + (uint64_t)vres->offset, 1, (size_t)vst * vh, f); fclose(f); }
++               uint32_t nzf = 0;
++               for (uint32_t q = 0; q < vst * vh; q += 4096u)
++                  if (vb2[(uint64_t)vres->offset + q]) nzf++;
++               fprintf(stderr, "[SVDUMP] d=%d tex=%p fmt=%s %ux%u st=%u mode=%d comp=%d tsen=%d nzfrag=%u first=%08x mid=%08x\n",
++                       nsv, (void *)vres, util_format_name(v->texture->format), vw, vh, vst,
++                       (int)vres->mode, (int)vres->ts.compressed, (int)vres->ts.enable, nzf,
++                       *(uint32_t *)(vb2 + (uint64_t)vres->offset),
++                       *(uint32_t *)(vb2 + (uint64_t)vres->offset + (uint64_t)(vh/2) * vst + (vw/2)*4));
++               ctx->ws->bo_unmap(ctx->ws, vres->bo);
++            }
++         }
++      }
++      nsv++;
++   }
++
++   pre_px = 0xdeadbeefu;
++   if (getenv("MWV207_SEQ")) {
++      static int nseq = 0;
++      struct pipe_framebuffer_state *fb = &ctx->fb_state;
++      struct mwv207_surface *s0 = fb->cbufs[0] ? mwv207_surface(fb->cbufs[0]) : NULL;
++      if (s0 && fb->width == 1280 && fb->height == 929) {
++         struct mwv207_resource *r0 = mwv207_resource(s0->base.texture);
++         if (r0->bo) {
++            ctx->ws->bo_wait(ctx->ws, r0->bo, 0x7fffffffffffffffULL);
++            uint8_t *b = ctx->ws->bo_map(ctx->ws, r0->bo);
++            if (b) {
++               uint32_t st = r0->level_infos[0].stride;
++               uint32_t *q = (uint32_t *)(b + (uint64_t)r0->offset + (uint64_t)40 * st + 640 * 4);
++               uint32_t *q2 = (uint32_t *)(b + (uint64_t)r0->offset + (uint64_t)300 * st + 640 * 4);
++               fprintf(stderr,
++                  "[SEQ] DRAW %d bo=%p tb40=%08x ct300=%08x emis=%u,%u..%u,%u cnt=%u mode=%u tex0=%s"
++                  " ben=%d src=%d dst=%d eq=%d amask=%08x zsa=%d zfunc=%d zwr=%d alphacfg=%08x cfg=%08x ex=%08x\n",
++                  nseq++, (void *)r0, *q, *q2,
++                  g_mwv_scissor[0], g_mwv_scissor[1], g_mwv_scissor[2], g_mwv_scissor[3],
++                  draws[0].count, dinfo->mode,
++                  ctx->sampler_views[PIPE_SHADER_FRAGMENT][0]
++                     ? util_format_name(ctx->sampler_views[PIPE_SHADER_FRAGMENT][0]->texture->format) : "-",
++                  ctx->blend_state ? (int)ctx->blend_state->blend_state.rt[0].blend_enable : -1,
++                  ctx->blend_state ? (int)ctx->blend_state->blend_state.rt[0].rgb_src_factor : -1,
++                  ctx->blend_state ? (int)ctx->blend_state->blend_state.rt[0].rgb_dst_factor : -1,
++                  ctx->blend_state ? (int)ctx->blend_state->blend_state.rt[0].rgb_func : -1,
++                  ctx->blend_state ? (uint32_t)ctx->blend_state->color_mask[0] : 0,
++                  ctx->zsa ? (int)ctx->zsa->base.depth_enabled : -1,
++                  ctx->zsa ? (int)ctx->zsa->base.depth_func : -1,
++                  ctx->zsa ? (int)ctx->zsa->base.depth_writemask : -1,
++                  ctx->zsa ? ctx->zsa->alpha_config : 0,
++                  ctx->blend_state ? ctx->blend_state->blend_config[0] : 0,
++                  ctx->blend_state ? ctx->blend_state->blend_configex[0] : 0);
++               {
++                  int ns = ctx->num_sampler_views[PIPE_SHADER_FRAGMENT];
++                  fprintf(stderr, "[SEQX2] DRAW %d nsv=%d", nseq - 1, ns);
++                  for (int si = 0; si < ns && si < 6; si++) {
++                     struct pipe_sampler_view *v = ctx->sampler_views[PIPE_SHADER_FRAGMENT][si];
++                     if (!v) { fprintf(stderr, " s%d=NULL", si); continue; }
++                     fprintf(stderr, " s%d=%p(fl%u-%u ll%u-%u sw%u%u%u%u)", si,
++                        (void *)mwv207_resource(v->texture),
++                        v->u.tex.first_layer, v->u.tex.last_layer,
++                        v->u.tex.first_level, v->u.tex.last_level,
++                        v->swizzle_r, v->swizzle_g, v->swizzle_b, v->swizzle_a);
++                  }
++                  fprintf(stderr, "\n");
++               }
++               fprintf(stderr, "[SEQX] DRAW %d fb_ts=%d fb_lin=%d fb_linptr=%p tex_ts=%d prog=%p\n",
++                  nseq - 1, r0->ts.enable, r0->linear ? 1 : 0, (void *)r0->linear,
++                  (ctx->sampler_views[PIPE_SHADER_FRAGMENT][0]
++                     ? mwv207_resource(ctx->sampler_views[PIPE_SHADER_FRAGMENT][0]->texture)->ts.enable : -1),
++                  (void *)ctx->shader_states[PIPE_SHADER_FRAGMENT]);
++               ctx->ws->bo_unmap(ctx->ws, r0->bo);
++            }
++         }
++      }
++   }
++
++   if (getenv("MWV207_VTXDUMP")) {
++      static int nvx = 0;
++      struct pipe_framebuffer_state *vfb = &ctx->fb_state;
++      struct mwv207_surface *vs0 = vfb->cbufs[0] ? mwv207_surface(vfb->cbufs[0]) : NULL;
++      if (vs0 && vfb->width == 1280 && vfb->height == 929 && !indirect &&
++          draws[0].count && nvx < 60) {
++         struct mwv207_elements_state *ves = ctx->element_state;
++         fprintf(stderr, "[VTXDUMP] #%d cnt=%u idxsize=%u idxres=%p start=%u startinst=%u nve=%u nvb=%u\n",
++                 nvx, draws[0].count, (unsigned)dinfo->index_size,
++                 (void *)(dinfo->index_size ? dinfo->index.resource : NULL),
++                 draws[0].start, (unsigned)dinfo->start_instance,
++                 ves ? ves->num_elements : 0, ctx->num_vertex_buffers);
++         for (unsigned ei = 0; ei < (ves ? ves->num_elements : 0) && ei < 6; ei++) {
++            const struct pipe_vertex_element *pe = &ves->elements[ei].base;
++            const struct pipe_vertex_buffer *pvb = &ctx->vertex_buffer[pe->vertex_buffer_index];
++            fprintf(stderr, "[VEL]   e%u vbi=%u soff=%u fmt=%s stride=%u vbbuf=%p vboff=%u\n",
++                    ei, (unsigned)pe->vertex_buffer_index, (unsigned)pe->src_offset,
++                    util_format_name(pe->src_format), (unsigned)pe->src_stride,
++                    (void *)(pvb ? pvb->buffer.resource : NULL),
++                    pvb ? (unsigned)pvb->buffer_offset : 0);
++            if (pvb && pvb->buffer.resource) {
++               struct mwv207_resource *vbr = mwv207_resource(pvb->buffer.resource);
++               if (vbr && vbr->bo) {
++                  ctx->ws->bo_wait(ctx->ws, vbr->bo, 0x7fffffffffffffffULL);
++                  uint8_t *vbm = ctx->ws->bo_map(ctx->ws, vbr->bo);
++                  if (vbm) {
++                     unsigned istride = pe->src_stride ? pe->src_stride : 1;
++                     uint8_t *vbase = vbm + (uint64_t)vbr->offset + pvb->buffer_offset
++                                      + (uint64_t)dinfo->start_instance * istride;
++                     for (unsigned vi = 0; vi < 8; vi++) {
++                        uint8_t *src = vbase + (uint64_t)vi * istride + pe->src_offset;
++                        float f0, f1, f2, f3;
++                        memcpy(&f0, src, 4);
++                        memcpy(&f1, src + 4, 4);
++                        memcpy(&f2, src + 8, 4);
++                        memcpy(&f3, src + 12, 4);
++                        fprintf(stderr, "[VTX]   e%u v%u: %.2f,%.2f,%.2f,%.2f\n",
++                                ei, vi, f0, f1, f2, f3);
++                     }
++                     ctx->ws->bo_unmap(ctx->ws, vbr->bo);
++                  }
++               }
++            }
++         }
++         /* raw dump of the big shared VB (first 152*6 bytes) to inspect instance structs */
++         if (ctx->num_vertex_buffers > 1 && ctx->vertex_buffer[1].buffer.resource) {
++            struct mwv207_resource *rvb = mwv207_resource(ctx->vertex_buffer[1].buffer.resource);
++            if (rvb && rvb->bo) {
++               ctx->ws->bo_wait(ctx->ws, rvb->bo, 0x7fffffffffffffffULL);
++               uint8_t *rm = ctx->ws->bo_map(ctx->ws, rvb->bo);
++               if (rm) {
++                  char rpn[64]; snprintf(rpn, sizeof rpn, "/tmp/ffx/vb152_%03d.raw", nvx);
++                  FILE *rf = fopen(rpn, "wb");
++                  if (rf) {
++                     uint64_t vbstart = (uint64_t)ctx->vertex_buffer[1].buffer_offset
++                                        + (uint64_t)dinfo->start_instance * 152;
++                     fwrite(rm + (uint64_t)rvb->offset + vbstart, 1, 152 * 8, rf);
++                     fclose(rf);
++                  }
++                  ctx->ws->bo_unmap(ctx->ws, rvb->bo);
++               }
++            }
++         }
++         if (dinfo->index_size && dinfo->index.resource) {
++            struct mwv207_resource *ibr = mwv207_resource(dinfo->index.resource);
++            if (ibr && ibr->bo) {
++               ctx->ws->bo_wait(ctx->ws, ibr->bo, 0x7fffffffffffffffULL);
++               uint8_t *ibm = ctx->ws->bo_map(ctx->ws, ibr->bo);
++               if (ibm) {
++                  uint8_t *ib = ibm + (uint64_t)ibr->offset + draws[0].start * dinfo->index_size;
++                  fprintf(stderr, "[IDX]   n=6:");
++                  for (unsigned ii = 0; ii < 6 && ii < draws[0].count; ii++) {
++                     unsigned v;
++                     if (dinfo->index_size == 2) v = ((uint16_t *)ib)[ii];
++                     else v = ((uint32_t *)ib)[ii];
++                     fprintf(stderr, " %u", v);
++                  }
++                  fprintf(stderr, "\n");
++                  ctx->ws->bo_unmap(ctx->ws, ibr->bo);
++               }
++            }
++         }
++         nvx++;
++      }
++   }
++
++   /* MWV207_BAND: per-composite-draw dump of window rows 0..100 (CPU mmap, after prior draw
++    * work). Also prints the instance-0 dest/src rect (from VB) so we can align which quad
++    * touches the chrome band, and the sampled source pixel at (tile) 10,45. */
++   if (getenv("MWV207_BAND")) {
++      static int nbd = 0;
++      struct pipe_framebuffer_state *bfb = &ctx->fb_state;
++      struct mwv207_surface *bs0 = bfb->cbufs[0] ? mwv207_surface(bfb->cbufs[0]) : NULL;
++      if (bs0 && bfb->width == 1280 && bfb->height == 929 && nbd < 400) {
++         struct mwv207_resource *rb = mwv207_resource(bs0->base.texture);
++         struct mwv207_elements_state *bves = ctx->element_state;
++         float r0=0,r1=0,r2=0,r3=0, s0=0,s1=0,s2=0,s3=0;
++         if (bves && bves->num_elements > 1) {
++            const struct pipe_vertex_element *pe = &bves->elements[1].base;
++            const struct pipe_vertex_buffer *pvb = &ctx->vertex_buffer[pe->vertex_buffer_index];
++            if (pvb && pvb->buffer.resource) {
++               struct mwv207_resource *vbr = mwv207_resource(pvb->buffer.resource);
++               if (vbr && vbr->bo) {
++                  uint8_t *vm = ctx->ws->bo_map(ctx->ws, vbr->bo);
++                  if (vm) {
++                     float tmp[4];
++                     memcpy(tmp, vm + (uint64_t)vbr->offset + pvb->buffer_offset + pe->src_offset, 16);
++                     r0=tmp[0];r1=tmp[1];r2=tmp[2];r3=tmp[3];
++                     ctx->ws->bo_unmap(ctx->ws, vbr->bo);
++                  }
++               }
++            }
++         }
++         float d0=0,d1=0,d2=0,d3=0;
++         if (bves && bves->num_elements > 2) {
++            const struct pipe_vertex_element *pe = &bves->elements[2].base;
++            const struct pipe_vertex_buffer *pvb = &ctx->vertex_buffer[pe->vertex_buffer_index];
++            if (pvb && pvb->buffer.resource) {
++               struct mwv207_resource *vbr = mwv207_resource(pvb->buffer.resource);
++               if (vbr && vbr->bo) {
++                  uint8_t *vm = ctx->ws->bo_map(ctx->ws, vbr->bo);
++                  if (vm) {
++                     float tmp[4];
++                     memcpy(tmp, vm + (uint64_t)vbr->offset + pvb->buffer_offset + pe->src_offset, 16);
++                     d0=tmp[0];d1=tmp[1];d2=tmp[2];d3=tmp[3];
++                     ctx->ws->bo_unmap(ctx->ws, vbr->bo);
++                  }
++               }
++            }
++         }
++         if (bves && bves->num_elements > 3) {
++            const struct pipe_vertex_element *pe = &bves->elements[3].base;
++            const struct pipe_vertex_buffer *pvb = &ctx->vertex_buffer[pe->vertex_buffer_index];
++            if (pvb && pvb->buffer.resource) {
++               struct mwv207_resource *vbr = mwv207_resource(pvb->buffer.resource);
++               if (vbr && vbr->bo) {
++                  uint8_t *vm = ctx->ws->bo_map(ctx->ws, vbr->bo);
++                  if (vm) {
++                     float tmp[4];
++                     memcpy(tmp, vm + (uint64_t)vbr->offset + pvb->buffer_offset + pe->src_offset, 16);
++                     s0=tmp[0];s1=tmp[1];s2=tmp[2];s3=tmp[3];
++                     ctx->ws->bo_unmap(ctx->ws, vbr->bo);
++                  }
++               }
++            }
++         }
++         if (rb && rb->bo) {
++            ctx->ws->bo_wait(ctx->ws, rb->bo, 0x7fffffffffffffffULL);
++            uint8_t *bm = ctx->ws->bo_map(ctx->ws, rb->bo);
++            if (bm) {
++               uint32_t st = rb->level_infos[0].stride;
++               uint8_t *base = bm + (uint64_t)rb->offset;
++               char pn[80]; snprintf(pn, sizeof pn, "/tmp/ffx/band_%03d.raw", nbd);
++               FILE *f = fopen(pn, "wb");
++               if (f) { fwrite(base, 1, (size_t)st * 100, f); fclose(f); }
++               /* BANDSRC: if this draw touches window rows < 86, sample the atlas at the
++                * coordinate that maps to dst pixel (640,40) and count content in the source rows.
++                * Also handle draws covering the content-area probe point (500,300) so that the
++                * black-block region (dst 0,86..1024,598) is covered too. */
++               if (d3 > 0 && d1 < 86) {
++                  struct pipe_sampler_view *bsv = ctx->sampler_views[PIPE_SHADER_FRAGMENT][0];
++                  if (bsv) {
++                     struct mwv207_resource *ars = mwv207_resource(bsv->texture);
++                     if (ars && ars->bo) {
++                        ctx->ws->bo_wait(ctx->ws, ars->bo, 0x7fffffffffffffffULL);
++                        uint8_t *am = ctx->ws->bo_map(ctx->ws, ars->bo);
++                        if (am) {
++                           uint32_t ast = ars->level_infos[0].stride;
++                           uint8_t *ab = am + (uint64_t)ars->offset;
++                           float sx = r0 + (640.0f - d0) * (r2 - r0) / (d2 - d0);
++                           float sy = r1 + (40.0f - d1) * (r3 - r1) / (d3 - d1);
++                           int ix = (int)sx, iy = (int)sy;
++                           uint32_t pv = 0;
++                           if (ix >= 0 && iy >= 0 && ix < (int)ars->base.width0 && iy < (int)ars->base.height0)
++                              pv = *(uint32_t *)(ab + (uint64_t)iy * ast + ix * 4);
++                           /* count non-zero pixels in atlas rows [r1, min(r3,86)) */
++                           uint64_t nz = 0, tot = 0;
++                           int y0 = (int)r1, y1 = (int)r3; if (y1 > 90) y1 = 90;
++                           for (int yy = y0; yy < y1; yy++) {
++                              if (yy < 0 || yy >= (int)ars->base.height0) continue;
++                              uint32_t *rp = (uint32_t *)(ab + (uint64_t)yy * ast);
++                              for (int xx = (int)r0; xx < (int)r2 && xx < (int)ars->base.width0; xx++) {
++                                 tot++; if (rp[xx] != 0) nz++;
++                              }
++                           }
++                           fprintf(stderr, "[BANDSRC] #%d atlasres=%p atlasbo=%p %ux%u st=%u samp=(%.1f,%.1f)->(%d,%d)=%08x"
++                                   " regionrows nz=%llu/%llu\n",
++                                   nbd, (void*)ars, (void*)ars->bo, ars->base.width0, ars->base.height0, ast,
++                                   sx, sy, ix, iy, pv,
++                                   (unsigned long long)nz, (unsigned long long)tot);
++                           ctx->ws->bo_unmap(ctx->ws, ars->bo);
++                        }
++                     }
++                  }
++               }
++               /* BANDCNT: content-area probe. For every composite draw covering window point
++                * (500,300) report the sampled resource and how many non-zero bytes the whole
++                * sampled BO holds, plus the pixel that maps to (500,300). */
++               if (d2 > 500 && d0 < 500 && d3 > 300 && d1 < 300) {
++                  struct pipe_sampler_view *csv = ctx->sampler_views[PIPE_SHADER_FRAGMENT][0];
++                  if (csv) {
++                     struct mwv207_resource *crs = mwv207_resource(csv->texture);
++                     if (crs && crs->bo) {
++                        ctx->ws->bo_wait(ctx->ws, crs->bo, 0x7fffffffffffffffULL);
++                        uint8_t *cm = ctx->ws->bo_map(ctx->ws, crs->bo);
++                        if (cm) {
++                           uint32_t cst = crs->level_infos[0].stride;
++                           uint8_t *cb = cm + (uint64_t)crs->offset;
++                           float sx2 = r0 + (500.0f - d0) * (r2 - r0) / (d2 - d0);
++                           float sy2 = r1 + (300.0f - d1) * (r3 - r1) / (d3 - d1);
++                           int ix2 = (int)sx2, iy2 = (int)sy2;
++                           uint32_t pv2 = 0;
++                           if (ix2 >= 0 && iy2 >= 0 && ix2 < (int)crs->base.width0 && iy2 < (int)crs->base.height0)
++                              pv2 = *(uint32_t *)(cb + (uint64_t)iy2 * cst + ix2 * 4);
++                           uint64_t nz2 = 0, tot2 = 0;
++                           uint64_t limit = (uint64_t)crs->base.height0 * cst;
++                           for (uint64_t off = 0; off + 4 <= limit; off += 4096) {
++                              tot2++; if (*(uint32_t *)(cb + off) != 0) nz2++;
++                           }
++                           fprintf(stderr, "[BANDCNT] #%d dst=(%.0f,%.0f..%.0f,%.0f) src=%p %s %ux%u st=%u"
++                                   " samp=(%.1f,%.1f)->(%d,%d)=%08x nz=%llu/%llu"
++                                   " mode=%d ts_en=%d ts_cmp=%d tsclr=%08x,%08x lout=%d\n",
++                                   nbd, d0,d1,d2,d3, (void*)crs, util_format_name(crs->base.format),
++                                   crs->base.width0, crs->base.height0, cst,
++                                   sx2, sy2, ix2, iy2, pv2,
++                                   (unsigned long long)nz2, (unsigned long long)tot2,
++                                   crs->mode, crs->ts.enable, crs->ts.compressed,
++                                   crs->ts.clear_values[0], crs->ts.clear_values[1],
++                                   crs->linear_output);
++                           ctx->ws->bo_unmap(ctx->ws, crs->bo);
++                        }
++                     }
++                  }
++               }
++               fflush(stdout); fprintf(stderr, "[BAND] #%d src=(%.0f,%.0f..%.0f,%.0f) dst=(%.0f,%.0f..%.0f,%.0f)"
++                      " col=(%.2f,%.2f,%.2f,%.2f)"
++                      " row0=%08x row40=%08x row80=%08x\n",
++                      nbd, r0,r1,r2,r3, d0,d1,d2,d3, s0,s1,s2,s3,
++                      *(uint32_t *)(base + 0 * st + 640*4),
++                      *(uint32_t *)(base + 40 * st + 640*4),
++                      *(uint32_t *)(base + 80 * st + 640*4));
++               ctx->ws->bo_unmap(ctx->ws, rb->bo);
++            }
++         }
++         nbd++;
++      }
++   }
++
++   if (getenv("MWV207_SRC")) {
++      static int nsrc = 0;
++      struct pipe_framebuffer_state *fb = &ctx->fb_state;
++      struct mwv207_surface *s0 = fb->cbufs[0] ? mwv207_surface(fb->cbufs[0]) : NULL;
++      struct pipe_sampler_view *sv = ctx->sampler_views[PIPE_SHADER_FRAGMENT][0];
++      if (s0 && fb->width == 1280 && fb->height == 929 && sv && nsrc < 200) {
++         struct mwv207_resource *rs = mwv207_resource(sv->texture);
++         if (rs && rs->bo) {
++            ctx->ws->bo_wait(ctx->ws, rs->bo, 0x7fffffffffffffffULL);
++            uint8_t *bb = ctx->ws->bo_map(ctx->ws, rs->bo);
++            if (bb) {
++               uint32_t st = rs->level_infos[0].stride;
++               /* sampler view box gives the subrect inside the atlas */
++               unsigned bx = sv->u.tex.first_layer, by = 0;
++               (void)bx; (void)by;
++               uint8_t *p0 = bb + (uint64_t)rs->offset;
++               /* sample a few points across the source texture */
++               uint32_t w = rs->base.width0, h = rs->base.height0;
++               uint32_t q1w=0,q2w=0,q3w=0;
++               if (w>4 && h>4) {
++                  uint8_t *a = p0 + (uint64_t)(h/4)*st + (w/4)*4;
++                  uint8_t *b2 = p0 + (uint64_t)(h/2)*st + (w/2)*4;
++                  uint8_t *c2 = p0 + (uint64_t)(h*3/4)*st + (w*3/4)*4;
++                  q1w=a[0]|(a[1]<<8)|(a[2]<<16)|(a[3]<<24);
++                  q2w=b2[0]|(b2[1]<<8)|(b2[2]<<16)|(b2[3]<<24);
++                  q3w=c2[0]|(c2[1]<<8)|(c2[2]<<16)|(c2[3]<<24);
++               }
++               fprintf(stderr, "[SRC] #%d src=%p %s %ux%u stride=%u samples=%08x/%08x/%08x box=%u,%u..%u,%u\n",
++                       nsrc++, (void*)rs, util_format_name(rs->base.format), w, h, st,
++                       q1w,q2w,q3w,
++                       sv->u.tex.first_layer, sv->u.tex.last_layer,
++                       sv->u.tex.first_level, sv->u.tex.last_level);
++               ctx->ws->bo_unmap(ctx->ws, rs->bo);
++            }
++         }
++      }
++   }
++
++   if (getenv("MWV207_PIX")) {
++      static int npix = 0;
++      struct pipe_framebuffer_state *fb = &ctx->fb_state;
++      struct mwv207_surface *s0 = fb->cbufs[0] ? mwv207_surface(fb->cbufs[0]) : NULL;
++      if (s0 && fb->width == 1280 && fb->height == 929 && npix < 400) {
++         struct mwv207_resource *r0 = mwv207_resource(s0->base.texture);
++         if (r0->bo) {
++            ctx->ws->bo_wait(ctx->ws, r0->bo, 0x7fffffffffffffffULL);
++            uint8_t *base = ctx->ws->bo_map(ctx->ws, r0->bo);
++            if (base) {
++               uint32_t stride = r0->level_infos[0].stride;
++               uint8_t *px = base + (uint64_t)r0->offset + (uint64_t)(40 * stride) + 640 * 4;
++               npix++;
++               fprintf(stderr, "[MWV207_PIX] #%d scis=%u,%u..%u,%u px@640,40 = %u,%u,%u,%u (stride=%u)\n",
++                       npix, g_mwv_scissor[0], g_mwv_scissor[1],
++                       g_mwv_scissor[2], g_mwv_scissor[3],
++                       px[0], px[1], px[2], px[3], stride);
++               ctx->ws->bo_unmap(ctx->ws, r0->bo);
++            }
++         }
++      }
++   }
++
++   /* MWV207_GPUREAD: read cbuf0 via pipe_transfer_map (staging+GPU blit path)
++    * — reveals the GPU-side view of the RT, contrast with CPU mmap dumps. */
++   if (getenv("MWV207_GPUREAD")) {
++      static int ngr = 0;
++      struct pipe_framebuffer_state *gfb = &ctx->fb_state;
++      struct pipe_surface *gs = gfb->cbufs[0];
++      if (gs && gs->texture && gs->texture->width0 == 1024 && gs->texture->height0 == 512) {
++         struct pipe_box gbox = {0, 0, 0, 1024, 512, 1};
++         struct pipe_transfer *gtr = NULL;
++         uint8_t *gmap = pctx->texture_map(pctx, gs->texture, 0,
++                                            PIPE_MAP_READ, &gbox, &gtr);
++         if (gmap && gtr) {
++            char gpn[64];
++            snprintf(gpn, sizeof gpn, "/tmp/ffx/grt_%03d.raw", ngr);
++            FILE *gf = fopen(gpn, "wb");
++            if (gf) {
++               for (uint32_t gy = 0; gy < 512; gy++)
++                  fwrite(gmap + (size_t)gy * gtr->stride, 1, 1024 * 4, gf);
++               fclose(gf);
++            }
++            fprintf(stderr, "[GPUREAD] #%d stride=%u\n", ngr, gtr->stride);
++            pctx->texture_unmap(pctx, gtr);
++         }
++         ngr++;
++      }
++   }
++
++   if (getenv("MWV207_DUMPATLAS")) {
++      static int nd = 0;
++      int want = atoi(getenv("MWV207_DUMPATLAS"));
++      struct mwv207_surface *s0 = ctx->fb_state.cbufs[0] ? mwv207_surface(ctx->fb_state.cbufs[0]) : NULL;
++      struct pipe_sampler_view *sv = ctx->sampler_views[PIPE_SHADER_FRAGMENT][0];
++      if (s0 && ctx->fb_state.width == 1280 && ctx->fb_state.height == 929 && sv) {
++         if (want >= 0 && nd != want) { nd++; }
++         else {
++         struct mwv207_resource *rs = mwv207_resource(sv->texture);
++         if (rs && rs->bo) {
++            struct mwv207_resource *rw = mwv207_resource(s0->base.texture);
++            ctx->ws->bo_wait(ctx->ws, rs->bo, 0x7fffffffffffffffULL);
++            uint8_t *bb = ctx->ws->bo_map(ctx->ws, rs->bo);
++            if (bb && rw && rw->bo) {
++               FILE *f = fopen("/tmp/ffx/atlas.raw", "wb");
++               if (f) {
++                  uint32_t st = rs->level_infos[0].stride;
++                  fwrite(bb + rs->offset, 1, (size_t)st * rs->base.height0, f);
++                  fclose(f);
++               }
++               fprintf(stderr, "[ATLAS] draw=%d src=%p %ux%u stride=%u box=%u,%u..%u,%u first_layer=%u\n",
++                  nd, (void *)rs, rs->base.width0, rs->base.height0,
++                  rs->level_infos[0].stride,
++                  sv->u.tex.first_layer, sv->u.tex.last_layer,
++                  sv->u.tex.first_level, sv->u.tex.last_level, sv->u.tex.first_layer);
++            }
++            if (bb) ctx->ws->bo_unmap(ctx->ws, rs->bo);
++         }
++         nd++;
++         }
++      }
++   }
++
++   {
++      const char *da = getenv("MWV207_DIFFAT");
++      static int ndiff2 = 0;
++      if (da && getenv("MWV207_DIFFPOST")) {
++         struct pipe_framebuffer_state *fb = &ctx->fb_state;
++         struct mwv207_surface *s = fb->cbufs[0] ? mwv207_surface(fb->cbufs[0]) : NULL;
++         if (s && fb->width == 1280 && fb->height == 929 &&
++             (atoi(da) < 0 || ndiff2 == atoi(da))) {
++            struct mwv207_resource *r = mwv207_resource(s->base.texture);
++            ctx->ws->bo_wait(ctx->ws, r->bo, 0x7fffffffffffffffULL);
++            uint8_t *b = ctx->ws->bo_map(ctx->ws, r->bo);
++            if (b && ndiff2 >= 20 && ndiff2 <= 30) {
++               uint32_t st = r->level_infos[0].stride;
++               char pn[64]; snprintf(pn,sizeof pn,"/tmp/ffx/post_%02d.raw", ndiff2);
++               FILE *f = fopen(pn, "wb");
++               if (f) { fwrite(b + (uint64_t)r->offset, 1, (size_t)st * 929, f); fclose(f); }
++               fprintf(stderr, "[DIFF] draw=%d POST_DONE bo=%p\n", ndiff2, (void*)r);
++               ctx->ws->bo_unmap(ctx->ws, r->bo);
++            }
++            ndiff2++;
++         }
++      }
++   }
++
++   if (getenv("MWV207_EACHDRAWFLUSH"))
++      pctx->flush(pctx, NULL, 0);
++
++   /* NOTE: this submit is part of the original driver. Instrumentation hooks
++    * above must never replace it -- dropping it makes draws pile up in the
++    * command buffer and never reach the GPU. */
+    mwv207_submit(ctx, NULL, false);
+ 
++   /* MWV207_POSTGPU: AFTER the draw is queued, read cbuf0 through the GPU
++    * staging path (texture_map => blit staging<-res, submit, wait). Safe:
++    * not re-entering an in-progress command stream build. */
++   if (getenv("MWV207_POSTGPU")) {
++      static int npg = 0;
++      struct pipe_framebuffer_state *gfb = &ctx->fb_state;
++      struct pipe_surface *gs = gfb->cbufs[0];
++      if (gs && gs->texture && gs->texture->width0 == 1024 && gs->texture->height0 == 512) {
++         struct pipe_box gbox = {0, 0, 0, 1024, 512, 1};
++         struct pipe_transfer *gtr = NULL;
++         uint8_t *gmap = pctx->texture_map(pctx, gs->texture, 0,
++                                            PIPE_MAP_READ, &gbox, &gtr);
++         if (gmap && gtr) {
++            char gpn[64];
++            snprintf(gpn, sizeof gpn, "/tmp/ffx/pgt_%03d.raw", npg);
++            FILE *gf = fopen(gpn, "wb");
++            if (gf) {
++               for (uint32_t gy = 0; gy < 512; gy++)
++                  fwrite(gmap + (size_t)gy * gtr->stride, 1, 1024 * 4, gf);
++               fclose(gf);
++            }
++            fprintf(stderr, "[POSTGPU] #%d stride=%u\n", npg, gtr->stride);
++            pctx->texture_unmap(pctx, gtr);
++         }
++         npg++;
++      }
++   }
++
+    if (unlikely(ctx->ws->debug & 0x40))
+       pctx->flush(pctx, NULL, 0);
+ }
+diff --git a/src/gallium/drivers/mwv207/mwv207_resource.c b/src/gallium/drivers/mwv207/mwv207_resource.c
+index 018f0f7..6778b97 100644
+--- a/src/gallium/drivers/mwv207/mwv207_resource.c
++++ b/src/gallium/drivers/mwv207/mwv207_resource.c
+@@ -52,6 +52,9 @@ mwv207_can_tile(struct mwv207_resource *res)
+ 
+    const bool enable_scanout_tile = false;
+ 
++   if (getenv("MWV207_NOTILE"))
++      return PIPE_ERROR_BAD_INPUT;
++
+    if (!mwv207_tile_supported_format(res->base.format))
+       return PIPE_ERROR_BAD_INPUT;
+ 
+@@ -99,6 +102,8 @@ mwv207_get_tile_info(struct mwv207_screen *screen,
+ 
+    tile->compressed_format = mwv207_get_compressed_format(res->base.format);
+    tile->compressed = (tile->compressed_format != -1);
++   if (getenv("MWV207_NOCOMPRESS"))
++      tile->compressed = false;
+    tile->enable = false;
+    res->linear_output = false;
+ 
+@@ -297,7 +302,28 @@ mwv207_resource_from_handle(struct pipe_screen *pscreen,
+                             struct winsys_handle *whandle,
+                             unsigned usage)
+ {
+-   return resource_create(pscreen, templ, whandle, usage);
++   struct pipe_resource *r = resource_create(pscreen, templ, whandle, usage);
++   if (r && getenv("MWV207_IMP")) {
++      struct mwv207_resource *res = mwv207_resource(r);
++      struct mwv207_bo *bo = res->bo;
++      unsigned nz = 0;
++      if (bo) {
++         struct mwv207_screen *screen = mwv207_screen(pscreen);
++         screen->ws->bo_wait(screen->ws, bo, OS_TIMEOUT_INFINITE);
++         void *pm = screen->ws->bo_map(screen->ws, bo);
++         if (pm) {
++            uint32_t *p32 = (uint32_t *)((uint8_t *)pm + bo->offset);
++            for (size_t k = 0; k < bo->base.base.size / 4 && k < 65536; k++)
++               if (p32[k]) nz++;
++            fprintf(stderr, "[IMP] res=%p hdl=%d bo=%p size=%lu %s %ux%u mode=%d first=%08x nz64k=%u\n",
++                    (void *)res, (int)bo->handle, (void *)bo, (unsigned long)bo->base.base.size,
++                    util_format_name(res->base.format), res->base.width0, res->base.height0,
++                    res->mode, p32[0], nz);
++         }
++         screen->ws->bo_unmap(screen->ws, bo);
++      }
++   }
++   return r;
+ }
+ 
+ static bool
+@@ -317,6 +343,43 @@ mwv207_resource_get_handle(struct pipe_screen *pscreen,
+    if (res->base.target != PIPE_BUFFER)
+       whandle->stride = res->level_infos[0].stride;
+ 
++   if (getenv("MWV207_GETHDL"))
++      fprintf(stderr, "[GETHDL] res=%p fmt=%s %ux%u bind=0x%x mode=%d linear=%p ts_en=%d bo=%p off=%lu "
++              "size=%lu handle=%d stride=%u modifier=%llu\n",
++              (void *)res, util_format_name(res->base.format), res->base.width0, res->base.height0,
++              res->base.bind, res->mode, (void *)res->linear, res->ts.enable,
++              (void *)res->bo, (unsigned long)(res->bo ? res->bo->offset : 0UL),
++              (unsigned long)(res->bo ? res->bo->base.base.size : 0UL),
++              (int)(res->bo ? res->bo->handle : -1),
++              (unsigned)whandle->stride, (unsigned long long)whandle->modifier);
++
++   if (getenv("MWV207_GETHDL")) {
++      struct mwv207_resource *exp = res->linear ? mwv207_resource(res->linear) : res;
++      struct mwv207_bo *ebo = exp->bo;
++      if (ebo) {
++         screen->ws->bo_wait(screen->ws, ebo, OS_TIMEOUT_INFINITE);
++         void *pm = screen->ws->bo_map(screen->ws, ebo);
++         if (pm) {
++            uint32_t *p32 = (uint32_t *)((uint8_t *)pm + ebo->offset);
++            size_t n = ebo->base.base.size / 4;
++            unsigned nz = 0, npoison = 0;
++            uint32_t first = n ? p32[0] : 0;
++            for (size_t k = 0; k < n && k < 65536; k++) {
++               if (p32[k]) nz++;
++            }
++            size_t stride_words = n > 1 ? (size_t)(exp->level_infos[0].stride / 4) : 1;
++            if (n > stride_words * 40)
++               npoison = p32[stride_words * 40];
++            fprintf(stderr, "[GETHDL] exp res=%p %s %ux%u mode=%d lin=%d hdl=%d bo=%p size=%lu "
++                    "first=%08x row40a=%08x nz64k=%u\n",
++                    (void *)exp, util_format_name(exp->base.format), exp->base.width0, exp->base.height0,
++                    exp->mode, res->linear != NULL, (int)ebo->handle, (void *)ebo,
++                    (unsigned long)ebo->base.base.size, first, npoison, nz);
++         }
++         screen->ws->bo_unmap(screen->ws, ebo);
++      }
++   }
++
+    if (res->linear)
+       return pscreen->resource_get_handle(pscreen, context, res->linear, whandle, usage);
+    else
+@@ -385,6 +448,8 @@ mwv207_wait_resource(struct pipe_context *pctx,
+    ctx->ws->bo_wait(ctx->ws, res->bo, OS_TIMEOUT_INFINITE);
+ }
+ 
++static int trn = -1; /* MWV207_TRACE counter */
++
+ static void *
+ mwv207_transfer_map(struct pipe_context *pctx,
+                     struct pipe_resource *pres,
+@@ -410,6 +475,14 @@ mwv207_transfer_map(struct pipe_context *pctx,
+    trans->base.usage = usage;
+    trans->base.box = *box;
+ 
++   /* MWV207_TRACE: log texture transfers */
++   if (trn == -1) trn = getenv("MWV207_TRACE") ? 0 : -2;
++   if (trn >= 0 && pres->target != PIPE_BUFFER)
++      fprintf(stderr, "[TRMAP] n=%d res=%p %s %ux%u lvl=%u usage=%x box=%d,%d %dx%d mode=%d\n",
++              trn++, (void *)res, util_format_name(pres->format),
++              pres->width0, pres->height0, level, usage,
++              box->x, box->y, box->width, box->height, res->mode);
++
+    if (pres->target == PIPE_BUFFER) {
+       if ((usage & PIPE_MAP_READ) ||
+            util_ranges_intersect(&res->valid_buffer_range,
+@@ -507,14 +580,19 @@ mwv207_transfer_unmap(struct pipe_context *pctx, struct pipe_transfer *ptrans)
+    struct mwv207_resource *res = mwv207_resource(ptrans->resource);
+    struct mwv207_transfer *trans = (struct mwv207_transfer *)ptrans;
+ 
+-   if (trans->staging_res) {
++    if (trans->staging_res) {
+       struct mwv207_resource *staging_res = mwv207_resource(trans->staging_res);
+ 
+       ctx->ws->bo_unmap(ctx->ws, staging_res->bo);
+ 
+-      if (trans->base.usage & PIPE_MAP_WRITE)
++      if (trans->base.usage & PIPE_MAP_WRITE) {
++         if (trn >= 0)
++            fprintf(stderr, "[TRUNMAP] n=%d res=%p -> staging=%p lvl=%u box=%d,%d %dx%d BLIT_BACK\n",
++                    trn, (void *)res, (void *)staging_res, ptrans->level,
++                    ptrans->box.x, ptrans->box.y, ptrans->box.width, ptrans->box.height);
+          mwv207_blit_resource_box(pctx, &res->base, &staging_res->base,
+             ptrans->level, &ptrans->box);
++      }
+ 
+       pipe_resource_reference(&trans->staging_res, NULL);
+    } else {
+diff --git a/src/gallium/drivers/mwv207/mwv207_surface.c b/src/gallium/drivers/mwv207/mwv207_surface.c
+index 78c9b83..5b7febc 100644
+--- a/src/gallium/drivers/mwv207/mwv207_surface.c
++++ b/src/gallium/drivers/mwv207/mwv207_surface.c
+@@ -288,6 +288,25 @@ mwv207_set_framebuffer_state(struct pipe_context *pctx,
+ 
+    util_copy_framebuffer_state(&ctx->fb_state, state);
+ 
++   if (getenv("MWV207_FBTRACE")) {
++      static int seq = 0;
++      fprintf(stderr, "[MWV207_FB %d] nr_cbufs=%u w=%u h=%u",
++              seq++, state->nr_cbufs, state->width, state->height);
++      for (unsigned i = 0; i < state->nr_cbufs; i++) {
++         if (!state->cbufs[i]) { fprintf(stderr, " cbuf[%u]=null", i); continue; }
++         struct mwv207_resource *r = mwv207_resource(state->cbufs[i]->texture);
++         fprintf(stderr, " cbuf[%u]=%s %ux%u lvl=%u lay=%u",
++                 i, util_format_name(r->base.format), r->base.width0,
++                 r->base.height0, state->cbufs[i]->u.tex.level,
++                 state->cbufs[i]->u.tex.first_layer);
++      }
++      if (state->zsbuf) {
++         struct mwv207_resource *z = mwv207_resource(state->zsbuf->texture);
++         fprintf(stderr, " z=%s", util_format_name(z->base.format));
++      }
++      fprintf(stderr, "\n");
++   }
++
+    ctx->info.linear_outmode = false;
+ 
+    for (int i = 0; i < ctx->fb_state.nr_cbufs; i++) {
+diff --git a/src/gallium/winsys/mwv207/drm/mwv207_drm_bo.c b/src/gallium/winsys/mwv207/drm/mwv207_drm_bo.c
+index d0c7922..f8081fc 100644
+--- a/src/gallium/winsys/mwv207/drm/mwv207_drm_bo.c
++++ b/src/gallium/winsys/mwv207/drm/mwv207_drm_bo.c
+@@ -212,6 +212,42 @@ no_slab:
+ 
+    pipe_reference_init(&bo->base.base.reference, 1);
+ 
++   {
++      static int poison = -1;
++      static int pcount = 0;
++      if (poison < 0) {
++         const char *e = getenv("MWV207_POISON");
++         poison = e ? (int)strtoul(e, NULL, 0) : 0;
++      }
++      /* Poison by size class so the colour that reaches the screen tells us
++       * which allocation it came from:
++       *   16 MB  -> 0xc3 (2048x2048 RGBA atlas)
++       *    4-8MB-> 0x5a (1280x929 window back buffer)
++       *   others -> 0x27 */
++      if (poison == 2) {
++         /* Handle-keyed poison: every BO gets a byte derived from its GEM
++          * handle, so the colour that reaches the screen identifies the exact
++          * BO that was presented. */
++         unsigned char pv = (unsigned char)(0x40 + (bo->handle * 7u) % 0xb0);
++         void *pp = ws->bo_map(ws, bo);
++         if (pp) {
++            memset((char *)pp + bo->offset, pv, size);
++            fprintf(stderr, "[POISONH] bo=%p handle=%u size=%lu pattern=%02x\n",
++                    (void *)bo, bo->handle, (unsigned long)size, pv);
++         }
++      } else if (poison && size >= (1u << 20)) {
++         unsigned char pv = (size >= (12u << 20)) ? 0xc3 :
++                            (size >= (4u << 20))  ? 0x5a : 0x27;
++         void *pp = ws->bo_map(ws, bo);
++         if (pp) {
++            memset((char *)pp + bo->offset, pv, size);
++            fprintf(stderr, "[POISON] bo=%p handle=%u size=%lu off=%lu pattern=%02x\n",
++                    (void *)bo, bo->handle, (unsigned long)size,
++                    (unsigned long)bo->offset, pv);
++         }
++      }
++   }
++
+    if (unlikely(ws->debug & 0x4))
+       printf("%s bo handle %u size : %lu\n", __FUNCTION__, bo->handle, bo->base.base.size);
+ 
+@@ -438,6 +474,7 @@ mwv207_bo_can_reclaim(void *winsys, struct pb_buffer_lean *buf)
+ {
+    struct mwv207_bo *bo = mwv207_bo(buf);
+ 
++   if (getenv("MWV207_NORECLAIM")) return false;
+    if (bo->base.base.reference.count != 0) {
+       return false;
+    }
+@@ -452,6 +489,7 @@ mwv207_bo_can_reclaim_slab(void *priv, struct pb_slab_entry *entry)
+    struct mwv207_bo *bo = NULL;
+    bo = container_of(entry, struct mwv207_bo, u.slab.entry);
+ 
++   if (getenv("MWV207_NORECLAIM")) return false;
+    if (bo->base.base.reference.count != 0) {
+       return false;
+    }
+diff --git a/src/loader/loader_dri3_helper.c b/src/loader/loader_dri3_helper.c
+index dc1db4f..0b72f32 100644
+--- a/src/loader/loader_dri3_helper.c
++++ b/src/loader/loader_dri3_helper.c
+@@ -23,8 +23,22 @@
+ 
+ #include <fcntl.h>
+ #include <stdlib.h>
++#include <stdio.h>
+ #include <unistd.h>
+ #include <string.h>
++#include <stdbool.h>
++
++/* MWV207 debug instrumentation (env: MWV207_DRI3_DEBUG=1) */
++static bool
++mwv207_dri3_dbg(void)
++{
++   static int dbg = -1;
++   if (dbg < 0)
++      dbg = getenv("MWV207_DRI3_DEBUG") != NULL;
++   return dbg != 0;
++}
++#define MWV207_DBG(...) do { if (mwv207_dri3_dbg()) \
++   fprintf(stderr, "[DRI3D] " __VA_ARGS__); } while (0)
+ 
+ #include <X11/xshmfence.h>
+ #include <xcb/xcb.h>
+@@ -462,6 +476,9 @@ loader_dri3_drawable_init(xcb_connection_t *conn,
+    draw->depth = reply->depth;
+    draw->vtable->set_drawable_size(draw, draw->width, draw->height);
+    free(reply);
++   MWV207_DBG("init drawable=0x%x type=%d geom=%ux%u depth=%u swap_interval=%d\n",
++              (unsigned) draw->drawable, (int) draw->type,
++              draw->width, draw->height, draw->depth, draw->swap_interval);
+ 
+    /*
+     * Make sure server has the same swap interval we do for the new
+@@ -486,6 +503,9 @@ dri3_handle_present_event(struct loader_dri3_drawable *draw,
+    switch (ge->evtype) {
+    case XCB_PRESENT_CONFIGURE_NOTIFY: {
+       xcb_present_configure_notify_event_t *ce = (void *) ge;
++      MWV207_DBG("CONFIGURE drawable=0x%x ev=%dx%d flags=%u (cur %ux%u)\n",
++                 (unsigned) ce->event, ce->width, ce->height,
++                 (unsigned) ce->pixmap_flags, draw->width, draw->height);
+       if (ce->pixmap_flags & PresentWindowDestroyed) {
+          free(ge);
+          return false;
+@@ -507,6 +527,13 @@ dri3_handle_present_event(struct loader_dri3_drawable *draw,
+       if (ce->kind == XCB_PRESENT_COMPLETE_KIND_PIXMAP) {
+          uint64_t recv_sbc = (draw->send_sbc & 0xffffffff00000000LL) | ce->serial;
+ 
++         MWV207_DBG("COMPLETE drawable=0x%x serial=%u mode=%u msc=%lld ust=%lld "
++                    "send_sbc=%lld recv_sbc=%lld wrap_in=%d\n",
++                    (unsigned) ce->event, (unsigned) ce->serial,
++                    (unsigned) ce->mode, (long long) ce->msc,
++                    (long long) ce->ust, (long long) draw->send_sbc,
++                    (long long) draw->recv_sbc, recv_sbc <= draw->send_sbc ? 1 : 0);
++
+          /* Only assume wraparound if that results in exactly the previous
+           * SBC + 1, otherwise ignore received SBC > sent SBC (those are
+           * probably from a previous loader_dri3_drawable instance) to avoid
+@@ -1033,8 +1060,11 @@ loader_dri3_swap_buffers_msc(struct loader_dri3_drawable *draw,
+     * single|  nop   |  nop   |   nop   |  nop   |  nop   |   nop  |
+     * double|  swap  |  nop   |   swap  |  swap  |  NA    |   NA   |
+     */
+-   if (!draw->have_back || draw->type == LOADER_DRI3_DRAWABLE_PIXMAP)
++   if (!draw->have_back || draw->type == LOADER_DRI3_DRAWABLE_PIXMAP) {
++      MWV207_DBG("swap SKIP drawable=0x%x have_back=%d type=%d\n",
++                 (unsigned) draw->drawable, draw->have_back, (int) draw->type);
+       return ret;
++   }
+ 
+    draw->vtable->flush_drawable(draw, flush_flags);
+ 
+@@ -1141,6 +1171,17 @@ loader_dri3_swap_buffers_msc(struct loader_dri3_drawable *draw,
+       back->busy = 1;
+       back->last_swap = draw->send_sbc;
+ 
++      MWV207_DBG("PRESENT drawable=0x%x pixmap=0x%x sbc=%lld recv=%lld msc=%lld "
++                 "target_msc=%lld div=%lld rem=%lld interval=%d opts=0x%x "
++                 "buf=%ux%u draw=%ux%u reallocate=%d\n",
++                 (unsigned) draw->drawable, (unsigned) back->pixmap,
++                 (long long) draw->send_sbc, (long long) draw->recv_sbc,
++                 (long long) draw->msc, (long long) target_msc,
++                 (long long) divisor, (long long) remainder,
++                 draw->swap_interval, (unsigned) options,
++                 back->width, back->height, draw->width, draw->height,
++                 back->reallocate ? 1 : 0);
++
+       if (!draw->region) {
+          draw->region = xcb_generate_id(draw->conn);
+          xcb_xfixes_create_region(draw->conn, draw->region, 0, NULL);
+@@ -1149,6 +1190,18 @@ loader_dri3_swap_buffers_msc(struct loader_dri3_drawable *draw,
+       xcb_xfixes_region_t region = 0;
+       xcb_rectangle_t xcb_rects[64];
+ 
++      static int mwv_full[4];
++      if (getenv("MWV207_FULLDAMAGE") && draw->width > 1) {
++         mwv_full[0] = 0; mwv_full[1] = 0;
++         mwv_full[2] = draw->width; mwv_full[3] = draw->height;
++         rects = mwv_full; n_rects = 1;
++      }
++      if (mwv207_dri3_dbg()) {
++         fprintf(stderr, "[DRI3D] DAMAGE n_rects=%d", n_rects);
++         for (int i = 0; i < n_rects && i < 8; i++)
++            fprintf(stderr, " [%d,%d %dx%d]", rects[i*4], rects[i*4+1], rects[i*4+2], rects[i*4+3]);
++         fprintf(stderr, "\n");
++      }
+       if (n_rects > 0 && n_rects <= ARRAY_SIZE(xcb_rects)) {
+          for (int i = 0; i < n_rects; i++) {
+             const int *rect = &rects[i * 4];
+@@ -1271,8 +1324,11 @@ loader_dri3_query_buffer_age(struct loader_dri3_drawable *draw)
+    draw->queries_buffer_age = true;
+    if (back && back->last_swap != 0)
+       ret = draw->send_sbc - back->last_swap + 1;
++   if (getenv("MWV207_AGE0"))
++      ret = 0;
+    mtx_unlock(&draw->mtx);
+ 
++   MWV207_DBG("buffer_age -> %d (last_swap=%lld sbc=%lld)\n", ret, back?(long long)back->last_swap:-1LL, (long long)draw->send_sbc);
+    return ret;
+ }
+ 
+@@ -2218,6 +2274,10 @@ loader_dri3_get_buffers(__DRIdrawable *driDrawable,
+    buffers->front = NULL;
+    buffers->back = NULL;
+ 
++   MWV207_DBG("get_buffers drawable=0x%x fmt=%d mask=0x%x stamps_differ=%d\n",
++              (unsigned) draw->drawable, (int) format, buffer_mask,
++              (stamp && draw->stamp && *draw->stamp != *stamp) ? 1 : 0);
++
+    if (!dri3_update_drawable(draw))
+       return false;
+ 

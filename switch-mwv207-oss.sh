@@ -46,14 +46,20 @@
 set -u
 
 # ----------------------------- 常量与路径 ----------------------------------
-VERSION="24.1.2-fullstack-r1"
+# 版本号不硬编码 —— 由载荷自身派生 (见 payload_version)。
+# 硬编码的 VERSION 会把"改了载荷忘了改版本"变成静默故障: 不带 --force 时直接
+# 拒绝(挡住正确操作), 带 --force 则用同一版本号装进不同内容(状态里看不出差别)。
+VERSION_FALLBACK="24.1.2-fullstack-r1"
 # 仓库根 = 本脚本所在目录 (不硬编码用户主目录, 从任意路径调用均有效)。
 # 自安装副本 (/usr/local/sbin/mwv207-oss-switch) 所在目录无仓库文件时:
 # 载荷自动回退 payload-cache, egl-smoke 自检回退 $CACHE_DIR/tests (install 时复制)。
 WORKDIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 
+# 载荷候选的回退顺序: 显式 PAYLOAD_SRC 最优先, 其次是仓库内最新的 payload-*
+# 目录 (见 repo_payloads), 最后才是 payload-cache。
+# 顺序很关键 —— 若让缓存优先, 在仓库重打载荷后 install 会静默安装旧内容;
+# 缓存只是"仓库工作区被删后的兜底", 不代表"更新的内容"。
 PAYLOAD_CANDIDATES=(
-    "${PAYLOAD_SRC:-}"
     "/var/lib/mwv207-oss/payload-cache"
     "$WORKDIR/payload-24"
 )
@@ -157,7 +163,35 @@ log()  { echo "[$(date '+%F %T')] $*" | tee -a "$LOG_FILE" 2>/dev/null || echo "
 die()  { log "错误: $*"; exit 1; }
 need_root() { [ "$(id -u)" = 0 ] || die "请以 root 运行: sudo $0 $*"; }
 
+# 仓库内可用载荷目录, 新版本优先 (payload-25 排在 payload-24 之前)
+repo_payloads() {
+    local d
+    for d in "$WORKDIR"/payload-*; do
+        [ -d "$d" ] && [ -f "$d/MANIFEST.sha256" ] && echo "$d"
+    done | sort -rV
+}
+
+# 载荷声明的版本: 优先读载荷内 VERSION 文件; 没有就用 MANIFEST 摘要
+# —— 内容一变摘要就变, 不会被"忘了改版本号"骗过去。
+payload_version() {
+    local d="$1"
+    if [ -f "$d/VERSION" ]; then
+        head -1 "$d/VERSION" | tr -d '[:space:]'
+    elif [ -f "$d/MANIFEST.sha256" ]; then
+        echo "manifest-$(sha256sum "$d/MANIFEST.sha256" | cut -c1-12)"
+    else
+        echo "$VERSION_FALLBACK"
+    fi
+}
+
 payload_src() {
+    local d
+    if [ -n "${PAYLOAD_SRC:-}" ]; then
+        [ -f "$PAYLOAD_SRC/MANIFEST.sha256" ] || return 1
+        echo "$PAYLOAD_SRC"; return 0
+    fi
+    d=$(repo_payloads | head -1)
+    [ -n "$d" ] && { echo "$d"; return 0; }
     for d in "${PAYLOAD_CANDIDATES[@]}"; do
         [ -n "$d" ] && [ -f "$d/MANIFEST.sha256" ] && { echo "$d"; return 0; }
     done
@@ -226,8 +260,19 @@ cmd_check() {
     free_gb=$(df -BG / | awk 'NR==2{print $4}' | tr -d G)
     [ "${free_gb:-0}" -ge 1 ] && echo "  [OK] 磁盘剩余 ${free_gb}G (需 ~0.6G)" || { echo "  [FAIL] 磁盘不足"; rc=1; }
 
+    local ver; ver=$(payload_version "$src")
+    echo "  [OK] 载荷版本: $ver"
+    local cache="$CACHE_DIR/payload-cache"
+    if [ -f "$cache/MANIFEST.sha256" ] && [ "$(readlink -f "$src")" != "$(readlink -f "$cache")" ]; then
+        if cmp -s "$src/MANIFEST.sha256" "$cache/MANIFEST.sha256"; then
+            echo "  [OK] 载荷缓存与所选载荷一致"
+        else
+            echo "  [WARN] 载荷缓存与所选载荷不同 (install 用 $src, 部署后缓存会被覆盖)"
+        fi
+    fi
+
     local cur; cur=$(active_stack)
-    [ "$cur" = "oss-$VERSION" ] && echo "  [注意] 当前已是 oss 栈 (install 将拒绝, 除非 --force)"
+    [ "$cur" = "oss-$ver" ] && echo "  [注意] 当前已是 oss 栈 ($cur, install 将拒绝, 除非 --force)"
     echo "== 预检结果: $([ $rc = 0 ] && echo 通过 || echo 未通过) =="
     return $rc
 }
@@ -253,7 +298,7 @@ backup_snapshot() {
     done
     # 记录 jmgpu.icd 的 .oss-disabled 衍生名 (回滚时清除)
     echo "derived	$OPENCL_ICD_DISABLED" >> "$hist/backup/manifest.txt"
-    echo "$VERSION" > "$hist/version"
+    echo "${1:-unknown}" > "$hist/version"
     ln -sfn "$ts" "$HIST_ROOT/LATEST"
     echo "$ts"
 }
@@ -321,11 +366,14 @@ deploy_payload() {
     patchelf --set-rpath '$ORIGIN' "$INST_DIR/mwv207_dri.so" || die "DRI rpath 设置失败"
     chmod 0644 "$INST_DIR/mwv207_dri.so"
     # 载荷缓存 (供工作区删除后重装)
-    if [ "$(readlink -f "$src")" != "$CACHE_DIR/payload-cache" ]; then
+    if [ "$(readlink -f "$src")" != "$(readlink -f "$CACHE_DIR/payload-cache")" ]; then
         rm -rf "$CACHE_DIR/payload-cache"
         mkdir -p "$CACHE_DIR/payload-cache"
-        cp -a "$src"/. "$CACHE_DIR/payload-cache/"
+        cp -a "$src"/. "$CACHE_DIR/payload-cache/" || die "刷新载荷缓存失败"
     fi
+    # 供 verify 做安装目录的内容校验: 只查"链接指向哪"发现不了内容被换掉,
+    # 必须拿 MANIFEST 对 $INST_DIR 里的 10 个实体文件逐个核 sha256。
+    cp -f "$src/MANIFEST.sha256" "$CACHE_DIR/manifest.sha256" || die "无法保存 MANIFEST"
 }
 
 cmd_install() {
@@ -333,16 +381,17 @@ cmd_install() {
     local force=0
     [ "${1:-}" = "--force" ] && force=1
 
-    local cur; cur=$(active_stack)
-    [ "$cur" = "oss-$VERSION" ] && [ $force = 0 ] && die "当前已是 oss 栈 ($cur)。如需重装: install --force"
-
     cmd_check >/dev/null 2>&1 || { cmd_check; die "预检未通过, 中止"; }
     local src; src=$(payload_src) || die "无载荷"
+    local ver; ver=$(payload_version "$src")
 
-    log "==== install 开始 (载荷 $src, 版本 $VERSION) ===="
+    local cur; cur=$(active_stack)
+    [ "$cur" = "oss-$ver" ] && [ $force = 0 ] && die "当前已是 oss 栈 ($cur)。如需重装: install --force"
+
+    log "==== install 开始 (载荷 $src, 版本 $ver) ===="
 
     # 1) 备份快照
-    local ts; ts=$(backup_snapshot)
+    local ts; ts=$(backup_snapshot "$ver")
     log "已创建系统快照: $HIST_ROOT/$ts"
 
     # 2) 部署载荷 + 缓存
@@ -361,10 +410,10 @@ cmd_install() {
 
     # 4) DRI / VA / VDPAU 默认搜索路径软链 (DRI 指向 rpath 实体副本, 见 deploy)
     mkdir -p /usr/local/lib/aarch64-linux-gnu/dri /usr/lib/aarch64-linux-gnu/vdpau
-    ln -sfn "$INST_DIR/mwv207_dri.so"          "$DRI_LINK"
-    ln -sfn "$INST_DIR/libmwv207_drv_video.so" "$VA_LINK"
-    ln -sfn "$INST_DIR/libvdpau_mwv207.so.1.0.0" "$VDPAU_LINK"
-    ln -sfn "$INST_DIR/libvdpau_mwv207.so.1.0.0" "$VDPAU_LINK.0"
+    ln -sfn "$INST_DIR/mwv207_dri.so"            "$DRI_LINK"    || die "DRI 软链失败: $DRI_LINK (deepin 不可变根未解锁?)"
+    ln -sfn "$INST_DIR/libmwv207_drv_video.so"   "$VA_LINK"     || die "VA 软链失败: $VA_LINK"
+    ln -sfn "$INST_DIR/libvdpau_mwv207.so.1.0.0" "$VDPAU_LINK"   || die "VDPAU 软链失败: $VDPAU_LINK"
+    ln -sfn "$INST_DIR/libvdpau_mwv207.so.1.0.0" "$VDPAU_LINK.0" || die "VDPAU 软链失败: $VDPAU_LINK.0"
 
     # 5) OpenCL: 禁用厂商 ICD (mwv207 KMD 下 devices=0), 启用 rusticl
     mkdir -p "$OPENCL_DIR"
@@ -376,7 +425,13 @@ cmd_install() {
     mkdir -p /etc/environment.d
     printf 'RUSTICL_ENABLE=mwv207\nVDPAU_DRIVER=mwv207\n' > "$ENVIRONMENT_D"
     printf '# mwv207 开源栈: rusticl 设备门控\nexport RUSTICL_ENABLE=mwv207\nexport VDPAU_DRIVER=mwv207\n' > "$PROFILE_D"
-    if ! grep -q '^RUSTICL_ENABLE=' "$SYS_ENVIRONMENT" 2>/dev/null; then
+    # 幂等且能纠错: 先删掉已有的同名键再追加。原来的实现是"键不存在才追加",
+# 一旦值被写错 (例如 RUSTICL_ENABLE=llvmpipe) 就永远纠正不回来。
+    # 只动这两行, /etc/environment 其余内容原样保留。
+    if [ -f "$SYS_ENVIRONMENT" ]; then
+        sed -i '/^RUSTICL_ENABLE=/d; /^VDPAU_DRIVER=/d' "$SYS_ENVIRONMENT"
+        # 若文件末尾没有换行, 先补一个, 免得与最后一行粘连
+        [ -n "$(tail -c1 "$SYS_ENVIRONMENT" 2>/dev/null)" ] && echo >> "$SYS_ENVIRONMENT"
         printf 'RUSTICL_ENABLE=mwv207\nVDPAU_DRIVER=mwv207\n' >> "$SYS_ENVIRONMENT"
     fi
 
@@ -385,24 +440,30 @@ cmd_install() {
     chmod 0755 "$SELF_INSTALLED"
 
     # 8) 生效
-    ldconfig
-    echo "oss-$VERSION" > "$STATE_FILE"
+    ldconfig || die "ldconfig 失败 (动态库缓存未更新)"
+    echo "oss-$ver" > "$STATE_FILE"
     echo "installed $(date '+%F %T') history=$ts payload=$src" >> "$STATE_FILE"
 
     # 9) 看门狗 + 重启 lightdm
+    # 启动前先停掉可能残留的旧看门狗: 同名 unit 会让 systemd-run 直接失败,
+    # 于是静默降级成"只靠本脚本内联自检"。
+    systemctl stop mwv207-oss-watchdog 2>/dev/null || true
     touch "$STAMP"
     systemd-run --collect --unit=mwv207-oss-watchdog \
         --description="mwv207-oss switch watchdog" \
         "$SELF_INSTALLED" watchdog "$STAMP" >/dev/null 2>&1 || log "[警告] 看门狗启动失败, 依赖脚本自检"
     log "重启 lightdm (图形会话将终止, 请稍后重新登录)..."
-    systemctl restart lightdm
+    systemctl restart lightdm || die "lightdm 重启失败 (图形会话可能已中断)"
 
     # 10) 自检验证
     sleep 8
     if wait_xorg_and_check; then
         systemctl stop mwv207-oss-watchdog 2>/dev/null || true
         log "install 完成: glamor 硬件加速已生效"
-        cmd_verify
+        # 自检失败必须以非零退出 —— 原实现丢弃 cmd_verify 的 rc, 即使
+        # VA/OpenCL/EGL 全挂, install 依然报成功。这里不自动回滚(图形已可用),
+        # 只把失败如实上报。
+        cmd_verify || die "install 已切换但自检未通过 (见上); 未自动回滚, 如需还原请执行 rollback"
         return 0
     else
         log "install 后 X 仍为软件渲染 → 自动回滚"
@@ -522,6 +583,31 @@ cmd_verify() {
     done
     [ -f "$LDCONF" ] && echo "  [OK] $LDCONF" || { echo "  [FAIL] 缺 $LDCONF"; rc=1; }
     [ -f "$OPENCL_ICD_DISABLED" ] && echo "  [OK] 厂商 jmgpu.icd 已禁用" || echo "  [INFO] 厂商 jmgpu.icd 原本不存在"
+    # 厂商包升级(apt upgrade mwv207-dev)会把这个 ICD 装回来, 于是出现第二个
+    # OpenCL 平台(该实现在 mwv207 KMD 下枚举 0 设备), 需要重新 install。
+    [ -f "$OPENCL_DIR/jmgpu.icd" ] && echo "  [WARN] $OPENCL_DIR/jmgpu.icd 又出现 (mwv207-dev 被重装?), 需重新 install"
+
+    echo "  -- 安装目录内容完整性:"
+    if [ -f "$CACHE_DIR/manifest.sha256" ]; then
+        if ( cd "$INST_DIR" && sha256sum -c "$CACHE_DIR/manifest.sha256" >/dev/null 2>&1 ); then
+            echo "     [OK] 实体文件与 MANIFEST 一致"
+        else
+            echo "     [FAIL] 实体文件与 MANIFEST 不一致 (安装目录被改动?)"; rc=1
+            ( cd "$INST_DIR" && sha256sum -c "$CACHE_DIR/manifest.sha256" 2>&1 \
+                | grep -v '成功$' | sed 's/^/       /' )
+        fi
+    else
+        echo "     [INFO] 无 $CACHE_DIR/manifest.sha256 (旧安装), 跳过内容校验"
+    fi
+    if [ -e "$INST_DIR/mwv207_dri.so" ] && [ -e "$INST_DIR/libmwv207_dri.so" ]; then
+        if [ "$INST_DIR/mwv207_dri.so" -ef "$INST_DIR/libmwv207_dri.so" ] \
+           || [ "$(md5sum < "$INST_DIR/mwv207_dri.so" | cut -d' ' -f1)" = \
+                "$(md5sum < "$INST_DIR/libmwv207_dri.so" | cut -d' ' -f1)" ]; then
+            echo "     [OK] DRI 实体副本与 libmwv207_dri.so 内容一致"
+        else
+            echo "     [FAIL] DRI 实体副本与 libmwv207_dri.so 内容不同"; rc=1
+        fi
+    fi
 
     echo "  -- Xorg glamor:"
     if grep -qiE "$PASS_MARKERS" "$XORG_LOG" 2>/dev/null; then
@@ -567,6 +653,24 @@ cmd_status() {
     echo "== MWV207 开源栈状态 =="
     echo "  活动栈:     $(active_stack)"
     echo "  内核驱动:   $(kernel_driver 2>/dev/null || echo 未知)"
+    local src ver
+    if src=$(payload_src); then
+        ver=$(payload_version "$src")
+        echo "  载荷:       $src (版本 $ver)"
+    else
+        echo "  载荷:       未找到"
+    fi
+    # 自安装副本才是 watchdog / rollback 的实际执行者; 它与仓库脚本不一致,
+    # 就意味着回滚跑的是旧逻辑。
+    if [ -f "$SELF_INSTALLED" ]; then
+        if [ -f "$WORKDIR/switch-mwv207-oss.sh" ]; then
+            cmp -s "$SELF_INSTALLED" "$WORKDIR/switch-mwv207-oss.sh" \
+                && echo "  自安装副本: 与仓库脚本一致" \
+                || echo "  自安装副本: [WARN] 与仓库脚本不同 (重新 install 可同步)"
+        else
+            echo "  自安装副本: $SELF_INSTALLED (无仓库脚本可比)"
+        fi
+    fi
     echo "  安装目录:   $([ -d "$INST_DIR" ] && echo "存在 ($(du -sh "$INST_DIR" 2>/dev/null | cut -f1))" || echo 未安装)"
     echo "  历史快照:   $(ls "$HIST_ROOT" 2>/dev/null | grep -v LATEST | tr '\n' ' ')"
     [ -L "$HIST_ROOT/LATEST" ] && echo "  LATEST:     $(readlink "$HIST_ROOT/LATEST")"
