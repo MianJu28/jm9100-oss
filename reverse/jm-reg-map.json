@@ -1,0 +1,1149 @@
+{
+ "0x24": {
+  "addr": 144,
+  "name": "CONTROL2",
+  "src": "immediate",
+  "funcs": [
+   "jmo_HARDWARE_InvokeThreadWalkerCL",
+   "jmo_HARDWARE_InvokeThreadWalkerCLEx"
+  ]
+ },
+ "0x26": {
+  "addr": 152,
+  "name": "HI_CHIP_PATCH_REV",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x55": {
+  "addr": 340,
+  "name": "AHB_POWER_CONTROL0",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x57": {
+  "addr": 348,
+  "name": "AHB_POWER_CONTROL2",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x58": {
+  "addr": 352,
+  "name": "AHB_POWER_CONTROL3",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x59": {
+  "addr": 356,
+  "name": "AHB_POWER_CONTROL4",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x5A": {
+  "addr": 360,
+  "name": "AHB_POWER_CONTROL5",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x5E": {
+  "addr": 376,
+  "name": "AHB_POWER_CONTROL9",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x61": {
+  "addr": 388,
+  "name": "MMU_CONFIGURATION",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x64": {
+  "addr": 400,
+  "name": "MMU_EXCEPTION",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x68": {
+  "addr": 416,
+  "name": "MMU_CONFIGURATION_EXT",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x6B": {
+  "addr": 428,
+  "name": "MMU_CONFIG",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x6C": {
+  "addr": 432,
+  "name": "MMU_DC_CONTROL",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0xE0": {
+  "addr": 896,
+  "name": "MMUAHB_EXCEPTION",
+  "src": "immediate",
+  "funcs": [
+   "jmo_HARDWARE_StartDELine"
+  ]
+ },
+ "0xE8": {
+  "addr": 928,
+  "name": "MMUAHB_SAFE_ADDRESS_EXT",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0xEC": {
+  "addr": 944,
+  "name": "AHB_CONTROL0",
+  "src": "immediate",
+  "funcs": [
+   "jmo_HARDWARE_InvokeThreadWalkerCL",
+   "jmo_HARDWARE_InvokeThreadWalkerCLEx"
+  ]
+ },
+ "0x121": {
+  "addr": 1156,
+  "name": "ENDIANNESS0",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x128": {
+  "addr": 1184,
+  "name": "FRAME_BUFFER_STRIDE/REQ_WEIGHT",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x12A": {
+  "addr": 1192,
+  "name": "FRAME_BUFFER_ORIGIN",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x130": {
+  "addr": 1216,
+  "name": "OVERLAY_STRIDE/RD_REQ_AGING_THRESH",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x132": {
+  "addr": 1224,
+  "name": "OVERLAY_TL",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x140": {
+  "addr": 1280,
+  "name": "HDISPLAY/WR_REQ_AGING_THRESH",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x142": {
+  "addr": 1288,
+  "name": "HSYNC",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x144": {
+  "addr": 1296,
+  "name": "HCOUNTER1",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x168": {
+  "addr": 1440,
+  "name": "DBI_WR_CHAR2",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x16E": {
+  "addr": 1464,
+  "name": "DC_CHIP_ID",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x180": {
+  "addr": 1536,
+  "name": "DC_STATUS",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x19C": {
+  "addr": 1648,
+  "name": "FEDE_TIMEOUT",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x19D": {
+  "addr": 1652,
+  "name": "FE_PRIMITIVE_RESTART",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x19E": {
+  "addr": 1656,
+  "name": "FE_INDEX_MIN",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x19F": {
+  "addr": 1660,
+  "name": "FE_INDEX_MAX",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x1A0": {
+  "addr": 1664,
+  "name": "FE_VERTEX_ADDRESS",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x1A8": {
+  "addr": 1696,
+  "name": "FE_VERTEX_STRIDE",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x1E0": {
+  "addr": 1920,
+  "name": "FE_GENERICS_W",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x1F1": {
+  "addr": 1988,
+  "name": "FE_ID",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x1F6": {
+  "addr": 2008,
+  "name": "FE_CONTROL",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x1F7": {
+  "addr": 2012,
+  "name": "FE_DESCRIPTOR_START_ADDRESS",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x1F8": {
+  "addr": 2016,
+  "name": "FE_DESCRIPTOR_END_ADDRESS",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x1F9": {
+  "addr": 2020,
+  "name": "FE_ASYNC_STATUS",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x1FA": {
+  "addr": 2024,
+  "name": "FE_FENCE_DATA",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x1FB": {
+  "addr": 2028,
+  "name": "FE_BASE_INSTANCE",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x1FE": {
+  "addr": 2040,
+  "name": "FE_INDEX_END_ADDRESS",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x1FF": {
+  "addr": 2044,
+  "name": "FA_CONTROL",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x200": {
+  "addr": 2048,
+  "name": "AHBDEC_CONTROL",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x201": {
+  "addr": 2052,
+  "name": "AHBDEC_CONTROL_EX",
+  "src": "immediate",
+  "funcs": [
+   "jmo_TPHARDWARE_SetSrcTPCCompression_V11"
+  ]
+ },
+ "0x203": {
+  "addr": 2060,
+  "name": "AHBDEC_INTR_ENBL",
+  "src": "immediate",
+  "funcs": [
+   "jmo_TPHARDWARE_SetSrcTPCCompression_V11"
+  ]
+ },
+ "0x208": {
+  "addr": 2080,
+  "name": "AHBDEC_INTR_ACKNOWLEDGE_EX2",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x20C": {
+  "addr": 2096,
+  "name": "AHBDEC_TOTAL_READS_IN",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x218": {
+  "addr": 2144,
+  "name": "AHBDEC_TOTAL_WRITE_BURSTS_OUT/SHADER_CONFIG",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x228": {
+  "addr": 2208,
+  "name": "VS_THROTTLE",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x22E": {
+  "addr": 2232,
+  "name": "SHADER_STATIC",
+  "src": "immediate",
+  "funcs": [
+   "_jmo_HARDWARE_Load2DNormalizationState_Previous"
+  ]
+ },
+ "0x230": {
+  "addr": 2240,
+  "name": "VS_INPUT",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x240": {
+  "addr": 2304,
+  "name": "AHBDEC_READ_EX_CONFIG/TW_CONFIG",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x241": {
+  "addr": 2308,
+  "name": "TW_INFO_X",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x242": {
+  "addr": 2312,
+  "name": "TW_INFO_Y",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x243": {
+  "addr": 2316,
+  "name": "TW_INFO_Z",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x244": {
+  "addr": 2320,
+  "name": "TW_WORK_GROUP_X",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x245": {
+  "addr": 2324,
+  "name": "TW_WORK_GROUP_Y",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x246": {
+  "addr": 2328,
+  "name": "TW_WORK_GROUP_Z",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x247": {
+  "addr": 2332,
+  "name": "TW_SHADER_INFO",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x250": {
+  "addr": 2368,
+  "name": "TW_WORK_GROUP_COUNT_X",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x251": {
+  "addr": 2372,
+  "name": "TW_WORK_GROUP_COUNT_Y",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x252": {
+  "addr": 2376,
+  "name": "TW_WORK_GROUP_COUNT_Z",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x253": {
+  "addr": 2380,
+  "name": "TW_WORKGROUP_SIZE_X",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x254": {
+  "addr": 2384,
+  "name": "TW_WORKGROUP_SIZE_Y",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x255": {
+  "addr": 2388,
+  "name": "TW_WORKGROUP_SIZE_Z",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x280": {
+  "addr": 2560,
+  "name": "AHBDEC_WRITE_EX_CONFIG",
+  "src": "immediate",
+  "funcs": [
+   "jmo_HARDWARE_SetMultiSource"
+  ]
+ },
+ "0x28E": {
+  "addr": 2616,
+  "name": "PA_LINE_ADJUST_SUB",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x28F": {
+  "addr": 2620,
+  "name": "PA_LINE_ADJUST_ADD",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x2A0": {
+  "addr": 2688,
+  "name": "AHBDEC_READ_BUFFER_BASE/PA_CLIP_W",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x2A1": {
+  "addr": 2692,
+  "name": "PA_MAX_POINT_SIZE",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x2A3": {
+  "addr": 2700,
+  "name": "PA_SMALL_W",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x2AA": {
+  "addr": 2728,
+  "name": "PA_CONTROL",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x300": {
+  "addr": 3072,
+  "name": "AHBDEC_READ_BUFFER_END_EX",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x308": {
+  "addr": 3104,
+  "name": "SE_CLIP_COMPARE_RIGHT",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x309": {
+  "addr": 3108,
+  "name": "SE_CLIP_COMPARE_BOTTOM",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x381": {
+  "addr": 3588,
+  "name": "MULTI_SAMPLE_JITTER",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x382": {
+  "addr": 3592,
+  "name": "RA_CONTROL",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x384": {
+  "addr": 3600,
+  "name": "MULTI_SAMPLE_COORDS",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x388": {
+  "addr": 3616,
+  "name": "RA_CONTROL_HZ",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x389": {
+  "addr": 3620,
+  "name": "HZ_BASE_ADDRESS1",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x38A": {
+  "addr": 3624,
+  "name": "HZ_TILE_STATUS1",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x38D": {
+  "addr": 3636,
+  "name": "RA_CONTROL_EX",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x390": {
+  "addr": 3648,
+  "name": "CENTROIDS",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x400": {
+  "addr": 4096,
+  "name": "AHBDEC_WRITE_FLUSH_CACHE_EX",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x40B": {
+  "addr": 4140,
+  "name": "PS_OUTPUT_CONTROL",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x40C": {
+  "addr": 4144,
+  "name": "PS_OUTPUT_MODE",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x414": {
+  "addr": 4176,
+  "name": "PS_UNIFORM_LOCK",
+  "src": "immediate",
+  "funcs": [
+   "_SetSourceTileStatus.constprop.0"
+  ]
+ },
+ "0x426": {
+  "addr": 4248,
+  "name": "PS_MAX",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x42B": {
+  "addr": 4268,
+  "name": "SH_ALLOC_UNIFORMS",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x432": {
+  "addr": 4296,
+  "name": "PS_OUTPUT_CONTROL1",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x433": {
+  "addr": 4300,
+  "name": "PS_OUTPUT_CONTROL2",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x440": {
+  "addr": 4352,
+  "name": "AHBDEC_READ_CACHE_BASE_EX/GS_CONTROL",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x450": {
+  "addr": 4416,
+  "name": "GS_THROTTLE",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x457": {
+  "addr": 4444,
+  "name": "GS_THROTTLE_EX",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x460": {
+  "addr": 4480,
+  "name": "AHBDEC_WRITE_CACHE_BASE",
+  "src": "immediate",
+  "funcs": [
+   "jmo_HARDWARE_Initialize3D"
+  ]
+ },
+ "0x480": {
+  "addr": 4608,
+  "name": "AHBDEC_WRITE_CACHE_BASE_EX",
+  "src": "immediate",
+  "funcs": [
+   "jmo_HARDWARE_SetMultiSource"
+  ]
+ },
+ "0x4B0": {
+  "addr": 4800,
+  "name": "AHBDEC_CR_DEBUG_TILE256_TYPE2",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x4B1": {
+  "addr": 4804,
+  "name": "AHBDEC_CR_DEBUG_TILE256_TYPE3",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x4B2": {
+  "addr": 4808,
+  "name": "AHBDEC_CR_DEBUG_TILE256_TYPE4",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x4B5": {
+  "addr": 4820,
+  "name": "AHBDEC_CR_DEBUG_TILE256_TYPE7",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x4B6": {
+  "addr": 4824,
+  "name": "AHBDEC_DEBUG_READ_GATE_DOMAIN_CLK_COUNTER",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x4B7": {
+  "addr": 4828,
+  "name": "AHBDEC_DEBUG_WRITE_GATE_DOMAIN_CLK_COUNTER",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x4B8": {
+  "addr": 4832,
+  "name": "AHBDEC_DEBUG_OTHER_GATE_DOMAIN_CLK_COUNTER",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x4C0": {
+  "addr": 4864,
+  "name": "AHBDEC_FAST_CLEAR_VALUE",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x4C5": {
+  "addr": 4884,
+  "name": "DE_PLANE2_STRIDE",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x4C6": {
+  "addr": 4888,
+  "name": "DE_PLANE3_ADDRESS",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x4C7": {
+  "addr": 4892,
+  "name": "DE_PLANE3_STRIDE",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x4D6": {
+  "addr": 4952,
+  "name": "DEYUV2_RGB_COEF_D1",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x515": {
+  "addr": 5204,
+  "name": "PE_HIERARCHICAL_CONTROL",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x516": {
+  "addr": 5208,
+  "name": "PE_HIERARCHICAL_ADDRESS",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x518": {
+  "addr": 5216,
+  "name": "PE_COLOR_BASE_ADDRESS",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x520": {
+  "addr": 5248,
+  "name": "PE_DEPTH_BASE_ADDRESS",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x52A": {
+  "addr": 5288,
+  "name": "PE_DITHER_LOW",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x52B": {
+  "addr": 5292,
+  "name": "PE_DITHER_HIGH",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x52C": {
+  "addr": 5296,
+  "name": "PE_BLEND_FACTOR_LOW",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x52D": {
+  "addr": 5300,
+  "name": "PE_BLEND_FACTOR_HIGH",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x52E": {
+  "addr": 5304,
+  "name": "PE_BACKFACE_STENCIL",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x52F": {
+  "addr": 5308,
+  "name": "PE_CONFIG_EX",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x530": {
+  "addr": 5312,
+  "name": "PE_ALPHA_CONFIG",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x531": {
+  "addr": 5316,
+  "name": "DEPTH_BUFFER_END_ADDRESS",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x579": {
+  "addr": 5604,
+  "name": "DE_HIST_SOBEL_MATRIX_GY1",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x57A": {
+  "addr": 5608,
+  "name": "DE_HIST_SOBEL_MATRIX_GY2",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x5A9": {
+  "addr": 5796,
+  "name": "MC_CACHE_HZ",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x5AA": {
+  "addr": 5800,
+  "name": "MC_CLEAR_VALUE_HZ",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x5AB": {
+  "addr": 5804,
+  "name": "MC_COUNTER_HZ",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x5AF": {
+  "addr": 5820,
+  "name": "MC_COLOR_CLEAR64",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x5E0": {
+  "addr": 6016,
+  "name": "MC_TEXTURE_CLEAR64",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x5E8": {
+  "addr": 6048,
+  "name": "MRT_MEMORY_CONFIG",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x680": {
+  "addr": 6656,
+  "name": "MRT_COLOR_CLEAR_VALUE",
+  "src": "immediate",
+  "funcs": [
+   "jmo_HARDWARE_SetColorSource",
+   "jmo_HARDWARE_SetMultiSource",
+   "jmo_HARDWARE_SetMultiSourceEx"
+  ]
+ },
+ "0x8B0": {
+  "addr": 8896,
+  "name": "TX_ASTC1",
+  "src": "immediate",
+  "funcs": [
+   "jmo_HARDWARE_InvokeThreadWalkerCL",
+   "jmo_HARDWARE_InvokeThreadWalkerCLEx"
+  ]
+ },
+ "0x900": {
+  "addr": 9216,
+  "name": "MCFE_STD_DESC_RING_BUF_START_ADDR",
+  "src": "immediate",
+  "funcs": [
+   "jmo_HARDWARE_EnableSampleMask"
+  ]
+ },
+ "0x940": {
+  "addr": 9472,
+  "name": "MCFE_STD_DESC_FIFO_DEPTH_EXP",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x980": {
+  "addr": 9728,
+  "name": "MCFE_STD_DESC_FIFO_WR_PTR",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x9C0": {
+  "addr": 9984,
+  "name": "MCFE_STD_DESC_FIFO_RD_PTR",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0xC10": {
+  "addr": 12352,
+  "name": "CE_DITHER_LOW",
+  "src": "immediate",
+  "funcs": [
+   "jmo_HARDWARE_SetDepthScaleBiasF",
+   "jmo_HARDWARE_SetDepthScaleBiasX"
+  ]
+ },
+ "0xC20": {
+  "addr": 12416,
+  "name": "CE_ATTRIBUTE_XDX",
+  "src": "immediate",
+  "funcs": [
+   "jmo_HARDWARE_FlushSHL1Cache",
+   "jmo_HARDWARE_LoadProgram"
+  ]
+ },
+ "0xCC0": {
+  "addr": 13056,
+  "name": "AHBX_RECEIVER_DBG1",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0xE06": {
+  "addr": 14360,
+  "name": "MULTI_SAMPLE_CONFIG",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0xE07": {
+  "addr": 14364,
+  "name": "VARYINGS",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0xE08": {
+  "addr": 14368,
+  "name": "VARYING_PACKING",
+  "src": "immediate",
+  "funcs": [
+   "jmo_HARDWARE_Initialize3D"
+  ]
+ },
+ "0xE0C": {
+  "addr": 14384,
+  "name": "OCCLUSION_DATA",
+  "src": "immediate",
+  "funcs": [
+   "jmo_HARDWARE_Initialize3D"
+  ]
+ },
+ "0xE22": {
+  "addr": 14472,
+  "name": "SEMANTIC_LOCATION",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0xE23": {
+  "addr": 14476,
+  "name": "DEPTH_SLICE",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0xE28": {
+  "addr": 14496,
+  "name": "COLOR_SLICE",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0xE80": {
+  "addr": 14848,
+  "name": "MULTI_CHIP_CONTROL",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0xE84": {
+  "addr": 14864,
+  "name": "MULTI_CHIP_SET_MAPPING_EX",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x2000": {
+  "addr": 32768,
+  "name": "PS_SHADER_CODE",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x3000": {
+  "addr": 49152,
+  "name": "VS_SHADER_CODE",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x4000": {
+  "addr": 65536,
+  "name": "TX_CONFIG",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x4100": {
+  "addr": 66560,
+  "name": "TX_CONTROL_YUV_EX",
+  "src": "immediate",
+  "funcs": [
+   "jmo_HARDWARE_SetMaskedSource"
+  ]
+ },
+ "0x4C00": {
+  "addr": 77824,
+  "name": "PC_TIME_STAMP",
+  "src": "immediate",
+  "funcs": [
+   "jmo_HARDWARE_Initialize3D"
+  ]
+ },
+ "0x4C40": {
+  "addr": 78080,
+  "name": "PC_DEPTH_RENDERED_PIXELS",
+  "src": "immediate",
+  "funcs": [
+   "jmo_HARDWARE_Initialize3D"
+  ]
+ },
+ "0x4C80": {
+  "addr": 78336,
+  "name": "PCZ_CACHE_BYTES_WRITTEN",
+  "src": "immediate",
+  "funcs": [
+   "jmo_TPHARDWARE_StartTPCCompression_V11"
+  ]
+ },
+ "0x4C90": {
+  "addr": 78400,
+  "name": "PC_TEXEL_REQUESTS",
+  "src": "immediate",
+  "funcs": [
+   "jmo_TPHARDWARE_SetDstTPCCompression_V11"
+  ]
+ },
+ "0x4C94": {
+  "addr": 78416,
+  "name": "PC_VERTEX_INSTRUCTIONS",
+  "src": "immediate",
+  "funcs": [
+   "jmo_TPHARDWARE_StartTPCCompression_V11"
+  ]
+ },
+ "0x4C98": {
+  "addr": 78432,
+  "name": "PCTX_CACHE_REQUESTS",
+  "src": "immediate",
+  "funcs": [
+   "jmo_TPHARDWARE_StartTPCCompression_V11"
+  ]
+ },
+ "0x4CA0": {
+  "addr": 78464,
+  "name": "PCTX_CACHE_MISSES",
+  "src": "immediate",
+  "funcs": [
+   "jmo_TPHARDWARE_StartTPCCompression_V11"
+  ]
+ },
+ "0x4CA8": {
+  "addr": 78496,
+  "name": "PCTX_BYTES_FETCHED",
+  "src": "immediate",
+  "funcs": [
+   "jmo_TPHARDWARE_SetSrcTPCCompression_V11"
+  ]
+ },
+ "0x5000": {
+  "addr": 81920,
+  "name": "BLT_SRC_ADDRESS",
+  "src": "immediate",
+  "funcs": [
+   "_StartVR"
+  ]
+ },
+ "0x5270": {
+  "addr": 84416,
+  "name": "PE_RENDER_TARGET_END_ADDRES_EX",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x5286": {
+  "addr": 84504,
+  "name": "TCS_THROTTLE",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x52C6": {
+  "addr": 84760,
+  "name": "TES_CONTROL",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x52C7": {
+  "addr": 84764,
+  "name": "TES_THROTTLE",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x52CD": {
+  "addr": 84788,
+  "name": "TES_THROTTLE_EX",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x532D": {
+  "addr": 85172,
+  "name": "TPC_SURFACE2_HDR_ADDR",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x5582": {
+  "addr": 87560,
+  "name": "VS_THROTTLE_EX",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x5600": {
+  "addr": 88064,
+  "name": "TX_GPIPE_TEXTURE_DESCRIPTOR_ADDR",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x5700": {
+  "addr": 89088,
+  "name": "TX_PIXEL_TEXTURE_DESCRIPTOR_ADDR",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x5800": {
+  "addr": 90112,
+  "name": "TX_GPIPE_SAMPLER_CTRL0",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x5B00": {
+  "addr": 93184,
+  "name": "TX_PIXEL_SAMPLER_CTRL0",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x5E80": {
+  "addr": 96768,
+  "name": "FE_GENERIC_W",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x6000": {
+  "addr": 98304,
+  "name": "DEC_READ_CONFIG",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x7000": {
+  "addr": 114688,
+  "name": "TFB_CONTROL",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x7002": {
+  "addr": 114696,
+  "name": "TFB_HEADER",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x7020": {
+  "addr": 114816,
+  "name": "TFB_BUFFER_SIZE",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x7030": {
+  "addr": 114880,
+  "name": "TFB_BUFFER_STRIDE",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0x8000": {
+  "addr": 131072,
+  "name": "SH_INSTRUCTIONS",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0xC000": {
+  "addr": 196608,
+  "name": "SH_UNIFORMS",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0xD000": {
+  "addr": 212992,
+  "name": "GPIPE_UNIFORMS",
+  "src": "literal-pool",
+  "funcs": []
+ },
+ "0xD800": {
+  "addr": 221184,
+  "name": "PIXEL_UNIFORMS",
+  "src": "literal-pool",
+  "funcs": []
+ }
+}

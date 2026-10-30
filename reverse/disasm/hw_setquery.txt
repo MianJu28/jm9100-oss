@@ -1,0 +1,607 @@
+
+/tmp/v180/usr/lib/aarch64-linux-gnu/libdrm_jmgpu.so.1.0.0：     文件格式 elf64-littleaarch64
+
+
+Disassembly of section .text:
+
+00000000000dbc00 <jmo_HARDWARE_SetQuery>:
+   dbc00:	a9b87bfd 	stp	x29, x30, [sp, #-128]!
+   dbc04:	7100045f 	cmp	w2, #0x1
+   dbc08:	910003fd 	mov	x29, sp
+   dbc0c:	a90153f3 	stp	x19, x20, [sp, #16]
+   dbc10:	2a0203f4 	mov	w20, w2
+   dbc14:	aa0003f3 	mov	x19, x0
+   dbc18:	a9025bf5 	stp	x21, x22, [sp, #32]
+   dbc1c:	2a0303f5 	mov	w21, w3
+   dbc20:	52800016 	mov	w22, #0x0                   	// #0
+   dbc24:	a90363f7 	stp	x23, x24, [sp, #48]
+   dbc28:	aa0403f8 	mov	x24, x4
+   dbc2c:	2a0503f7 	mov	w23, w5
+   dbc30:	a9046bf9 	stp	x25, x26, [sp, #64]
+   dbc34:	2a0103f9 	mov	w25, w1
+   dbc38:	1a9f07fa 	cset	w26, ne	// ne = any
+   dbc3c:	b4000920 	cbz	x0, dbd60 <jmo_HARDWARE_SetQuery+0x160>
+   dbc40:	2a170280 	orr	w0, w20, w23
+   dbc44:	71000c1f 	cmp	w0, #0x3
+   dbc48:	540031e8 	b.hi	dc284 <jmo_HARDWARE_SetQuery+0x684>  // b.pmore
+   dbc4c:	340002f7 	cbz	w23, dbca8 <jmo_HARDWARE_SetQuery+0xa8>
+   dbc50:	51000680 	sub	w0, w20, #0x1
+   dbc54:	7100041f 	cmp	w0, #0x1
+   dbc58:	54003168 	b.hi	dc284 <jmo_HARDWARE_SetQuery+0x684>  // b.pmore
+   dbc5c:	b944ae60 	ldr	w0, [x19, #1196]
+   dbc60:	34000160 	cbz	w0, dbc8c <jmo_HARDWARE_SetQuery+0x8c>
+   dbc64:	71000abf 	cmp	w21, #0x2
+   dbc68:	54001700 	b.eq	dbf48 <jmo_HARDWARE_SetQuery+0x348>  // b.none
+   dbc6c:	54001268 	b.hi	dbeb8 <jmo_HARDWARE_SetQuery+0x2b8>  // b.pmore
+   dbc70:	34000dd5 	cbz	w21, dbe28 <jmo_HARDWARE_SetQuery+0x228>
+   dbc74:	f95b5264 	ldr	x4, [x19, #13984]
+   dbc78:	d37e7e82 	ubfiz	x2, x20, #2, #32
+   dbc7c:	8b374042 	add	x2, x2, w23, uxtw
+   dbc80:	b8627880 	ldr	w0, [x4, x2, lsl #2]
+   dbc84:	7100081f 	cmp	w0, #0x2
+   dbc88:	540044c0 	b.eq	dc520 <jmo_HARDWARE_SetQuery+0x920>  // b.none
+   dbc8c:	a94153f3 	ldp	x19, x20, [sp, #16]
+   dbc90:	2a1603e0 	mov	w0, w22
+   dbc94:	a9425bf5 	ldp	x21, x22, [sp, #32]
+   dbc98:	a94363f7 	ldp	x23, x24, [sp, #48]
+   dbc9c:	a9446bf9 	ldp	x25, x26, [sp, #64]
+   dbca0:	a8c87bfd 	ldp	x29, x30, [sp], #128
+   dbca4:	d65f03c0 	ret
+   dbca8:	350002d4 	cbnz	w20, dbd00 <jmo_HARDWARE_SetQuery+0x100>
+   dbcac:	b9424e60 	ldr	w0, [x19, #588]
+   dbcb0:	34fffee0 	cbz	w0, dbc8c <jmo_HARDWARE_SetQuery+0x8c>
+   dbcb4:	71000abf 	cmp	w21, #0x2
+   dbcb8:	540024c0 	b.eq	dc150 <jmo_HARDWARE_SetQuery+0x550>  // b.none
+   dbcbc:	54000748 	b.hi	dbda4 <jmo_HARDWARE_SetQuery+0x1a4>  // b.pmore
+   dbcc0:	34001955 	cbz	w21, dbfe8 <jmo_HARDWARE_SetQuery+0x3e8>
+   dbcc4:	f95b5260 	ldr	x0, [x19, #13984]
+   dbcc8:	b9400000 	ldr	w0, [x0]
+   dbccc:	7100081f 	cmp	w0, #0x2
+   dbcd0:	54fffde1 	b.ne	dbc8c <jmo_HARDWARE_SetQuery+0x8c>  // b.any
+   dbcd4:	a9425bf5 	ldp	x21, x22, [sp, #32]
+   dbcd8:	aa1803e3 	mov	x3, x24
+   dbcdc:	a94363f7 	ldp	x23, x24, [sp, #48]
+   dbce0:	aa1303e0 	mov	x0, x19
+   dbce4:	a94153f3 	ldp	x19, x20, [sp, #16]
+   dbce8:	528bcec2 	mov	w2, #0x5e76                	// #24182
+   dbcec:	a9446bf9 	ldp	x25, x26, [sp, #64]
+   dbcf0:	72a03be2 	movk	w2, #0x1df, lsl #16
+   dbcf4:	a8c87bfd 	ldp	x29, x30, [sp], #128
+   dbcf8:	52870601 	mov	w1, #0x3830                	// #14384
+   dbcfc:	17fd3af1 	b	2a8c0 <jmo_HARDWARE_LoadCtrlStateNEW@plt>
+   dbd00:	71000e9f 	cmp	w20, #0x3
+   dbd04:	54fffac1 	b.ne	dbc5c <jmo_HARDWARE_SetQuery+0x5c>  // b.any
+   dbd08:	71000abf 	cmp	w21, #0x2
+   dbd0c:	54fffc00 	b.eq	dbc8c <jmo_HARDWARE_SetQuery+0x8c>  // b.none
+   dbd10:	a90573fb 	stp	x27, x28, [sp, #80]
+   dbd14:	54000148 	b.hi	dbd3c <jmo_HARDWARE_SetQuery+0x13c>  // b.pmore
+   dbd18:	340014b5 	cbz	w21, dbfac <jmo_HARDWARE_SetQuery+0x3ac>
+   dbd1c:	a94573fb 	ldp	x27, x28, [sp, #80]
+   dbd20:	2a1603e0 	mov	w0, w22
+   dbd24:	a94153f3 	ldp	x19, x20, [sp, #16]
+   dbd28:	a9425bf5 	ldp	x21, x22, [sp, #32]
+   dbd2c:	a94363f7 	ldp	x23, x24, [sp, #48]
+   dbd30:	a9446bf9 	ldp	x25, x26, [sp, #64]
+   dbd34:	a8c87bfd 	ldp	x29, x30, [sp], #128
+   dbd38:	d65f03c0 	ret
+   dbd3c:	d280001c 	mov	x28, #0x0                   	// #0
+   dbd40:	d280007b 	mov	x27, #0x3                   	// #3
+   dbd44:	71000ebf 	cmp	w21, #0x3
+   dbd48:	540005a1 	b.ne	dbdfc <jmo_HARDWARE_SetQuery+0x1fc>  // b.any
+   dbd4c:	f95b5260 	ldr	x0, [x19, #13984]
+   dbd50:	8b1b0b9b 	add	x27, x28, x27, lsl #2
+   dbd54:	b83b781f 	str	wzr, [x0, x27, lsl #2]
+   dbd58:	a94573fb 	ldp	x27, x28, [sp, #80]
+   dbd5c:	17ffffcc 	b	dbc8c <jmo_HARDWARE_SetQuery+0x8c>
+   dbd60:	9101e3e0 	add	x0, sp, #0x78
+   dbd64:	97fd346b 	bl	28f10 <jmo_OS_GetTLS@plt>
+   dbd68:	2a0003f6 	mov	w22, w0
+   dbd6c:	37fff900 	tbnz	w0, #31, dbc8c <jmo_HARDWARE_SetQuery+0x8c>
+   dbd70:	f9403fe3 	ldr	x3, [sp, #120]
+   dbd74:	b9400060 	ldr	w0, [x3]
+   dbd78:	71000c1f 	cmp	w0, #0x3
+   dbd7c:	54002880 	b.eq	dc28c <jmo_HARDWARE_SetQuery+0x68c>  // b.none
+   dbd80:	7100141f 	cmp	w0, #0x5
+   dbd84:	54002800 	b.eq	dc284 <jmo_HARDWARE_SetQuery+0x684>  // b.none
+   dbd88:	f9400c60 	ldr	x0, [x3, #24]
+   dbd8c:	b40028e0 	cbz	x0, dc2a8 <jmo_HARDWARE_SetQuery+0x6a8>
+   dbd90:	f9400873 	ldr	x19, [x3, #16]
+   dbd94:	b5fff573 	cbnz	x19, dbc40 <jmo_HARDWARE_SetQuery+0x40>
+   dbd98:	f9400c73 	ldr	x19, [x3, #24]
+   dbd9c:	f9000873 	str	x19, [x3, #16]
+   dbda0:	17ffffa8 	b	dbc40 <jmo_HARDWARE_SetQuery+0x40>
+   dbda4:	71000ebf 	cmp	w21, #0x3
+   dbda8:	540002c1 	b.ne	dbe00 <jmo_HARDWARE_SetQuery+0x200>  // b.any
+   dbdac:	aa1303e0 	mov	x0, x19
+   dbdb0:	97fd328c 	bl	287e0 <jmo_HARDWARE_InvalidateCache@plt>
+   dbdb4:	2a0003f6 	mov	w22, w0
+   dbdb8:	37fff6a0 	tbnz	w0, #31, dbc8c <jmo_HARDWARE_SetQuery+0x8c>
+   dbdbc:	f95b4660 	ldr	x0, [x19, #13960]
+   dbdc0:	b945c000 	ldr	w0, [x0, #1472]
+   dbdc4:	37602a80 	tbnz	w0, #12, dc314 <jmo_HARDWARE_SetQuery+0x714>
+   dbdc8:	f95b5260 	ldr	x0, [x19, #13984]
+   dbdcc:	b9400000 	ldr	w0, [x0]
+   dbdd0:	7100081f 	cmp	w0, #0x2
+   dbdd4:	54001ac0 	b.eq	dc12c <jmo_HARDWARE_SetQuery+0x52c>  // b.none
+   dbdd8:	a90573fb 	stp	x27, x28, [sp, #80]
+   dbddc:	52800020 	mov	w0, #0x1                   	// #1
+   dbde0:	f95b6a61 	ldr	x1, [x19, #14032]
+   dbde4:	d280001c 	mov	x28, #0x0                   	// #0
+   dbde8:	d280001b 	mov	x27, #0x0                   	// #0
+   dbdec:	b9000820 	str	w0, [x1, #8]
+   dbdf0:	f95b6a61 	ldr	x1, [x19, #14032]
+   dbdf4:	b9001420 	str	w0, [x1, #20]
+   dbdf8:	17ffffd5 	b	dbd4c <jmo_HARDWARE_SetQuery+0x14c>
+   dbdfc:	a94573fb 	ldp	x27, x28, [sp, #80]
+   dbe00:	d00001c0 	adrp	x0, 115000 <_fini+0x7b04>
+   dbe04:	910d2000 	add	x0, x0, #0x348
+   dbe08:	97fd2cfa 	bl	271f0 <jmo_OS_Print@plt>
+   dbe0c:	a94153f3 	ldp	x19, x20, [sp, #16]
+   dbe10:	2a1603e0 	mov	w0, w22
+   dbe14:	a9425bf5 	ldp	x21, x22, [sp, #32]
+   dbe18:	a94363f7 	ldp	x23, x24, [sp, #48]
+   dbe1c:	a9446bf9 	ldp	x25, x26, [sp, #64]
+   dbe20:	a8c87bfd 	ldp	x29, x30, [sp], #128
+   dbe24:	d65f03c0 	ret
+   dbe28:	a90573fb 	stp	x27, x28, [sp, #80]
+   dbe2c:	2a1703fc 	mov	w28, w23
+   dbe30:	8b344b95 	add	x21, x28, w20, uxtw #2
+   dbe34:	f95b5260 	ldr	x0, [x19, #13984]
+   dbe38:	910042a2 	add	x2, x21, #0x10
+   dbe3c:	910082a1 	add	x1, x21, #0x20
+   dbe40:	2a1403fb 	mov	w27, w20
+   dbe44:	b8227819 	str	w25, [x0, x2, lsl #2]
+   dbe48:	f95b5260 	ldr	x0, [x19, #13984]
+   dbe4c:	b821781f 	str	wzr, [x0, x1, lsl #2]
+   dbe50:	34002434 	cbz	w20, dc2d4 <jmo_HARDWARE_SetQuery+0x6d4>
+   dbe54:	f95b5264 	ldr	x4, [x19, #13984]
+   dbe58:	52980281 	mov	w1, #0xc014                	// #49172
+   dbe5c:	aa1803e3 	mov	x3, x24
+   dbe60:	aa1303e0 	mov	x0, x19
+   dbe64:	72a00021 	movk	w1, #0x1, lsl #16
+   dbe68:	b8627882 	ldr	w2, [x4, x2, lsl #2]
+   dbe6c:	97fd31ad 	bl	28520 <jmo_HARDWARE_LoadState32NEW@plt>
+   dbe70:	2a0003f6 	mov	w22, w0
+   dbe74:	37fff540 	tbnz	w0, #31, dbd1c <jmo_HARDWARE_SetQuery+0x11c>
+   dbe78:	53185f42 	lsl	w2, w26, #8
+   dbe7c:	52980201 	mov	w1, #0xc010                	// #49168
+   dbe80:	2a171042 	orr	w2, w2, w23, lsl #4
+   dbe84:	aa1803e3 	mov	x3, x24
+   dbe88:	32000042 	orr	w2, w2, #0x1
+   dbe8c:	aa1303e0 	mov	x0, x19
+   dbe90:	72a00021 	movk	w1, #0x1, lsl #16
+   dbe94:	97fd391b 	bl	2a300 <jmo_HARDWARE_LoadCtrlStateNEW_GPU0@plt>
+   dbe98:	2a0003f6 	mov	w22, w0
+   dbe9c:	37fff400 	tbnz	w0, #31, dbd1c <jmo_HARDWARE_SetQuery+0x11c>
+   dbea0:	f95b5260 	ldr	x0, [x19, #13984]
+   dbea4:	8b150815 	add	x21, x0, x21, lsl #2
+   dbea8:	b94082a0 	ldr	w0, [x21, #128]
+   dbeac:	11000400 	add	w0, w0, #0x1
+   dbeb0:	b90082a0 	str	w0, [x21, #128]
+   dbeb4:	14000047 	b	dbfd0 <jmo_HARDWARE_SetQuery+0x3d0>
+   dbeb8:	71000ebf 	cmp	w21, #0x3
+   dbebc:	54fffa21 	b.ne	dbe00 <jmo_HARDWARE_SetQuery+0x200>  // b.any
+   dbec0:	a90573fb 	stp	x27, x28, [sp, #80]
+   dbec4:	2a1703fc 	mov	w28, w23
+   dbec8:	8b344b82 	add	x2, x28, w20, uxtw #2
+   dbecc:	f95b5264 	ldr	x4, [x19, #13984]
+   dbed0:	91004042 	add	x2, x2, #0x10
+   dbed4:	52980281 	mov	w1, #0xc014                	// #49172
+   dbed8:	aa1803e3 	mov	x3, x24
+   dbedc:	aa1303e0 	mov	x0, x19
+   dbee0:	72a00021 	movk	w1, #0x1, lsl #16
+   dbee4:	b8627882 	ldr	w2, [x4, x2, lsl #2]
+   dbee8:	2a1403fb 	mov	w27, w20
+   dbeec:	97fd318d 	bl	28520 <jmo_HARDWARE_LoadState32NEW@plt>
+   dbef0:	2a0003f6 	mov	w22, w0
+   dbef4:	37fff140 	tbnz	w0, #31, dbd1c <jmo_HARDWARE_SetQuery+0x11c>
+   dbef8:	53185f42 	lsl	w2, w26, #8
+   dbefc:	52980201 	mov	w1, #0xc010                	// #49168
+   dbf00:	2a171042 	orr	w2, w2, w23, lsl #4
+   dbf04:	aa1803e3 	mov	x3, x24
+   dbf08:	321f0042 	orr	w2, w2, #0x2
+   dbf0c:	aa1303e0 	mov	x0, x19
+   dbf10:	72a00021 	movk	w1, #0x1, lsl #16
+   dbf14:	97fd38fb 	bl	2a300 <jmo_HARDWARE_LoadCtrlStateNEW_GPU0@plt>
+   dbf18:	2a0003f6 	mov	w22, w0
+   dbf1c:	37fff000 	tbnz	w0, #31, dbd1c <jmo_HARDWARE_SetQuery+0x11c>
+   dbf20:	52980181 	mov	w1, #0xc00c                	// #49164
+   dbf24:	aa1803e3 	mov	x3, x24
+   dbf28:	aa1303e0 	mov	x0, x19
+   dbf2c:	72a00021 	movk	w1, #0x1, lsl #16
+   dbf30:	52800022 	mov	w2, #0x1                   	// #1
+   dbf34:	97fd38f3 	bl	2a300 <jmo_HARDWARE_LoadCtrlStateNEW_GPU0@plt>
+   dbf38:	2a0003f6 	mov	w22, w0
+   dbf3c:	36fff080 	tbz	w0, #31, dbd4c <jmo_HARDWARE_SetQuery+0x14c>
+   dbf40:	a94573fb 	ldp	x27, x28, [sp, #80]
+   dbf44:	17ffff77 	b	dbd20 <jmo_HARDWARE_SetQuery+0x120>
+   dbf48:	d37e7e82 	ubfiz	x2, x20, #2, #32
+   dbf4c:	52980281 	mov	w1, #0xc014                	// #49172
+   dbf50:	f95b5264 	ldr	x4, [x19, #13984]
+   dbf54:	8b374042 	add	x2, x2, w23, uxtw
+   dbf58:	91004042 	add	x2, x2, #0x10
+   dbf5c:	aa1803e3 	mov	x3, x24
+   dbf60:	aa1303e0 	mov	x0, x19
+   dbf64:	72a00021 	movk	w1, #0x1, lsl #16
+   dbf68:	b8627882 	ldr	w2, [x4, x2, lsl #2]
+   dbf6c:	97fd316d 	bl	28520 <jmo_HARDWARE_LoadState32NEW@plt>
+   dbf70:	2a0003f6 	mov	w22, w0
+   dbf74:	37ffe8c0 	tbnz	w0, #31, dbc8c <jmo_HARDWARE_SetQuery+0x8c>
+   dbf78:	53185f42 	lsl	w2, w26, #8
+   dbf7c:	aa1803e3 	mov	x3, x24
+   dbf80:	2a171042 	orr	w2, w2, w23, lsl #4
+   dbf84:	52980201 	mov	w1, #0xc010                	// #49168
+   dbf88:	321e0042 	orr	w2, w2, #0x4
+   dbf8c:	a9425bf5 	ldp	x21, x22, [sp, #32]
+   dbf90:	aa1303e0 	mov	x0, x19
+   dbf94:	a94153f3 	ldp	x19, x20, [sp, #16]
+   dbf98:	72a00021 	movk	w1, #0x1, lsl #16
+   dbf9c:	a94363f7 	ldp	x23, x24, [sp, #48]
+   dbfa0:	a9446bf9 	ldp	x25, x26, [sp, #64]
+   dbfa4:	a8c87bfd 	ldp	x29, x30, [sp], #128
+   dbfa8:	17fd38d6 	b	2a300 <jmo_HARDWARE_LoadCtrlStateNEW_GPU0@plt>
+   dbfac:	f95b5260 	ldr	x0, [x19, #13984]
+   dbfb0:	52800021 	mov	w1, #0x1                   	// #1
+   dbfb4:	d280001c 	mov	x28, #0x0                   	// #0
+   dbfb8:	d280007b 	mov	x27, #0x3                   	// #3
+   dbfbc:	b9007019 	str	w25, [x0, #112]
+   dbfc0:	f95b5260 	ldr	x0, [x19, #13984]
+   dbfc4:	b900b01f 	str	wzr, [x0, #176]
+   dbfc8:	f95b5260 	ldr	x0, [x19, #13984]
+   dbfcc:	b900b001 	str	w1, [x0, #176]
+   dbfd0:	f95b5260 	ldr	x0, [x19, #13984]
+   dbfd4:	8b1b0b9b 	add	x27, x28, x27, lsl #2
+   dbfd8:	52800041 	mov	w1, #0x2                   	// #2
+   dbfdc:	b83b7801 	str	w1, [x0, x27, lsl #2]
+   dbfe0:	a94573fb 	ldp	x27, x28, [sp, #80]
+   dbfe4:	17ffff2a 	b	dbc8c <jmo_HARDWARE_SetQuery+0x8c>
+   dbfe8:	f95b5260 	ldr	x0, [x19, #13984]
+   dbfec:	b9004019 	str	w25, [x0, #64]
+   dbff0:	f95b5260 	ldr	x0, [x19, #13984]
+   dbff4:	b900801f 	str	wzr, [x0, #128]
+   dbff8:	9101b3e4 	add	x4, sp, #0x6c
+   dbffc:	aa1303e0 	mov	x0, x19
+   dc000:	d2800003 	mov	x3, #0x0                   	// #0
+   dc004:	d2800002 	mov	x2, #0x0                   	// #0
+   dc008:	d2800001 	mov	x1, #0x0                   	// #0
+   dc00c:	b9006fff 	str	wzr, [sp, #108]
+   dc010:	97fd3540 	bl	29510 <jmo_HARDWARE_QueryCluster@plt>
+   dc014:	2a0003f6 	mov	w22, w0
+   dc018:	37ffe3a0 	tbnz	w0, #31, dbc8c <jmo_HARDWARE_SetQuery+0x8c>
+   dc01c:	b943e260 	ldr	w0, [x19, #992]
+   dc020:	34000160 	cbz	w0, dc04c <jmo_HARDWARE_SetQuery+0x44c>
+   dc024:	b9761262 	ldr	w2, [x19, #13840]
+   dc028:	aa1803e3 	mov	x3, x24
+   dc02c:	aa1303e0 	mov	x0, x19
+   dc030:	52870c01 	mov	w1, #0x3860                	// #14432
+   dc034:	7100005f 	cmp	w2, #0x0
+   dc038:	1a9f17e2 	cset	w2, eq	// eq = none
+   dc03c:	11001842 	add	w2, w2, #0x6
+   dc040:	97fd3138 	bl	28520 <jmo_HARDWARE_LoadState32NEW@plt>
+   dc044:	2a0003f6 	mov	w22, w0
+   dc048:	37ffe220 	tbnz	w0, #31, dbc8c <jmo_HARDWARE_SetQuery+0x8c>
+   dc04c:	a90573fb 	stp	x27, x28, [sp, #80]
+   dc050:	f9404660 	ldr	x0, [x19, #136]
+   dc054:	b9407000 	ldr	w0, [x0, #112]
+   dc058:	7100041f 	cmp	w0, #0x1
+   dc05c:	54001bc9 	b.ls	dc3d4 <jmo_HARDWARE_SetQuery+0x7d4>  // b.plast
+   dc060:	f9003bff 	str	xzr, [sp, #112]
+   dc064:	b4001ef8 	cbz	x24, dc440 <jmo_HARDWARE_SetQuery+0x840>
+   dc068:	f9400300 	ldr	x0, [x24]
+   dc06c:	f9003fe0 	str	x0, [sp, #120]
+   dc070:	9101e3f4 	add	x20, sp, #0x78
+   dc074:	52800015 	mov	w21, #0x0                   	// #0
+   dc078:	1400000e 	b	dc0b0 <jmo_HARDWARE_SetQuery+0x4b0>
+   dc07c:	b9406fe4 	ldr	w4, [sp, #108]
+   dc080:	52800083 	mov	w3, #0x4                   	// #4
+   dc084:	52800022 	mov	w2, #0x1                   	// #1
+   dc088:	1ac42063 	lsl	w3, w3, w4
+   dc08c:	0b030339 	add	w25, w25, w3
+   dc090:	1ac42042 	lsl	w2, w2, w4
+   dc094:	0b010041 	add	w1, w2, w1
+   dc098:	b9008001 	str	w1, [x0, #128]
+   dc09c:	110006b5 	add	w21, w21, #0x1
+   dc0a0:	f9404660 	ldr	x0, [x19, #136]
+   dc0a4:	b9407000 	ldr	w0, [x0, #112]
+   dc0a8:	6b15001f 	cmp	w0, w21
+   dc0ac:	540014c9 	b.ls	dc344 <jmo_HARDWARE_SetQuery+0x744>  // b.plast
+   dc0b0:	8b354a61 	add	x1, x19, w21, uxtw #2
+   dc0b4:	52800020 	mov	w0, #0x1                   	// #1
+   dc0b8:	f9403fe2 	ldr	x2, [sp, #120]
+   dc0bc:	52ad0003 	mov	w3, #0x68000000            	// #1744830464
+   dc0c0:	b97a0421 	ldr	w1, [x1, #14852]
+   dc0c4:	91001044 	add	x4, x2, #0x4
+   dc0c8:	9139b021 	add	x1, x1, #0xe6c
+   dc0cc:	b8617a61 	ldr	w1, [x19, x1, lsl #2]
+   dc0d0:	f9003fe4 	str	x4, [sp, #120]
+   dc0d4:	1ac12000 	lsl	w0, w0, w1
+   dc0d8:	2a030000 	orr	w0, w0, w3
+   dc0dc:	b9000040 	str	w0, [x2]
+   dc0e0:	f9403fe0 	ldr	x0, [sp, #120]
+   dc0e4:	91001000 	add	x0, x0, #0x4
+   dc0e8:	f9003fe0 	str	x0, [sp, #120]
+   dc0ec:	aa1403e3 	mov	x3, x20
+   dc0f0:	2a1903e2 	mov	w2, w25
+   dc0f4:	aa1303e0 	mov	x0, x19
+   dc0f8:	52870481 	mov	w1, #0x3824                	// #14372
+   dc0fc:	97fd39f1 	bl	2a8c0 <jmo_HARDWARE_LoadCtrlStateNEW@plt>
+   dc100:	2a0003f6 	mov	w22, w0
+   dc104:	37ffe0c0 	tbnz	w0, #31, dbd1c <jmo_HARDWARE_SetQuery+0x11c>
+   dc108:	f95b5260 	ldr	x0, [x19, #13984]
+   dc10c:	2a1703fc 	mov	w28, w23
+   dc110:	b9465a62 	ldr	w2, [x19, #1624]
+   dc114:	8b374800 	add	x0, x0, w23, uxtw #2
+   dc118:	b9408001 	ldr	w1, [x0, #128]
+   dc11c:	35fffb02 	cbnz	w2, dc07c <jmo_HARDWARE_SetQuery+0x47c>
+   dc120:	11001339 	add	w25, w25, #0x4
+   dc124:	11000421 	add	w1, w1, #0x1
+   dc128:	17ffffdc 	b	dc098 <jmo_HARDWARE_SetQuery+0x498>
+   dc12c:	528bcec2 	mov	w2, #0x5e76                	// #24182
+   dc130:	aa1803e3 	mov	x3, x24
+   dc134:	aa1303e0 	mov	x0, x19
+   dc138:	72a03be2 	movk	w2, #0x1df, lsl #16
+   dc13c:	52870601 	mov	w1, #0x3830                	// #14384
+   dc140:	97fd39e0 	bl	2a8c0 <jmo_HARDWARE_LoadCtrlStateNEW@plt>
+   dc144:	2a0003f6 	mov	w22, w0
+   dc148:	36ffe480 	tbz	w0, #31, dbdd8 <jmo_HARDWARE_SetQuery+0x1d8>
+   dc14c:	17fffed0 	b	dbc8c <jmo_HARDWARE_SetQuery+0x8c>
+   dc150:	f9404665 	ldr	x5, [x19, #136]
+   dc154:	9101c3e4 	add	x4, sp, #0x70
+   dc158:	aa1303e0 	mov	x0, x19
+   dc15c:	d2800003 	mov	x3, #0x0                   	// #0
+   dc160:	d2800002 	mov	x2, #0x0                   	// #0
+   dc164:	d2800001 	mov	x1, #0x0                   	// #0
+   dc168:	b94070b5 	ldr	w21, [x5, #112]
+   dc16c:	b90073ff 	str	wzr, [sp, #112]
+   dc170:	97fd34e8 	bl	29510 <jmo_HARDWARE_QueryCluster@plt>
+   dc174:	2a0003f6 	mov	w22, w0
+   dc178:	37ffd8a0 	tbnz	w0, #31, dbc8c <jmo_HARDWARE_SetQuery+0x8c>
+   dc17c:	a90573fb 	stp	x27, x28, [sp, #80]
+   dc180:	531a66a1 	lsl	w1, w21, #6
+   dc184:	b94073e2 	ldr	w2, [sp, #112]
+   dc188:	f95b5260 	ldr	x0, [x19, #13984]
+   dc18c:	1ac22023 	lsl	w3, w1, w2
+   dc190:	b940801c 	ldr	w28, [x0, #128]
+   dc194:	6b03039f 	cmp	w28, w3
+   dc198:	540000cb 	b.lt	dc1b0 <jmo_HARDWARE_SetQuery+0x5b0>  // b.tstop
+   dc19c:	4b150021 	sub	w1, w1, w21
+   dc1a0:	1ac22021 	lsl	w1, w1, w2
+   dc1a4:	b9008001 	str	w1, [x0, #128]
+   dc1a8:	f95b5260 	ldr	x0, [x19, #13984]
+   dc1ac:	b940801c 	ldr	w28, [x0, #128]
+   dc1b0:	b9404000 	ldr	w0, [x0, #64]
+   dc1b4:	0b1c081c 	add	w28, w0, w28, lsl #2
+   dc1b8:	710006bf 	cmp	w21, #0x1
+   dc1bc:	54000e69 	b.ls	dc388 <jmo_HARDWARE_SetQuery+0x788>  // b.plast
+   dc1c0:	d2874080 	mov	x0, #0x3a04                	// #14852
+   dc1c4:	8b00027b 	add	x27, x19, x0
+   dc1c8:	f9400300 	ldr	x0, [x24]
+   dc1cc:	9101e3f4 	add	x20, sp, #0x78
+   dc1d0:	8b354b75 	add	x21, x27, w21, uxtw #2
+   dc1d4:	52800037 	mov	w23, #0x1                   	// #1
+   dc1d8:	52ad0019 	mov	w25, #0x68000000            	// #1744830464
+   dc1dc:	5280009a 	mov	w26, #0x4                   	// #4
+   dc1e0:	f9003fe0 	str	x0, [sp, #120]
+   dc1e4:	1400000a 	b	dc20c <jmo_HARDWARE_SetQuery+0x60c>
+   dc1e8:	b94073e2 	ldr	w2, [sp, #112]
+   dc1ec:	1ac22343 	lsl	w3, w26, w2
+   dc1f0:	0b03039c 	add	w28, w28, w3
+   dc1f4:	1ac222e2 	lsl	w2, w23, w2
+   dc1f8:	0b000040 	add	w0, w2, w0
+   dc1fc:	9100137b 	add	x27, x27, #0x4
+   dc200:	b9008020 	str	w0, [x1, #128]
+   dc204:	eb1b02bf 	cmp	x21, x27
+   dc208:	540006a0 	b.eq	dc2dc <jmo_HARDWARE_SetQuery+0x6dc>  // b.none
+   dc20c:	f9404664 	ldr	x4, [x19, #136]
+   dc210:	2a1c03e2 	mov	w2, w28
+   dc214:	aa1403e3 	mov	x3, x20
+   dc218:	aa1303e0 	mov	x0, x19
+   dc21c:	52870481 	mov	w1, #0x3824                	// #14372
+   dc220:	b9407084 	ldr	w4, [x4, #112]
+   dc224:	7100049f 	cmp	w4, #0x1
+   dc228:	540001a9 	b.ls	dc25c <jmo_HARDWARE_SetQuery+0x65c>  // b.plast
+   dc22c:	b9400364 	ldr	w4, [x27]
+   dc230:	f9403fe5 	ldr	x5, [sp, #120]
+   dc234:	9139b084 	add	x4, x4, #0xe6c
+   dc238:	910010a6 	add	x6, x5, #0x4
+   dc23c:	b8647a64 	ldr	w4, [x19, x4, lsl #2]
+   dc240:	f9003fe6 	str	x6, [sp, #120]
+   dc244:	1ac422e4 	lsl	w4, w23, w4
+   dc248:	2a190084 	orr	w4, w4, w25
+   dc24c:	b90000a4 	str	w4, [x5]
+   dc250:	f9403fe4 	ldr	x4, [sp, #120]
+   dc254:	91001084 	add	x4, x4, #0x4
+   dc258:	f9003fe4 	str	x4, [sp, #120]
+   dc25c:	97fd3999 	bl	2a8c0 <jmo_HARDWARE_LoadCtrlStateNEW@plt>
+   dc260:	2a0003f6 	mov	w22, w0
+   dc264:	37ffd5c0 	tbnz	w0, #31, dbd1c <jmo_HARDWARE_SetQuery+0x11c>
+   dc268:	f95b5261 	ldr	x1, [x19, #13984]
+   dc26c:	b9465a62 	ldr	w2, [x19, #1624]
+   dc270:	b9408020 	ldr	w0, [x1, #128]
+   dc274:	35fffba2 	cbnz	w2, dc1e8 <jmo_HARDWARE_SetQuery+0x5e8>
+   dc278:	1100139c 	add	w28, w28, #0x4
+   dc27c:	11000400 	add	w0, w0, #0x1
+   dc280:	17ffffdf 	b	dc1fc <jmo_HARDWARE_SetQuery+0x5fc>
+   dc284:	12800016 	mov	w22, #0xffffffff            	// #-1
+   dc288:	17fffe81 	b	dbc8c <jmo_HARDWARE_SetQuery+0x8c>
+   dc28c:	d2800000 	mov	x0, #0x0                   	// #0
+   dc290:	97fd3238 	bl	28b70 <jmo_HAL_QuerySeparated2D@plt>
+   dc294:	7100041f 	cmp	w0, #0x1
+   dc298:	54000c60 	b.eq	dc424 <jmo_HARDWARE_SetQuery+0x824>  // b.none
+   dc29c:	f9403fe3 	ldr	x3, [sp, #120]
+   dc2a0:	b9400060 	ldr	w0, [x3]
+   dc2a4:	17fffeb7 	b	dbd80 <jmo_HARDWARE_SetQuery+0x180>
+   dc2a8:	f0000380 	adrp	x0, 14f000 <__FRAME_END__+0x1746c>
+   dc2ac:	f9444400 	ldr	x0, [x0, #2184]
+   dc2b0:	91006063 	add	x3, x3, #0x18
+   dc2b4:	52800002 	mov	w2, #0x0                   	// #0
+   dc2b8:	52800021 	mov	w1, #0x1                   	// #1
+   dc2bc:	f9400400 	ldr	x0, [x0, #8]
+   dc2c0:	97fd3294 	bl	28d10 <jmo_HARDWARE_Construct@plt>
+   dc2c4:	2a0003f6 	mov	w22, w0
+   dc2c8:	37ffce20 	tbnz	w0, #31, dbc8c <jmo_HARDWARE_SetQuery+0x8c>
+   dc2cc:	f9403fe3 	ldr	x3, [sp, #120]
+   dc2d0:	17fffeb0 	b	dbd90 <jmo_HARDWARE_SetQuery+0x190>
+   dc2d4:	a94573fb 	ldp	x27, x28, [sp, #80]
+   dc2d8:	17ffff48 	b	dbff8 <jmo_HARDWARE_SetQuery+0x3f8>
+   dc2dc:	f9404661 	ldr	x1, [x19, #136]
+   dc2e0:	f9403fe0 	ldr	x0, [sp, #120]
+   dc2e4:	b9407021 	ldr	w1, [x1, #112]
+   dc2e8:	7100043f 	cmp	w1, #0x1
+   dc2ec:	540000e9 	b.ls	dc308 <jmo_HARDWARE_SetQuery+0x708>  // b.plast
+   dc2f0:	91001001 	add	x1, x0, #0x4
+   dc2f4:	f9003fe1 	str	x1, [sp, #120]
+   dc2f8:	12b2ffe1 	mov	w1, #0x6800ffff            	// #1744895999
+   dc2fc:	b9000001 	str	w1, [x0]
+   dc300:	f9403fe0 	ldr	x0, [sp, #120]
+   dc304:	91001000 	add	x0, x0, #0x4
+   dc308:	f9000300 	str	x0, [x24]
+   dc30c:	a94573fb 	ldp	x27, x28, [sp, #80]
+   dc310:	17fffe5f 	b	dbc8c <jmo_HARDWARE_SetQuery+0x8c>
+   dc314:	aa1303e0 	mov	x0, x19
+   dc318:	52800001 	mov	w1, #0x0                   	// #0
+   dc31c:	97fd2fb9 	bl	28200 <jmo_HARDWARE_PauseTileStatus@plt>
+   dc320:	f95b5260 	ldr	x0, [x19, #13984]
+   dc324:	b9400000 	ldr	w0, [x0]
+   dc328:	7100081f 	cmp	w0, #0x2
+   dc32c:	54000aa0 	b.eq	dc480 <jmo_HARDWARE_SetQuery+0x880>  // b.none
+   dc330:	aa1303e0 	mov	x0, x19
+   dc334:	52800021 	mov	w1, #0x1                   	// #1
+   dc338:	a90573fb 	stp	x27, x28, [sp, #80]
+   dc33c:	97fd2fb1 	bl	28200 <jmo_HARDWARE_PauseTileStatus@plt>
+   dc340:	17fffea7 	b	dbddc <jmo_HARDWARE_SetQuery+0x1dc>
+   dc344:	f9403fe2 	ldr	x2, [sp, #120]
+   dc348:	7100041f 	cmp	w0, #0x1
+   dc34c:	54000109 	b.ls	dc36c <jmo_HARDWARE_SetQuery+0x76c>  // b.plast
+   dc350:	91001040 	add	x0, x2, #0x4
+   dc354:	f9003fe0 	str	x0, [sp, #120]
+   dc358:	12b2ffe0 	mov	w0, #0x6800ffff            	// #1744895999
+   dc35c:	b9000040 	str	w0, [x2]
+   dc360:	f9403fe2 	ldr	x2, [sp, #120]
+   dc364:	91001042 	add	x2, x2, #0x4
+   dc368:	f9003fe2 	str	x2, [sp, #120]
+   dc36c:	b40009d8 	cbz	x24, dc4a4 <jmo_HARDWARE_SetQuery+0x8a4>
+   dc370:	f9000302 	str	x2, [x24]
+   dc374:	f95b6a60 	ldr	x0, [x19, #14032]
+   dc378:	52800021 	mov	w1, #0x1                   	// #1
+   dc37c:	d280001b 	mov	x27, #0x0                   	// #0
+   dc380:	b9000801 	str	w1, [x0, #8]
+   dc384:	17ffff13 	b	dbfd0 <jmo_HARDWARE_SetQuery+0x3d0>
+   dc388:	aa1803e3 	mov	x3, x24
+   dc38c:	2a1c03e2 	mov	w2, w28
+   dc390:	aa1303e0 	mov	x0, x19
+   dc394:	52870481 	mov	w1, #0x3824                	// #14372
+   dc398:	97fd394a 	bl	2a8c0 <jmo_HARDWARE_LoadCtrlStateNEW@plt>
+   dc39c:	2a0003f6 	mov	w22, w0
+   dc3a0:	37ffcbe0 	tbnz	w0, #31, dbd1c <jmo_HARDWARE_SetQuery+0x11c>
+   dc3a4:	f95b5261 	ldr	x1, [x19, #13984]
+   dc3a8:	b9465a63 	ldr	w3, [x19, #1624]
+   dc3ac:	b9408022 	ldr	w2, [x1, #128]
+   dc3b0:	11000440 	add	w0, w2, #0x1
+   dc3b4:	340000a3 	cbz	w3, dc3c8 <jmo_HARDWARE_SetQuery+0x7c8>
+   dc3b8:	b94073e3 	ldr	w3, [sp, #112]
+   dc3bc:	52800020 	mov	w0, #0x1                   	// #1
+   dc3c0:	1ac32000 	lsl	w0, w0, w3
+   dc3c4:	0b020000 	add	w0, w0, w2
+   dc3c8:	b9008020 	str	w0, [x1, #128]
+   dc3cc:	a94573fb 	ldp	x27, x28, [sp, #80]
+   dc3d0:	17fffe2f 	b	dbc8c <jmo_HARDWARE_SetQuery+0x8c>
+   dc3d4:	aa1803e3 	mov	x3, x24
+   dc3d8:	2a1903e2 	mov	w2, w25
+   dc3dc:	aa1303e0 	mov	x0, x19
+   dc3e0:	52870481 	mov	w1, #0x3824                	// #14372
+   dc3e4:	97fd3937 	bl	2a8c0 <jmo_HARDWARE_LoadCtrlStateNEW@plt>
+   dc3e8:	2a0003f6 	mov	w22, w0
+   dc3ec:	37ffc980 	tbnz	w0, #31, dbd1c <jmo_HARDWARE_SetQuery+0x11c>
+   dc3f0:	f95b5260 	ldr	x0, [x19, #13984]
+   dc3f4:	2a1703fc 	mov	w28, w23
+   dc3f8:	b9465a63 	ldr	w3, [x19, #1624]
+   dc3fc:	8b374800 	add	x0, x0, w23, uxtw #2
+   dc400:	b9408002 	ldr	w2, [x0, #128]
+   dc404:	11000441 	add	w1, w2, #0x1
+   dc408:	340000a3 	cbz	w3, dc41c <jmo_HARDWARE_SetQuery+0x81c>
+   dc40c:	b9406fe3 	ldr	w3, [sp, #108]
+   dc410:	52800021 	mov	w1, #0x1                   	// #1
+   dc414:	1ac32021 	lsl	w1, w1, w3
+   dc418:	0b020021 	add	w1, w1, w2
+   dc41c:	b9008001 	str	w1, [x0, #128]
+   dc420:	17ffffd5 	b	dc374 <jmo_HARDWARE_SetQuery+0x774>
+   dc424:	d2800000 	mov	x0, #0x0                   	// #0
+   dc428:	97fd2d02 	bl	27830 <jmo_HAL_Is3DAvailable@plt>
+   dc42c:	f9403fe3 	ldr	x3, [sp, #120]
+   dc430:	7100041f 	cmp	w0, #0x1
+   dc434:	540005a0 	b.eq	dc4e8 <jmo_HARDWARE_SetQuery+0x8e8>  // b.none
+   dc438:	b9400060 	ldr	w0, [x3]
+   dc43c:	17fffe51 	b	dbd80 <jmo_HARDWARE_SetQuery+0x180>
+   dc440:	a9420660 	ldp	x0, x1, [x19, #32]
+   dc444:	9101c3e2 	add	x2, sp, #0x70
+   dc448:	97fd367e 	bl	29e40 <jmo_BUFFER_StartTEMPCMDBUF@plt>
+   dc44c:	2a0003f6 	mov	w22, w0
+   dc450:	37ffc660 	tbnz	w0, #31, dbd1c <jmo_HARDWARE_SetQuery+0x11c>
+   dc454:	f9403be0 	ldr	x0, [sp, #112]
+   dc458:	f9400402 	ldr	x2, [x0, #8]
+   dc45c:	f9003fe2 	str	x2, [sp, #120]
+   dc460:	f9404661 	ldr	x1, [x19, #136]
+   dc464:	b9407021 	ldr	w1, [x1, #112]
+   dc468:	34000201 	cbz	w1, dc4a8 <jmo_HARDWARE_SetQuery+0x8a8>
+   dc46c:	9101e3f4 	add	x20, sp, #0x78
+   dc470:	52800015 	mov	w21, #0x0                   	// #0
+   dc474:	7100043f 	cmp	w1, #0x1
+   dc478:	54ffe3a0 	b.eq	dc0ec <jmo_HARDWARE_SetQuery+0x4ec>  // b.none
+   dc47c:	17fffefd 	b	dc070 <jmo_HARDWARE_SetQuery+0x470>
+   dc480:	528bcec2 	mov	w2, #0x5e76                	// #24182
+   dc484:	aa1803e3 	mov	x3, x24
+   dc488:	aa1303e0 	mov	x0, x19
+   dc48c:	72a03be2 	movk	w2, #0x1df, lsl #16
+   dc490:	52870601 	mov	w1, #0x3830                	// #14384
+   dc494:	97fd390b 	bl	2a8c0 <jmo_HARDWARE_LoadCtrlStateNEW@plt>
+   dc498:	2a0003f6 	mov	w22, w0
+   dc49c:	36fff4a0 	tbz	w0, #31, dc330 <jmo_HARDWARE_SetQuery+0x730>
+   dc4a0:	17fffdfb 	b	dbc8c <jmo_HARDWARE_SetQuery+0x8c>
+   dc4a4:	f9403be0 	ldr	x0, [sp, #112]
+   dc4a8:	52800001 	mov	w1, #0x0                   	// #0
+   dc4ac:	f9400403 	ldr	x3, [x0, #8]
+   dc4b0:	cb030042 	sub	x2, x2, x3
+   dc4b4:	b9000002 	str	w2, [x0]
+   dc4b8:	f9401260 	ldr	x0, [x19, #32]
+   dc4bc:	97fd2d7d 	bl	27ab0 <jmo_BUFFER_EndTEMPCMDBUF@plt>
+   dc4c0:	2a0003f6 	mov	w22, w0
+   dc4c4:	37ffc2c0 	tbnz	w0, #31, dbd1c <jmo_HARDWARE_SetQuery+0x11c>
+   dc4c8:	b97ab260 	ldr	w0, [x19, #15024]
+   dc4cc:	2a1703fc 	mov	w28, w23
+   dc4d0:	71000c1f 	cmp	w0, #0x3
+   dc4d4:	54fff500 	b.eq	dc374 <jmo_HARDWARE_SetQuery+0x774>  // b.none
+   dc4d8:	f9403660 	ldr	x0, [x19, #104]
+   dc4dc:	f9403e61 	ldr	x1, [x19, #120]
+   dc4e0:	97ffc418 	bl	cd540 <jmo_HARDWARE_UpdateTempDelta.isra.0>
+   dc4e4:	17ffffa4 	b	dc374 <jmo_HARDWARE_SetQuery+0x774>
+   dc4e8:	f9401073 	ldr	x19, [x3, #32]
+   dc4ec:	b5ffbab3 	cbnz	x19, dbc40 <jmo_HARDWARE_SetQuery+0x40>
+   dc4f0:	f0000384 	adrp	x4, 14f000 <__FRAME_END__+0x1746c>
+   dc4f4:	f9444484 	ldr	x4, [x4, #2184]
+   dc4f8:	2a0003e1 	mov	w1, w0
+   dc4fc:	91008063 	add	x3, x3, #0x20
+   dc500:	52800002 	mov	w2, #0x0                   	// #0
+   dc504:	f9400480 	ldr	x0, [x4, #8]
+   dc508:	97fd3202 	bl	28d10 <jmo_HARDWARE_Construct@plt>
+   dc50c:	2a0003f6 	mov	w22, w0
+   dc510:	37ffbbe0 	tbnz	w0, #31, dbc8c <jmo_HARDWARE_SetQuery+0x8c>
+   dc514:	f9403fe0 	ldr	x0, [sp, #120]
+   dc518:	f9401013 	ldr	x19, [x0, #32]
+   dc51c:	17fffdc9 	b	dbc40 <jmo_HARDWARE_SetQuery+0x40>
+   dc520:	34ffbdb4 	cbz	w20, dbcd4 <jmo_HARDWARE_SetQuery+0xd4>
+   dc524:	91004042 	add	x2, x2, #0x10
+   dc528:	52980281 	mov	w1, #0xc014                	// #49172
+   dc52c:	aa1803e3 	mov	x3, x24
+   dc530:	aa1303e0 	mov	x0, x19
+   dc534:	72a00021 	movk	w1, #0x1, lsl #16
+   dc538:	b8627882 	ldr	w2, [x4, x2, lsl #2]
+   dc53c:	97fd2ff9 	bl	28520 <jmo_HARDWARE_LoadState32NEW@plt>
+   dc540:	2a0003f6 	mov	w22, w0
+   dc544:	37ffba40 	tbnz	w0, #31, dbc8c <jmo_HARDWARE_SetQuery+0x8c>
+   dc548:	53185f42 	lsl	w2, w26, #8
+   dc54c:	aa1803e3 	mov	x3, x24
+   dc550:	2a171042 	orr	w2, w2, w23, lsl #4
+   dc554:	52980201 	mov	w1, #0xc010                	// #49168
+   dc558:	321f0042 	orr	w2, w2, #0x2
+   dc55c:	17fffe8c 	b	dbf8c <jmo_HARDWARE_SetQuery+0x38c>
