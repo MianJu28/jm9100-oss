@@ -28,6 +28,11 @@
 #   ./switch-mwv207.sh kmd --dry-run install      # 只打印将执行的命令
 #   ./switch-mwv207.sh kmd --root /tmp/fake rehearse   # 假根演练, 零副作用
 #
+#   sudo ./switch-mwv207.sh all install [--force] # 两层一起切, lightdm 只停一次
+#      阶段 1 放置文件(不动桌面) → 阶段 2 停一次 lightdm 换 KMD →
+#      阶段 3 拉起 lightdm 并自检。分开执行 umd install + kmd install
+#      会导致桌面被杀两次、登录态丢两次, 故不要用两个命令代替。
+#
 # 全局选项 (须写在子命令之前):
 #   --root <dir>   把"系统"搬到假根下 (供 kmd rehearse 演练)
 #   --dry-run      特权命令只打印不执行
@@ -433,10 +438,11 @@ umd_deploy() {
     cp -f "$src/MANIFEST.sha256" "$CACHE_DIR/manifest.sha256" || die "无法保存 MANIFEST"
 }
 
-umd_install() {
-    need_root "umd install"
-    local force=0
-    [ "${1:-}" = "--force" ] && force=1
+# 只部署文件 + 写状态，**不动 lightdm**。
+# 拆出来的原因：同时切换两层时必须"停一次 lightdm 换 KMD → 再统一起来"，
+# 若各切一次则桌面被杀两遍、登录态丢两次。
+umd_deploy_files() {
+    local force="${1:-0}"
 
     umd_check >/dev/null 2>&1 || { umd_check; die "预检未通过, 中止"; }
     local src; src=$(payload_src) || die "无载荷"
@@ -500,8 +506,13 @@ umd_install() {
     ldconfig || die "ldconfig 失败 (动态库缓存未更新)"
     echo "oss-$ver" > "$STATE_FILE"
     echo "installed $(date '+%F %T') history=$ts payload=$src" >> "$STATE_FILE"
+    # 返回版本号供上层 (all install) 打印
+    UMD_DEPLOYED_VER="$ver"
+    return 0
+}
 
-    # 9) 看门狗 + 重启 lightdm
+# 起看门狗 + 重启 lightdm + 自检（部署之后单独调用）
+umd_activate() {
     # 启动前先停掉可能残留的旧看门狗: 同名 unit 会让 systemd-run 直接失败,
     # 于是静默降级成"只靠本脚本内联自检"。
     systemctl stop mwv207-oss-watchdog 2>/dev/null || true
@@ -512,7 +523,6 @@ umd_install() {
     log "重启 lightdm (图形会话将终止, 请稍后重新登录)..."
     systemctl restart lightdm || die "lightdm 重启失败 (图形会话可能已中断)"
 
-    # 10) 自检验证
     sleep 8
     if umd_wait_xorg; then
         systemctl stop mwv207-oss-watchdog 2>/dev/null || true
@@ -529,6 +539,14 @@ umd_install() {
         systemctl restart lightdm
         die "切换失败已回滚, 详见 $LOG_FILE / $XORG_LOG"
     fi
+}
+
+umd_install() {
+    need_root "umd install"
+    local force=0
+    [ "${1:-}" = "--force" ] && force=1
+    umd_deploy_files "$force"
+    umd_activate
 }
 
 # Xorg.0.log 的 "Time: ..." 在 "(==) Log file:" 行内, 不在首行! 首行是
@@ -924,8 +942,9 @@ wait_x_ok() {
 
 # ---- install ----
 
-kmd_install() {
-    need_root "kmd install"
+# 只构建 + 放置模块 + depmod，**不动 lightdm、不换模块**。
+# 拆出来的原因同 umd_deploy_files：同时切换两层时 lightdm 只能停一次。
+kmd_place_module() {
     kmd_build
     local src="$SRC_DIR/mwv207.ko" it="$(ko_in_tree)" dk="$(ko_dkms)"
 
@@ -939,33 +958,56 @@ kmd_install() {
 
     local installed; installed=$(ko_srcver "$dk")
     log "  已放置: $dk (srcversion $installed)"
+    KMD_PLACED_SRCVER="$installed"
+    [ -n "$installed" ] || die "放置后读不到 srcversion: $dk"
+    return 0
+}
 
-    stop_display
+# 纯换模块：**不管显示管理器**（调用方负责停/起）。
+# 拆出来的原因：全栈切换要"停一次 lightdm、中间换模块、再由 umd 统一拉起"，
+# 若用 kmd_swap_module 则会多一轮 start_display。
+kmd_reload_module() {
+    local dk="$(ko_dkms)"
+    local installed="${KMD_PLACED_SRCVER:-$(ko_srcver "$dk")}"
+
     log "  卸载旧模块并加载新模块"
     if ! run modprobe -r mwv207; then
         warn "  modprobe -r 失败（仍被占用）"
-        kmd_do_rollback
-        die "无法卸载旧模块，已回滚"
+        return 1
     fi
     if ! run modprobe mwv207; then
         warn "  modprobe 新模块失败"
-        kmd_do_rollback
-        die "新模块加载失败，已回滚"
+        return 1
     fi
-
     sleep 1
     local lv; lv=$(loaded_srcver)
     if [ "$lv" != "$installed" ]; then
         warn "  加载后 srcversion=$lv，期望 $installed"
+        return 1
+    fi
+    KMD_LOADED_SRCVER="$lv"
+    return 0
+}
+
+# 停 lightdm → 换模块 → 校验 → 起 lightdm
+kmd_swap_module() {
+    stop_display
+    if ! kmd_reload_module; then
         kmd_do_rollback
-        die "加载的不是新模块，已回滚"
+        die "模块切换失败，已回滚"
     fi
 
     start_display
     wait_x_ok || { warn "  X 未点亮"; kmd_do_rollback; die "显示未恢复，已回滚"; }
 
-    log "安装完成：正在跑【自建版】(srcversion $lv)"
+    log "安装完成：正在跑【自建版】(srcversion $KMD_LOADED_SRCVER)"
     kmd_verify
+}
+
+kmd_install() {
+    need_root "kmd install"
+    kmd_place_module
+    kmd_swap_module
 }
 
 # ---- rollback ----
@@ -1152,6 +1194,75 @@ umd_main() {
     esac
 }
 
+# ----------------------------- 全栈切换 ------------------------------------
+# 一次命令把用户态 + 内核态都切过去, **lightdm 只停一次**。
+# 顺序是刻意安排的:
+#   1) 两层都先只"放文件" (kmd_place_module / umd_deploy_files), 都不动 lightdm;
+#      此时即使失败, 桌面完全没被打扰, 回滚也只需删文件。
+#   2) 停一次 lightdm → 换 KMD 模块 (kmd_reload_module, 不含 start_display)。
+#   3) umd_activate 统一拉起 lightdm + 看门狗 + 自检。
+# 若反过来先 umd install 再 kmd install, 桌面会被杀两次、登录态丢两次。
+all_install() {
+    need_root "all install"
+    local force=0
+    for a in "$@"; do [ "$a" = "--force" ] && force=1; done
+
+    # 唯一改动系统的动作是 umd_deploy_files / kmd_place_module 里的文件操作,
+    # 它们不走统一的 run(); 不像 kmd install 有 kmd_dryrun 分支, 这里必须显式拦。
+    if [ "$DRY_RUN" = 1 ]; then
+        log "==== all install (--dry-run, 不改动系统) ===="
+        log "阶段 1a  kmd_place_module : 构建 src/kernel-6.6, 备份内建 .ko, 放到 updates/dkms, depmod"
+        log "阶段 1b  umd_deploy_files : 备份快照, 部署载荷到 $INST_DIR, ldconfig 优先, 软链, ICD/env"
+        log "阶段 2   stop_display (仅此一次) + kmd_reload_module (modprobe -r / modprobe)"
+        log "阶段 3   umd_activate : 起看门狗, 重启 lightdm, 等 glamor, umd_verify"
+        log "阶段 4   kmd_verify"
+        return 0
+    fi
+
+    log "==== all install 开始 (用户态 + 内核态, lightdm 只停一次) ===="
+
+    # 提前做 umd_deploy_files 里那道"已装同版本"判定 —— 否则会先把 KMD 模块
+    # 放好、才被 UMD 的 die 拦下, 留下"模块已就位但用户态没动"的半成品。
+    # 只想换 KMD 而用户态已是同一版本时, 加 --force (或直接用 kmd install)。
+    local src; src=$(payload_src) || die "无载荷"
+    local ver; ver=$(payload_version "$src")
+    local cur; cur=$(umd_active_stack)
+    [ "$cur" = "oss-$ver" ] && [ $force = 0 ] &&
+        die "用户态已是 oss 栈 ($cur), KMD 未改动。若只为换内核模块: all install --force (或 kmd install)"
+
+    # --- 阶段 1: 只放文件 ---
+    kmd_place_module
+    umd_deploy_files "$force"
+
+    # --- 阶段 2: 停一次 lightdm, 换 KMD 模块 ---
+    stop_display
+    if ! kmd_reload_module; then
+        log "KMD 切换失败 → 回滚两层"
+        kmd_do_rollback
+        umd_do_rollback "all-install-kmd-failed" "--no-restart"
+        start_display
+        die "all install 失败: KMD 模块切换未成功 (两层均已回滚)"
+    fi
+    log "  KMD 就位: srcversion $KMD_LOADED_SRCVER"
+
+    # --- 阶段 3: umd 统一拉起 (含 lightdm 重启 + 看门狗 + 自检) ---
+    # umd_activate 失败时会自行 umd_do_rollback, 但 KMD 不会跟着退回去 ——
+    # 那属于"模块已换、用户态没跟上"的混合态, 如实上报让用户决定。
+    umd_activate || die "all install: 用户态未生效 (KMD 已切到 $KMD_LOADED_SRCVER, 未自动回滚内核态; 如需还原请 kmd rollback)"
+
+    log "==== all install 完成 ===="
+    log "  用户态: oss-${UMD_DEPLOYED_VER:-?}"
+    log "  内核态: 自建版 (srcversion $KMD_LOADED_SRCVER)"
+    kmd_verify
+}
+
+all_main() {
+    case "${1:-help}" in
+        install)  shift; all_install "$@" ;;
+        *)        usage ;;
+    esac
+}
+
 kmd_main() {
     case "${1:-help}" in
         check)    shift; kmd_check "$@" ;;
@@ -1189,6 +1300,7 @@ main() {
     case "$layer" in
         umd)  shift 2; umd_main "${cmd:-help}" "$@" ;;
         kmd)  shift 2; kmd_main "${cmd:-help}" "$@" ;;
+        all)  shift 2; all_main "${cmd:-help}" "$@" ;;
         # 不带层名的 status/check/verify 同时跑两层 —— 桌面异常时要一起看
         status) shift; umd_status "$@"; echo; kmd_status "$@" ;;
         check)  shift; umd_check "$@";  echo; kmd_check "$@" ;;
