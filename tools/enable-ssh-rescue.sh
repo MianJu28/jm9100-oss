@@ -402,6 +402,13 @@ cat <<EOF
       sudo journalctl -u ssh -f         # 实时日志
       sudo ss -tlnp | grep :$PORT     # 确认监听
 
+$(printf '%s' "${c_yel}")⚠ SSH 里跑图形命令必须带上 DISPLAY$(printf '%s' "${c_off}")
+  ssh 会话默认没有 DISPLAY（本配置也关掉了 X11Forwarding），直接跑会报
+  "Error: unable to open display"。要看桌面真实的 GL 栈，用：
+      DISPLAY=:0 glxinfo -B | grep -E 'OpenGL (renderer|ES profile)|Video memory'
+      DISPLAY=:0 xrandr --query
+  （同一用户 + ~/.Xauthority 里有 :0 的 cookie，所以不需要另外授权。）
+
   黑屏救援流程（KMD 出问题时）：
       1. 另一台电脑 ssh 进来
       2. sudo /home/${SUDO_USER:-admin}/jm9100-oss/switch-mwv207.sh kmd rollback
