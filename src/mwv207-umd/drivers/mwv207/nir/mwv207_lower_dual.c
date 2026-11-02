@@ -109,11 +109,30 @@ get_factor_def(struct mwv207_context *ctx, nir_builder *b, unsigned int factor,
 static nir_def *
 get_rt_texture_coord(struct mwv207_context *ctx, nir_builder *b)
 {
+   /* FIX(jm9100-oss): Firefox/GitHub 崩溃 (SIGSEGV / SEGV_MAPERR 0x48)。
+    * 这里原来无条件解引用 sampler_views[4][dsbi.sampler_index]->texture；
+    * 0x48 正是 pipe_sampler_view::texture 的偏移，即槽上视图为 NULL。
+    * 视图槽在 set_sampler_views 里随时可能被解绑/回缩，编译期必须判空：
+    * 没有视图就退回帧缓冲尺寸（lower_dual 只需要把 fragcoord 归一化到
+    * [0,1]，用渲染目标尺寸与 RT blit 拷贝视图等价）。 */
+   struct pipe_sampler_view *rt_view =
+      ctx->sampler_views[4][ctx->info.dsbi.sampler_index];
+   unsigned rt_width, rt_height;
+   if (rt_view && rt_view->texture) {
+      rt_width = rt_view->texture->width0;
+      rt_height = rt_view->texture->height0;
+   } else if (ctx->fb_state.cbufs[0]) {
+      rt_width = ctx->fb_state.cbufs[0]->width;
+      rt_height = ctx->fb_state.cbufs[0]->height;
+   } else {
+      rt_width = ctx->fb_state.width;
+      rt_height = ctx->fb_state.height;
+   }
    nir_def *coord = nir_load_frag_coord(b);
    nir_def *fragcoord_x = nir_channel(b, coord, 0);
    nir_def *fragcoord_y = nir_channel(b, coord, 1);
-   nir_def *width = nir_imm_float(b, ctx->sampler_views[4][ctx->info.dsbi.sampler_index]->texture->width0);
-   nir_def *height = nir_imm_float(b, ctx->sampler_views[4][ctx->info.dsbi.sampler_index]->texture->height0);
+   nir_def *width = nir_imm_float(b, rt_width);
+   nir_def *height = nir_imm_float(b, rt_height);
    nir_def *y_invert = nir_imm_float(b, ctx->info.dsbi.y_invert);
    nir_def *const_one = nir_imm_float(b, 1);
    nir_def *const_two = nir_imm_float(b, 2);

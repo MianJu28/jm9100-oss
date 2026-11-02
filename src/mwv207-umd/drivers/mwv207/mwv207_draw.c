@@ -1178,6 +1178,16 @@ mwv207_config_dual_blend(struct pipe_context *pctx,
       struct pipe_resource *texture_res;
       struct pipe_blit_info blt_info = {};
 
+      /* FIX(jm9100-oss): Firefox/GitHub 崩溃 (SIGSEGV 0x48)。原代码无条件解引用
+       * cbufs[0]；没有颜色附件（GitHub 站点导航条会短暂切到无 cbuf 的 FBO）时
+       * dual-source blend 无从谈起：关掉 is_dual 跳过绑定，让编译器不走
+       * lower_dual（那里解引用 sampler_views[4][sampler_index]，槽上没视图
+       * 就是空指针）。 */
+      if (!src_surface) {
+         ctx->info.dsbi.is_dual = false;
+         return;
+      }
+
       memset(&res_templ, 0, sizeof(struct pipe_resource));
       res_templ.target = PIPE_TEXTURE_2D;
       res_templ.width0 = src_surface->width;
@@ -1211,15 +1221,24 @@ mwv207_config_dual_blend(struct pipe_context *pctx,
       sampler_view.format = src_surface->format;
 
       ctx->info.dsbi.y_invert = 0;
-      ctx->info.dsbi.sampler_index = ctx->num_samplers[PIPE_SHADER_FRAGMENT];
+      /* FIX(jm9100-oss): 视图与采样器状态必须绑在同一个槽上。原来视图绑在
+       * num_sampler_views[FS]（尾部 NULL 会回缩），而 sampler_index 记的是
+       * num_samplers[FS]（不回缩），两者经常不等 —— lower_dual 按
+       * sampler_index 取视图时拿到 NULL 或错位视图 → 编译期解引用 ->texture
+       * 崩溃 (crash_address 0x48)。统一用视图计数。 */
+      ctx->info.dsbi.sampler_index = ctx->num_sampler_views[PIPE_SHADER_FRAGMENT];
       struct pipe_sampler_view *src_view;
       src_view = pctx->create_sampler_view(pctx, texture_res, &sampler_view);
+      if (!src_view) {
+         ctx->info.dsbi.is_dual = false;
+         return;
+      }
       pctx->set_sampler_views(pctx, PIPE_SHADER_FRAGMENT,
                               ctx->num_sampler_views[PIPE_SHADER_FRAGMENT], 1,
                               0, true, &src_view);
       void *sampler_state = mwv207_get_sampler_state(ctx);
       pctx->bind_sampler_states(pctx, PIPE_SHADER_FRAGMENT,
-                                ctx->num_samplers[PIPE_SHADER_FRAGMENT],
+                                ctx->num_sampler_views[PIPE_SHADER_FRAGMENT],
                                 1, &sampler_state);
       pipe_resource_reference(&texture_res, NULL);
    }
