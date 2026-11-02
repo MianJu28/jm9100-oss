@@ -24,6 +24,8 @@
 #   ./switch-mwv207.sh kmd build                  # 构建 src/kernel-6.6 (不需 root)
 #   sudo ./switch-mwv207.sh kmd status            # 内建/自建/实际加载 三方对照
 #   sudo ./switch-mwv207.sh kmd install           # 装自建模块并热切换 (会停 lightdm)
+#   sudo ./switch-mwv207.sh kmd stage             # 只暂存, 重启后自动生效 (现场零风险)
+#   sudo ./switch-mwv207.sh kmd install --force-unload   # 强制终止仍占 /dev/dri 的进程
 #   sudo ./switch-mwv207.sh kmd rollback
 #   ./switch-mwv207.sh kmd --dry-run install      # 只打印将执行的命令
 #   ./switch-mwv207.sh kmd --root /tmp/fake rehearse   # 假根演练, 零副作用
@@ -33,9 +35,12 @@
 #      阶段 3 拉起 lightdm 并自检。分开执行 umd install + kmd install
 #      会导致桌面被杀两次、登录态丢两次, 故不要用两个命令代替。
 #
-# 全局选项 (须写在子命令之前):
-#   --root <dir>   把"系统"搬到假根下 (供 kmd rehearse 演练)
-#   --dry-run      特权命令只打印不执行
+# 全局选项 (可写在任意位置):
+#   --root <dir>    把"系统"搬到假根下 (供 kmd rehearse 演练)
+#   --dry-run       特权命令只打印不执行
+#   --force-unload  kmd 热切换时, 强制终止仍持有 /dev/dri 的进程
+#                   (停 lightdm 只带走 Xorg; Electron/Chromium 系应用的 GPU
+#                    进程由 systemd --user 托管, 默认不会被会话结束杀掉)
 #
 # 用户态要点 (2026-10-21 实证, 详见 reports/PHASE5-SWITCH-REPORT.md):
 #   1. 非 glvnd 构建的私有目录方案 —— 本载荷 libEGL/libGL 未按 glvnd 构建,
@@ -963,12 +968,55 @@ kmd_place_module() {
     return 0
 }
 
+# 列出还占着 /dev/dri 的进程 —— rmmod 失败的真正原因。
+# 停 lightdm 只带走 Xorg；Electron/Chromium 系应用的 GPU 进程、浏览器等
+# 由 systemd --user 单元托管，可能既不退出、也不被 logind 杀（默认 KillUserProcesses=no）。
+dri_holders() {
+    local pids p
+    pids=$(fuser /dev/dri/card0 /dev/dri/renderD128 2>/dev/null \
+           | tr -s ' \t' '\n' | grep -E '^[0-9]+$' | sort -u) || true
+    [ -n "$pids" ] || return 1
+    for p in $pids; do
+        printf '    pid=%-8s %s\n' "$p" "$(ps -o args= -p "$p" 2>/dev/null | cut -c1-58)"
+    done
+    return 0
+}
+
+# 等 Xorg / X 客户端退出后释放 /dev/dri，最多等 $1 秒。返回 0 表示已释放。
+wait_for_dri_free() {
+    local waited=0 max="${1:-20}"
+    while [ "$waited" -lt "$max" ]; do
+        dri_holders >/dev/null 2>&1 || return 0
+        sleep 2; waited=$((waited + 2))
+    done
+    return 1
+}
+
 # 纯换模块：**不管显示管理器**（调用方负责停/起）。
 # 拆出来的原因：全栈切换要"停一次 lightdm、中间换模块、再由 umd 统一拉起"，
 # 若用 kmd_swap_module 则会多一轮 start_display。
 kmd_reload_module() {
     local dk="$(ko_dkms)"
     local installed="${KMD_PLACED_SRCVER:-$(ko_srcver "$dk")}"
+
+    # 先等 X 侧释放；再不行就把占用者点出来，而不是丢一句 modprobe 的报错。
+    if ! wait_for_dri_free 20; then
+        warn "  /dev/dri 仍被以下进程占用（rmmod 必然失败）："
+        dri_holders
+        if [ "${FORCE_UNLOAD:-0}" = 1 ]; then
+            warn "  --force-unload：终止这些进程（相关桌面应用会被关闭）"
+            fuser -k /dev/dri/card0 /dev/dri/renderD128 >/dev/null 2>&1 || true
+            sleep 3
+            wait_for_dri_free 10 || { warn "  仍有占用，放弃"; return 1; }
+        else
+            warn "  原因：这些应用由 systemd --user 单元托管，停 lightdm 不会带走它们，"
+            warn "        且默认 KillUserProcesses=no 也不会随会话结束被杀（有的还会自动重启）。"
+            warn "  可选：① 手动退出这些应用后重试"
+            warn "        ② kmd install --force-unload 强制终止（会关闭上述应用）"
+            warn "        ③ kmd stage —— 只暂存模块，重启后由 depmod 优先级自动加载（现场零风险）"
+            return 1
+        fi
+    fi
 
     log "  卸载旧模块并加载新模块"
     if ! run modprobe -r mwv207; then
@@ -1008,6 +1056,28 @@ kmd_install() {
     need_root "kmd install"
     kmd_place_module
     kmd_swap_module
+}
+
+# 只暂存：构建 + 装到 updates/dkms + depmod，**不卸载当前模块、不碰 lightdm**。
+# 重启后由 depmod 的 /updates 优先级自动加载自建版 —— 现场零黑屏风险。
+# 适用于模块被桌面应用占着、无法当场 rmmod 的情况（本机即如此）。
+kmd_stage() {
+    need_root "kmd stage"
+    if [ "$DRY_RUN" = 1 ]; then
+        log "[dry-run] 将执行: 构建 src/kernel-6.6 → 安装到 $(ko_dkms) → depmod -a $KVER"
+        log "[dry-run] 不卸载当前模块、不碰 lightdm; 重启后由 /updates 优先级生效。"
+        return 0
+    fi
+    local cur; cur=$(loaded_srcver)
+    kmd_place_module
+    log ""
+    log "已暂存自建模块（**当前运行的内核态未变**，仍是 $cur）"
+    log "  暂存位置: $(ko_dkms)"
+    log "  重启后生效，期望 srcversion: $KMD_PLACED_SRCVER"
+    log ""
+    log "验证:  cat /sys/module/mwv207/srcversion"
+    log "回滚:  ${0##*/} kmd rollback    # 删掉暂存副本, 下次仍用内建"
+    log "前提:  重启前确认 SSH 通道可用（本机 admin 口令登录已验证）"
 }
 
 # ---- rollback ----
@@ -1178,7 +1248,9 @@ EOF
 
 # ----------------------------- usage ---------------------------------------
 usage() {
-    sed -n '2,20p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    # 打印文件头部的连续注释块 (第 2 行起到第一个非注释行为止)。
+    # 原实现是 sed -n '2,20p', 头部注释变长后 kmd/all 那段用法就永远不显示了。
+    awk 'NR>1 && /^#/ { sub(/^# ?/, ""); print; next } NR>1 { exit }' "${BASH_SOURCE[0]}"
 }
 
 # ----------------------------- 分层派发 ------------------------------------
@@ -1269,6 +1341,7 @@ kmd_main() {
         build)    shift; kmd_build "$@" ;;
         status)   shift; kmd_status "$@" ;;
         install)  shift; if [ "$DRY_RUN" = 1 ]; then kmd_dryrun "$@"; else kmd_install "$@"; fi ;;
+        stage)    shift; kmd_stage "$@" ;;
         rollback) shift; kmd_rollback "$@" ;;
         verify)   shift; kmd_verify "$@" ;;
         rehearse) shift; kmd_rehearse "$@" ;;
@@ -1286,6 +1359,7 @@ main() {
             --root)    R="$2"; shift 2 ;;
             --root=*)  R="${1#*=}"; shift ;;
             --dry-run) DRY_RUN=1; shift ;;
+            --force-unload) FORCE_UNLOAD=1; shift ;;
             --)        shift; while [ $# -gt 0 ]; do pos+=("$1"); shift; done ;;
             *)         pos+=("$1"); shift ;;
         esac
