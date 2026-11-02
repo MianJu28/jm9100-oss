@@ -17,7 +17,7 @@
 # 用法:
 #   tools/make-payload.sh -v <版本号> [-b <构建目录>] [-f <上游载荷>] [-o <输出目录>]
 #
-#   默认 -b = src/oh-mesa/User_source_code/mesa-24.1.2/build-full
+#   默认 -b = ref/oh-mesa/User_source_code/mesa-24.1.2/build-full
 #        -f = 仓库内最新 payload-*
 #        -o = payload-<上一份序号 + 1>
 #   -v 必须显式给出 (不设默认, 逼你不要"忘了改版本号")
@@ -28,7 +28,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
-BUILD="$ROOT/src/oh-mesa/User_source_code/mesa-24.1.2/build-full"
+BUILD="$ROOT/ref/oh-mesa/User_source_code/mesa-24.1.2/build-full"
 FROM=""
 OUT=""
 VER=""

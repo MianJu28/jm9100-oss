@@ -8,7 +8,7 @@
 set -euo pipefail
 
 W=$(cd "$(dirname "$0")/.." && pwd)
-MESA=${MESA_SRC:-$W/src/oh-mesa/User_source_code/mesa-24.1.2}
+MESA=${MESA_SRC:-$W/ref/oh-mesa/User_source_code/mesa-24.1.2}
 BUILD=${MESA_BUILD:-$MESA/build-full}
 OURS=$W/src/mwv207-umd
 

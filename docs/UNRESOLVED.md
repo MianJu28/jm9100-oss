@@ -161,9 +161,9 @@
 > 批次 1 之外都建议在**能上机验证**的前提下做。
 >
 > **UMD 验证方法（2026-11-02 分层后已变简单）**：驱动源码已迁到独立目录
-> `src/mwv207-umd/`（`src/oh-mesa/.../drivers/mwv207` 与 `winsys/mwv207` 现在是
+> `src/mwv207-umd/`（`ref/oh-mesa/.../drivers/mwv207` 与 `winsys/mwv207` 现在是
 > 指向它的符号链接），改代码 → `./tools/build-umd.sh build` → 用
-> `LIBGL_DRIVERS_PATH=<mesa>/build-full/src/gallium/targets/dri` +
+> `LIBGL_DRIVERS_PATH=ref/oh-mesa/User_source_code/mesa-24.1.2/build-full/src/gallium/targets/dri` +
 > `MESA_LOADER_DRIVER_OVERRIDE=mwv207` 直连跑探针即可。版本戳取自 mesa 参考树的
 > `git HEAD`（现为 `b2ab2c9da2`，与已安装 `libGL.so.1` 一致），所以**不再需要
 > worktree**；只有在 mesa 树里新提交过东西后，才会重新出现

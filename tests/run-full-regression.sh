@@ -3,7 +3,7 @@
 # 用法: ./tests/run-full-regression.sh   (仓库内任意位置调用均可, 路径相对脚本自身)
 # 前置: 先运行 ./tests/run-all.sh 生成 /tmp/{fbo-test,tri-test,cl-test} 二进制
 R="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
-W="$R/src/oh-mesa/User_source_code/mesa-24.1.2/build-full"
+W="$R/ref/oh-mesa/User_source_code/mesa-24.1.2/build-full"
 export LIBGL_DRIVERS_PATH=$W/src/gallium/targets/dri
 export LD_LIBRARY_PATH=$W/src/egl:$W/src/gbm:$W/src/mapi/shared-glapi
 export MESA_LOADER_DRIVER_OVERRIDE=mwv207

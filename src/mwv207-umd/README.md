@@ -1,6 +1,6 @@
 # `src/mwv207-umd` — 我们维护的 MWV207 用户态驱动源码
 
-这是 **唯一可改** 的驱动源码位置。以前动的是 `src/oh-mesa/User_source_code/mesa-24.1.2`
+这是 **唯一可改** 的驱动源码位置。以前动的是 `ref/oh-mesa/User_source_code/mesa-24.1.2`
 里的同名目录，等于把上游 oh-mesa 仓当工作目录、还往它自己的 git 上提交 —— 那些提交
 （`cd90d9f` / `5499360` / `b2ab2c9`）属于我们，不应该长在上游历史里。2026-11-02 已
 把驱动源码整体搬到这里，上游树只留两个符号链接指回来。
@@ -19,7 +19,7 @@
 `drivers/mwv207` 与 `winsys/mwv207` **不是 Mesa 上游代码**，是景美（JingJiaMicro）为
 MWV207/JM9100 写的驱动，由 oh-mesa 移植接到 Mesa 24.1.2 上。所以这里的“上游参考”指的是：
 
-- `src/oh-mesa/User_source_code/mesa-24.1.2/` —— 整个 Mesa 24.1.2 树（只读参考 + 构建宿主）。
+- `ref/oh-mesa/User_source_code/mesa-24.1.2/` —— 整个 Mesa 24.1.2 树（只读参考 + 构建宿主）。
   本目录通过符号链接挂进它的 `src/gallium/drivers/mwv207` 与 `src/gallium/winsys/mwv207`，
   meson 构建时无感。
 - `patches/0009..0013` —— 本轮改动作为补丁留存，可用于对照/复现（内容已在本树里）。
@@ -28,7 +28,7 @@ MWV207/JM9100 写的驱动，由 oh-mesa 移植接到 Mesa 24.1.2 上。所以�
 
 ```bash
 # 1) 确保链接在（若上游树被重新克隆过，需要重建）
-ls -l src/oh-mesa/User_source_code/mesa-24.1.2/src/gallium/drivers/mwv207   # 应为符号链接
+ls -l ref/oh-mesa/User_source_code/mesa-24.1.2/src/gallium/drivers/mwv207   # 应为符号链接
 ./tools/build-umd.sh relink        # 不在或指错时修复
 
 # 2) 增量编译（配置已在 build-full 里）

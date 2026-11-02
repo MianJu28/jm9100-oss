@@ -4,7 +4,7 @@
 
 - 硬件：景美 JM9100 / MWV207，PCI `0731:9100`
 - 软件：Mesa 24.1.2 的 gallium 驱动 `mwv207` + `winsys/mwv207/drm` + 内核 KMD `mwv207.ko`
-- 源码：`src/oh-mesa/User_source_code/mesa-24.1.2/src/gallium/{drivers,winsys}/mwv207`
+- 源码：`src/mwv207-umd/{drivers,winsys}/mwv207`（适配代码唯一位置；上游 mesa 参考树在 `ref/oh-mesa/`）
 
 ## 文档索引
 

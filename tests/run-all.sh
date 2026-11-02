@@ -3,7 +3,7 @@
 # 用法: ./tests/run-all.sh   (仓库内任意位置调用均可, 路径相对脚本自身)
 set -e
 W="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
-D=$W/src/mesa/build-mwv207
+D=$W/ref/mesa-22.3.7/build-mwv207
 export LIBGL_DRIVERS_PATH=$D/src/gallium/targets/dri
 export MESA_LOADER_DRIVER_OVERRIDE=mwv207
 
@@ -11,20 +11,20 @@ echo "===== 1/4 KMD ioctl ABI ====="
 /tmp/gltest-mwv207 2>/dev/null || gcc -O2 -I/usr/include/libdrm -o /tmp/gltest-mwv207 $W/tests/gltest-mwv207.c -ldrm && /tmp/gltest-mwv207
 
 echo "===== 2/4 EGL/GBM surfaceless ====="
-gcc -O2 -I/usr/include/libdrm -I$W/src/mesa/include -I$W/src/mesa/src -I$W/src/mesa/src/gbm/main \
+gcc -O2 -I/usr/include/libdrm -I$W/ref/mesa-22.3.7/include -I$W/ref/mesa-22.3.7/src -I$W/ref/mesa-22.3.7/src/gbm/main \
     -o /tmp/egl-smoke $W/tests/egl-smoke.c \
     -L$D/src/egl -lEGL -L$D/src/gbm -lgbm -L$D/src/mapi/es2api -lGLESv2 \
     -Wl,-rpath,$D/src/egl -Wl,-rpath,$D/src/gbm -Wl,-rpath,$D/src/mapi/es2api
 /tmp/egl-smoke
 
 echo "===== 3/4 FBO 硬件渲染 ====="
-gcc -O2 -I/usr/include/libdrm -I$W/src/mesa/include -o /tmp/fbo-test $W/tests/fbo-test.c \
+gcc -O2 -I/usr/include/libdrm -I$W/ref/mesa-22.3.7/include -o /tmp/fbo-test $W/tests/fbo-test.c \
     -L$D/src/egl -lEGL -L$D/src/mapi/es2api -lGLESv2 \
     -Wl,-rpath,$D/src/egl -Wl,-rpath,$D/src/mapi/es2api
 EGL_PLATFORM=surfaceless /tmp/fbo-test
 
 echo "===== 4/4 完整硬件渲染（shader+draw+readback） ====="
-gcc -O2 -I/usr/include/libdrm -I$W/src/mesa/include -I$W/src/mesa/src -I$W/src/mesa/src/gbm/main \
+gcc -O2 -I/usr/include/libdrm -I$W/ref/mesa-22.3.7/include -I$W/ref/mesa-22.3.7/src -I$W/ref/mesa-22.3.7/src/gbm/main \
     -o /tmp/tri-test $W/tests/tri-test.c \
     -L$D/src/egl -lEGL -L$D/src/gbm -lgbm -L$D/src/mapi/es2api -lGLESv2 \
     -Wl,-rpath,$D/src/egl -Wl,-rpath,$D/src/gbm -Wl,-rpath,$D/src/mapi/es2api
@@ -36,9 +36,9 @@ echo "===== ALL TESTS DONE ====="
 # ===== 应用兼容性追加测试（本会话新增）=====
 compat_tests() {
     W="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
-    D=$W/src/mesa/build-mwv207
+    D=$W/ref/mesa-22.3.7/build-mwv207
     VA=$W/compat-env/va222-root/usr/lib/aarch64-linux-gnu
-    VADIR=$W/src/mesa/build-va/src/gallium/targets/va
+    VADIR=$W/ref/mesa-22.3.7/build-va/src/gallium/targets/va
     export LD_LIBRARY_PATH=$D/src/egl:$D/src/gbm:$D/src/mapi/shared-glapi
     export LIBGL_DRIVERS_PATH=$D/src/gallium/targets/dri
     export MESA_LOADER_DRIVER_OVERRIDE=mwv207

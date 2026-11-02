@@ -1,16 +1,17 @@
 # 分层约定（2026-11-02 起）：
 #   src/mwv207-umd/  —— 我们维护的驱动源码（唯一可改的地方, 纳入本仓库管理）
-#   src/oh-mesa/     —— 上游 oh-mesa 树, 只作**参考**, 不在其中修改/提交;
-#                       其中的 drivers/mwv207 与 winsys/mwv207 是指向上面那棵树的符号链接
-#   src/kernel-6.6/  —— 内核态驱动, 自成 git 仓
-#   src/kernel/      —— 上游 5.10 内核树, 参考
+#   src/kernel-6.6/  —— 我们维护的内核态驱动, 自成 git 仓
+#   ref/             —— 全部参考材料（上游 mesa / 上游内核 / 厂商包 / linux-source）
+#                       其中 ref/oh-mesa/.../drivers/mwv207 与 winsys/mwv207
+#                       是指向 src/mwv207-umd 的符号链接
 src/*
 !src/mwv207-umd/
 
 # 内嵌独立 git 仓的目录, 不能作为普通文件纳入
-src/kernel/
 src/kernel-6.6/
-src/oh-mesa/
+
+# 参考材料: 上游源码树、厂商闭源包、内核源码压缩包（体积大, 不入库）
+ref/
 
 # 二进制载荷 — 构建产物(src/mwv207-umd + 上游 mesa 构建得到);
 # 含 >50MB 大文件不适合 git 管理; 部署用 switch-mwv207.sh 从载荷安装

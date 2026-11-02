@@ -23,11 +23,11 @@ SRC_DIRS = [
     # 2026-11-02 起 UMD 适配代码已迁出 oh-mesa，独立存放在这里（os.walk 默认不跟
     # 目录符号链接，所以必须显式登记，否则 basename 会 fallback 到别的树、误报行号越界）
     os.path.join(REPO, 'src', 'mwv207-umd'),
-    os.path.join(REPO, 'src', 'oh-mesa', 'User_source_code', 'mesa-24.1.2', 'src', 'gallium'),
-    os.path.join(REPO, 'src', 'kernel'),
+    os.path.join(REPO, 'ref', 'oh-mesa', 'User_source_code', 'mesa-24.1.2', 'src', 'gallium'),
+    os.path.join(REPO, 'ref', 'kernel-5.10'),
     # 社区 6.6 移植（我们的 K 修复已搬进这棵树）：文档里的 KMD 行号多以它为准
     os.path.join(REPO, 'src', 'kernel-6.6'),
-    os.path.join(REPO, 'src', 'mesa'),
+    os.path.join(REPO, 'ref', 'mesa-22.3.7'),
 ]
 # 厂商发布包内的 KMD 寄存器头（只读、外部数据，可能不存在）：存在时纳入校验，
 # 用于核对 REGISTERS-FIELDS.md / REGISTER-MAP.md 里的 `jmgpu_*.h:行号` 引用。
@@ -36,6 +36,7 @@ VENDOR_DIRS = [
     '/tmp/dpkg/gg/usr/src/mwv207-1.6.1-v25.u1',
     '/tmp/v180/usr/src/mwv207-1.8.0.uos',
     '/tmp/vendor-1.8.0/usr/src/mwv207-1.8.0.uos',
+    os.path.join(REPO, 'ref', 'vendor-1.8.0', 'usr', 'src', 'mwv207-1.8.0.uos'),
 ]
 for d in VENDOR_DIRS:
     if os.path.isdir(d):
