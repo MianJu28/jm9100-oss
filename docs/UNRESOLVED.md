@@ -46,6 +46,15 @@ dmesg 里 GPU 相关错误计数为 0。
 
 ## 1. UMD — 未修复缺陷
 
+### 1.0 已修（2026-11-03）：dual-source blend 编译期空视图解引用（火狐 GitHub 崩溃）
+
+- 现象：Firefox 打开 GitHub 后概率性 SIGSEGV（crash_address `0x48`，SEGV_MAPERR）。
+- 帧链：`get_rt_texture_coord` (`nir/mwv207_lower_dual.c:115`) ← `mwv207_lower` (`mwv207_lower.c:1690`) ← `mwv207_compile_shader` ← `mwv207_set_current_shader` ← `mwv207_update_shader` ← `_mesa_DrawElementsInstancedBaseVertexBaseInstance`。
+- 根因：① `mwv207_config_dual_blend()`（`mwv207_draw.c:1214`）把 RT blit 视图绑在 `num_sampler_views[FS]` 槽，但 `dsbi.sampler_index` 记的是 `num_samplers[FS]`（两计数不等，视图槽回缩后错位）；② `mwv207_lower_dual.c:115` 无条件解引用 `sampler_views[4][sampler_index]->texture`（`0x48` = `pipe_sampler_view::texture` 偏移）。
+- 修复：`cbufs[0]`/`create_sampler_view` 为 NULL 时关闭 is_dual；`sampler_index` 与 `bind_sampler_states` 槽统一为 `num_sampler_views[FS]`；`get_rt_texture_coord()` 判空并回退到 `fb_state` 渲染目标尺寸。
+- 回归：wrreplay VT/brush/triv 全 OK；query tests PASS=4；glxgears/GLES 3.2/2048MB 不变；Firefox GitHub 45s 静止加载崩溃 0（原崩溃概率性触发，需日常使用观察）。
+- 提交：`40d5d76`；补丁 `patches/0020-mwv207-dual-blend-null-view-fix.patch`（85 行，`fb9c9b1`）。
+
 ### 1.1 错误路径 / 健壮性（低风险，可直接改）
 
 | # | 位置 | 问题 | 当前证据 | 建议 |
