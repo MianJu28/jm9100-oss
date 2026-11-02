@@ -6,7 +6,8 @@
 """
 import json, os, re, collections
 
-ROOT = '/home/admin/jm9100-oss/docs/registers'
+HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.normpath(os.path.join(HERE, '..', 'registers'))
 db = json.load(open(os.path.join(ROOT, 'register-db.json'), encoding='utf-8'))
 regs = db['registers']
 join = db['driver_join']

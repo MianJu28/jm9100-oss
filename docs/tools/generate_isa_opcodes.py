@@ -17,9 +17,10 @@ import re
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, '..'))
 REPO = os.path.normpath(os.path.join(ROOT, '..'))
-VENDOR = '/tmp/dpkg/gg/usr/src/mwv207-1.6.1-v25.u1'
-DRV = os.path.join(REPO, 'src', 'oh-mesa', 'User_source_code', 'mesa-24.1.2',
-                   'src', 'gallium', 'drivers', 'mwv207')
+VENDOR = os.environ.get('MWV207_VENDOR_SRC') or next(
+    (d for d in sorted(glob.glob('/tmp/dpkg/gg/usr/src/mwv207-*'))
+     if os.path.isdir(d)), '/tmp/dpkg/gg/usr/src/mwv207-1.6.1-v25.u1')
+DRV = os.path.join(REPO, 'src', 'mwv207-umd', 'drivers', 'mwv207')
 
 if not os.path.isdir(VENDOR):
     raise SystemExit(f'找不到厂商头文件目录：{VENDOR}（需要先解包 mwv207-dkms）')

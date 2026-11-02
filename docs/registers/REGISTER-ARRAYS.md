@@ -16,17 +16,17 @@
 | 键 | 出现次数 | 位置 |
 |---|---:|---|
 | `<STALL>` | 8 | include/mwv207_cmd.h, mwv207_cmd.c, mwv207_compute.c, mwv207_draw.c:114,167,184,180,281,820 |
-| `<computed:(0x5240 + (ctx->info.pixel_record[i] - 1))>` | 1 | mwv207_draw.c:963 |
-| `<computed:(0x5240 + (render_num - 1))>` | 1 | mwv207_draw.c:959 |
+| `<computed:(0x5240 + (ctx->info.pixel_record[i] - 1))>` | 1 | mwv207_draw.c:966 |
+| `<computed:(0x5240 + (render_num - 1))>` | 1 | mwv207_draw.c:962 |
 | `<computed:base>` | 2 | mwv207_vertex.c:442,561 |
 | `<computed:reg>` | 6 | include/mwv207_cmd.h, mwv207_cmd.c:231,250,92,98,104,112 |
-| `<computed:sampler_regs[config_id].sampler_anisval + index>` | 2 | mwv207_sampler.c:575,595 |
-| `<computed:sampler_regs[config_id].sampler_ctrl0 + index>` | 2 | mwv207_sampler.c:567,587 |
-| `<computed:sampler_regs[config_id].sampler_ctrl1 + index>` | 2 | mwv207_sampler.c:569,589 |
-| `<computed:sampler_regs[config_id].sampler_lod_bias + index>` | 2 | mwv207_sampler.c:573,593 |
-| `<computed:sampler_regs[config_id].sampler_lod_config + index>` | 2 | mwv207_sampler.c:571,591 |
-| `<computed:sampler_regs[config_id].tex_command>` | 2 | mwv207_sampler.c:616,621 |
-| `<computed:sampler_regs[config_id].tex_control + index>` | 2 | mwv207_sampler.c:580,600 |
+| `<computed:sampler_regs[config_id].sampler_anisval + index>` | 2 | mwv207_sampler.c:644,664 |
+| `<computed:sampler_regs[config_id].sampler_ctrl0 + index>` | 2 | mwv207_sampler.c:636,656 |
+| `<computed:sampler_regs[config_id].sampler_ctrl1 + index>` | 2 | mwv207_sampler.c:638,658 |
+| `<computed:sampler_regs[config_id].sampler_lod_bias + index>` | 2 | mwv207_sampler.c:642,662 |
+| `<computed:sampler_regs[config_id].sampler_lod_config + index>` | 2 | mwv207_sampler.c:640,660 |
+| `<computed:sampler_regs[config_id].tex_command>` | 2 | mwv207_sampler.c:685,690 |
+| `<computed:sampler_regs[config_id].tex_control + index>` | 2 | mwv207_sampler.c:649,669 |
 
 ## 1. PE 渲染目标寄存器文件（8 个 RT 槽）
 

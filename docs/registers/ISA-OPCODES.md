@@ -30,20 +30,20 @@
 
 | 值 | 厂商名 | 驱动反汇编（`0x7f + n`）| 驱动是否实现 |
 |---:|---|---|---|
-| `0x01` | `EMIT` | `0x7f + 0x01` = "EMIT"（`mwv207_disasm.c:1176`）| ✅ |
-| `0x02` | `RESTART` | `0x7f + 0x02` = "RESTART"（`mwv207_disasm.c:1177`）| ✅ |
-| `0x03` | `FLUSH` | `0x7f + 0x03` = "FLUSH"（`mwv207_disasm.c:1180`）| ✅ |
-| `0x04` | `LODQ` | `0x7f + 0x04` = "LODQ"（`mwv207_disasm.c:1184`）| ✅ |
-| `0x0B` | `BIT_FINDLSB` | `0x7f + 0x0B` = "BIT_FINDLSB"（`mwv207_disasm.c:1181`）| ✅ |
-| `0x0C` | `BIT_FINDMSB` | `0x7f + 0x0C` = "BIT_FINDMSB"（`mwv207_disasm.c:1182`）| ✅ |
-| `0x0D` | `TEXLD_FETCH_MS` | `0x7f + 0x0D` = "TEXLD_FETCH_MS_S"（`mwv207_disasm.c:1185`）| ✅ |
-| `0x0D` | `TEXLD_FETCH_MS_S` | `0x7f + 0x0D` = "TEXLD_FETCH_MS_S"（`mwv207_disasm.c:1185`）| ✅ |
-| `0x0E` | `TEXLD_FETCH_MS_U` | `0x7f + 0x0E` = "TEXLD_FETCH_MS_U"（`mwv207_disasm.c:1186`）| ✅ |
-| `0x0F` | `HALFMIX` | `0x7f + 0x0F` = "HALFMIX"（`mwv207_disasm.c:1178`）| ✅ |
-| `0x10` | `LDEXP` | `0x7f + 0x10` = "LDEXP"（`mwv207_disasm.c:1179`）| ✅ |
+| `0x01` | `EMIT` | `0x7f + 0x01` = "EMIT"（`mwv207_disasm.c:1181`）| ✅ |
+| `0x02` | `RESTART` | `0x7f + 0x02` = "RESTART"（`mwv207_disasm.c:1182`）| ✅ |
+| `0x03` | `FLUSH` | `0x7f + 0x03` = "FLUSH"（`mwv207_disasm.c:1185`）| ✅ |
+| `0x04` | `LODQ` | `0x7f + 0x04` = "LODQ"（`mwv207_disasm.c:1189`）| ✅ |
+| `0x0B` | `BIT_FINDLSB` | `0x7f + 0x0B` = "BIT_FINDLSB"（`mwv207_disasm.c:1186`）| ✅ |
+| `0x0C` | `BIT_FINDMSB` | `0x7f + 0x0C` = "BIT_FINDMSB"（`mwv207_disasm.c:1187`）| ✅ |
+| `0x0D` | `TEXLD_FETCH_MS` | `0x7f + 0x0D` = "TEXLD_FETCH_MS_S"（`mwv207_disasm.c:1190`）| ✅ |
+| `0x0D` | `TEXLD_FETCH_MS_S` | `0x7f + 0x0D` = "TEXLD_FETCH_MS_S"（`mwv207_disasm.c:1190`）| ✅ |
+| `0x0E` | `TEXLD_FETCH_MS_U` | `0x7f + 0x0E` = "TEXLD_FETCH_MS_U"（`mwv207_disasm.c:1191`）| ✅ |
+| `0x0F` | `HALFMIX` | `0x7f + 0x0F` = "HALFMIX"（`mwv207_disasm.c:1183`）| ✅ |
+| `0x10` | `LDEXP` | `0x7f + 0x10` = "LDEXP"（`mwv207_disasm.c:1184`）| ✅ |
 | `0x11` | `WAIT_GROUP_EVENT` | — | ❌ 未实现 |
 | `0x12` | `TD_OP` | — | ❌ 未实现 |
-| `0x13` | `MOVBIX` | `0x7f + 0x13` = "MOVBIX"（`mwv207_disasm.c:1187`）| ✅ |
+| `0x13` | `MOVBIX` | `0x7f + 0x13` = "MOVBIX"（`mwv207_disasm.c:1192`）| ✅ |
 | `0x14` | `TEX_INVALIDATE` | — | ❌ 未实现 |
 | `0x15` | `PRE_NORM` | — | ❌ 未实现 |
 
@@ -117,8 +117,8 @@
 |---|---:|---|
 | `nir/mwv207_emit.c:472` | `0x4` | `LODQ` |
 | `nir/mwv207_emit.c:476` | `0xE` | `TEXLD_FETCH_MS_U` |
-| `nir/mwv207_emit.c:1603` | `0x1` | `EMIT` |
-| `nir/mwv207_emit.c:1622` | `0x2` | `RESTART` |
+| `nir/mwv207_emit.c:1608` | `0x1` | `EMIT` |
+| `nir/mwv207_emit.c:1627` | `0x2` | `RESTART` |
 
 ## 4. 缺口
 

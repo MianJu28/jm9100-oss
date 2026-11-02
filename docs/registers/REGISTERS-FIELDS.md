@@ -960,8 +960,8 @@
 
 | 位置 | 宏 | 值表达式 |
 |---|---|---|
-| `mwv207_draw.c:1007` | `MWV207_EMIT` | `ra_control \|             (ALIGN_BIT((uint32_t) (DISABLE), 0x2) & (0x4)) \|             (ALIGN_BIT((uint32_t) (true), 0x1A) & (0x4000000)) \|             (ALIGN_BIT((uint32_t) (true), 0x18) & (0x1000000))` |
-| `mwv207_draw.c:1018` | `MWV207_EMIT` | `ra_control \|             (ALIGN_BIT(0x1, 0x1E) & (0xC0000000)) \|             (ALIGN_BIT((uint32_t) (DISABLE), 0x1C) & (0x30000000)) \|             (ALIGN_BIT((uint32_t) (use_w), 0x1A) & (0x4000000)) \|             (ALIGN_BIT((uint32_t) (fs->useFragCoord), 0x18) & (0x1000000))` |
+| `mwv207_draw.c:1010` | `MWV207_EMIT` | `ra_control \|             (ALIGN_BIT((uint32_t) (DISABLE), 0x2) & (0x4)) \|             (ALIGN_BIT((uint32_t) (true), 0x1A) & (0x4000000)) \|             (ALIGN_BIT((uint32_t) (true), 0x18) & (0x1000000))` |
+| `mwv207_draw.c:1029` | `MWV207_EMIT` | `ra_control \|             (ALIGN_BIT(0x1, 0x1E) & (0xC0000000)) \|             (ALIGN_BIT((uint32_t) (DISABLE), 0x1C) & (0x30000000)) \|             (ALIGN_BIT((uint32_t) (use_w), 0x1A) & (0x4000000)) \|             (ALIGN_BIT((uint32_t) (fs ? fs->useFragCoord : false), 0x18) & (0x1000000))` |
 
 ## `0x383` — `MWV207REG_RA_MEDIUMP_MASK`
 
@@ -1226,7 +1226,7 @@
 | 位置 | 宏 | 值表达式 |
 |---|---|---|
 | `mwv207_draw.c:630` | `MWV207_EMIT` | `((ALIGN_BIT((uint32_t) (coverage_invert), 0x10) & (0x10000)) \| (~(0x10000 \| 0x80000))) &       ((ALIGN_BIT((uint32_t) (sample_mask), 0x14) & (0x1F00000)) \| (~(0x1F00000 \| 0x8000000))) &       ((ALIGN_BIT((uint32_t) (coverage_enable), 0x1C) & (0x10000000)) \| (~(0x10000000 \| 0x80000000)))` |
-| `mwv207_draw.c:968` | `MWV207_EMIT` | `((ALIGN_BIT((uint32_t) (ctx->blend_state->blend_state.alpha_to_coverage), 0xC) & (0x1000)) \| (~(0x1000 \| 0x8000)))` |
+| `mwv207_draw.c:971` | `MWV207_EMIT` | `((ALIGN_BIT((uint32_t) (ctx->blend_state->blend_state.alpha_to_coverage), 0xC) & (0x1000)) \| (~(0x1000 \| 0x8000)))` |
 
 ## `0x416` — `MWV207REG_PS_SAMPLER_BASE`
 
@@ -1623,7 +1623,7 @@
 | 位置 | 宏 | 值表达式 |
 |---|---|---|
 | `mwv207_draw.c:655` | `MWV207_EMIT` | `ctx->zsa->alpha_reference` |
-| `mwv207_draw.c:1032` | `MWV207_EMIT` | `ctx->stencil_ref.stencil_back_reference[ctx->rast_state->base.front_ccw]` |
+| `mwv207_draw.c:1052` | `MWV207_EMIT` | `ctx->stencil_ref.stencil_back_reference[0]` |
 
 ## `0x529` — `MWV207REG_PE_CONFIG`
 
@@ -1763,7 +1763,7 @@
 
 | 位置 | 宏 | 值表达式 |
 |---|---|---|
-| `mwv207_draw.c:1035` | `MWV207_EMIT` | `ctx->zsa->stencil_back_config[ctx->rast_state->base.front_ccw]` |
+| `mwv207_draw.c:1055` | `MWV207_EMIT` | `ctx->zsa->stencil_back_config[ctx->rast_state->base.front_ccw]` |
 
 ## `0x52f` — `MWV207REG_PE_CONFIG_EX`
 
@@ -2003,7 +2003,7 @@
 
 | 位置 | 宏 | 值表达式 |
 |---|---|---|
-| `mwv207_draw.c:907` | `MWV207_EMIT` | `draw_count++` |
+| `mwv207_draw.c:909` | `MWV207_EMIT` | `draw_count++` |
 
 ## `0xe28` — `MWV207REG_COLOR_SLICE`
 
@@ -2122,12 +2122,12 @@
 
 | 位置 | 宏 | 值表达式 |
 |---|---|---|
-| `mwv207_blit.c:248` | `MWV207_EMIT` | `config` |
-| `mwv207_blit.c:407` | `MWV207_EMIT` | `levelInfo->config` |
-| `mwv207_blit.c:499` | `MWV207_EMIT` | `(ALIGN_BIT((uint32_t) (src_level->stride), 0x0) & (0x1FFFFF)) \|          (ALIGN_BIT((uint32_t) (src_blit_desc.format), 0x15) & (0x7E00000)) \|          (ALIGN_BIT((uint32_t) (src_msaa_mode), 0x1B) & (0x18000000))` |
-| `mwv207_blit.c:510` | `MWV207_EMIT` | `(ALIGN_BIT((uint32_t) (src_level->stride), 0x0) & (0x1FFFFF)) \|          (ALIGN_BIT((uint32_t) (src_blit_desc.format), 0x15) & (0x7E00000)) \|          (ALIGN_BIT((uint32_t) ((src->mode == MWV207_SUPERTILED)), 0x1D) & (0x20000000)) \|          (ALIGN_BIT((uint32_t) ((src->mode == MWV207_SUPERTILED)), 0x1E) & (0x40000000))` |
-| `mwv207_blit.c:519` | `MWV207_EMIT` | `(ALIGN_BIT((uint32_t) (src_level->stride), 0x0) & (0x1FFFFF)) \|          (ALIGN_BIT((uint32_t) (src_blit_desc.format), 0x15) & (0x7E00000)) \|          (ALIGN_BIT((uint32_t) (src_msaa_mode), 0x1B) & (0x18000000)) \|          (ALIGN_BIT((uint32_t) ((src->mode == MWV207_SUPERTILED)), 0x1D) & (0x20000000)) \|          (ALIGN_BIT((uint32_t) ((src->mode == MWV207_SUPERTILED)), 0x1E) & (0x40000000))` |
-| `mwv207_blit.c:651` | `MWV207_EMIT` | `src_level->config` |
+| `mwv207_blit.c:249` | `MWV207_EMIT` | `config` |
+| `mwv207_blit.c:408` | `MWV207_EMIT` | `levelInfo->config` |
+| `mwv207_blit.c:500` | `MWV207_EMIT` | `(ALIGN_BIT((uint32_t) (src_level->stride), 0x0) & (0x1FFFFF)) \|          (ALIGN_BIT((uint32_t) (src_blit_desc.format), 0x15) & (0x7E00000)) \|          (ALIGN_BIT((uint32_t) (src_msaa_mode), 0x1B) & (0x18000000))` |
+| `mwv207_blit.c:511` | `MWV207_EMIT` | `(ALIGN_BIT((uint32_t) (src_level->stride), 0x0) & (0x1FFFFF)) \|          (ALIGN_BIT((uint32_t) (src_blit_desc.format), 0x15) & (0x7E00000)) \|          (ALIGN_BIT((uint32_t) ((src->mode == MWV207_SUPERTILED)), 0x1D) & (0x20000000)) \|          (ALIGN_BIT((uint32_t) ((src->mode == MWV207_SUPERTILED)), 0x1E) & (0x40000000))` |
+| `mwv207_blit.c:520` | `MWV207_EMIT` | `(ALIGN_BIT((uint32_t) (src_level->stride), 0x0) & (0x1FFFFF)) \|          (ALIGN_BIT((uint32_t) (src_blit_desc.format), 0x15) & (0x7E00000)) \|          (ALIGN_BIT((uint32_t) (src_msaa_mode), 0x1B) & (0x18000000)) \|          (ALIGN_BIT((uint32_t) ((src->mode == MWV207_SUPERTILED)), 0x1D) & (0x20000000)) \|          (ALIGN_BIT((uint32_t) ((src->mode == MWV207_SUPERTILED)), 0x1E) & (0x40000000))` |
+| `mwv207_blit.c:652` | `MWV207_EMIT` | `src_level->config` |
 
 ## `0x5003` — `MWV207REG_BLT_SRC_CONFIG_EX`
 
@@ -2160,12 +2160,12 @@
 
 | 位置 | 宏 | 值表达式 |
 |---|---|---|
-| `mwv207_blit.c:249` | `MWV207_EMIT` | `src_configex` |
-| `mwv207_blit.c:408` | `MWV207_EMIT` | `src_configex \|       (ALIGN_BIT((uint32_t) (fast_clear), 0x0) & (0x1))` |
-| `mwv207_blit.c:503` | `MWV207_EMIT` | `(ALIGN_BIT((uint32_t) ((util_format_get_blocksize(src->base.format) == 8)), 0x13) & (0x80000)) \|          (ALIGN_BIT((uint32_t) (src_blit_desc.srgb), 0x8) & (0x100)) \|          (ALIGN_BIT((uint32_t) ((CACHE_MODE == 0x1)), 0x11) & (0x20000))` |
-| `mwv207_blit.c:515` | `MWV207_EMIT` | `src_configex \|          (ALIGN_BIT((uint32_t) (src_blit_desc.srgb), 0x8) & (0x100))` |
-| `mwv207_blit.c:525` | `MWV207_EMIT` | `src_configex \|          (ALIGN_BIT((uint32_t) (src_blit_desc.srgb), 0x8) & (0x100))` |
-| `mwv207_blit.c:652` | `MWV207_EMIT` | `src_configex` |
+| `mwv207_blit.c:250` | `MWV207_EMIT` | `src_configex` |
+| `mwv207_blit.c:409` | `MWV207_EMIT` | `src_configex \|       (ALIGN_BIT((uint32_t) (fast_clear), 0x0) & (0x1))` |
+| `mwv207_blit.c:504` | `MWV207_EMIT` | `(ALIGN_BIT((uint32_t) ((util_format_get_blocksize(src->base.format) == 8)), 0x13) & (0x80000)) \|          (ALIGN_BIT((uint32_t) (src_blit_desc.srgb), 0x8) & (0x100)) \|          (ALIGN_BIT((uint32_t) ((CACHE_MODE == 0x1)), 0x11) & (0x20000))` |
+| `mwv207_blit.c:516` | `MWV207_EMIT` | `src_configex \|          (ALIGN_BIT((uint32_t) (src_blit_desc.srgb), 0x8) & (0x100))` |
+| `mwv207_blit.c:526` | `MWV207_EMIT` | `src_configex \|          (ALIGN_BIT((uint32_t) (src_blit_desc.srgb), 0x8) & (0x100))` |
+| `mwv207_blit.c:653` | `MWV207_EMIT` | `src_configex` |
 
 ## `0x5004` — `MWV207REG_BLT_SRC_TILE_STATUS_ADDRESS`
 
@@ -2181,8 +2181,8 @@
 
 | 位置 | 宏 | 值表达式 |
 |---|---|---|
-| `mwv207_blit.c:169` | `MWV207_EMIT` | `0` |
-| `mwv207_blit.c:649` | `MWV207_EMIT` | `0` |
+| `mwv207_blit.c:170` | `MWV207_EMIT` | `0` |
+| `mwv207_blit.c:650` | `MWV207_EMIT` | `0` |
 
 ## `0x5005` — `MWV207REG_BLT_SRC_ORIGIN`
 
@@ -2199,8 +2199,8 @@
 
 | 位置 | 宏 | 值表达式 |
 |---|---|---|
-| `mwv207_blit.c:127` | `MWV207_EMIT` | `(ALIGN_BIT((uint32_t) (src_startx), 0x0) & (0xFFFF)) \|                (ALIGN_BIT((uint32_t) (src_starty), 0x10) & (0xFFFF0000))` |
-| `mwv207_blit.c:284` | `MWV207_EMIT` | `(ALIGN_BIT((uint32_t) (0), 0x0) & (0xFFFF)) \|          (ALIGN_BIT((uint32_t) (0), 0x10) & (0xFFFF0000))` |
+| `mwv207_blit.c:128` | `MWV207_EMIT` | `(ALIGN_BIT((uint32_t) (src_startx), 0x0) & (0xFFFF)) \|                (ALIGN_BIT((uint32_t) (src_starty), 0x10) & (0xFFFF0000))` |
+| `mwv207_blit.c:285` | `MWV207_EMIT` | `(ALIGN_BIT((uint32_t) (0), 0x0) & (0xFFFF)) \|          (ALIGN_BIT((uint32_t) (0), 0x10) & (0xFFFF0000))` |
 
 ## `0x5006` — `MWV207REG_BLT_DEST_ADDRESS`
 
@@ -2216,7 +2216,7 @@
 
 | 位置 | 宏 | 值表达式 |
 |---|---|---|
-| `mwv207_blit.c:654` | `MWV207_EMIT` | `0` |
+| `mwv207_blit.c:655` | `MWV207_EMIT` | `0` |
 
 ## `0x5008` — `MWV207REG_BLT_DEST_TILE_STATUS_ADDRESS`
 
@@ -2232,8 +2232,8 @@
 
 | 位置 | 宏 | 值表达式 |
 |---|---|---|
-| `mwv207_blit.c:170` | `MWV207_EMIT` | `0` |
-| `mwv207_blit.c:655` | `MWV207_EMIT` | `0` |
+| `mwv207_blit.c:171` | `MWV207_EMIT` | `0` |
+| `mwv207_blit.c:656` | `MWV207_EMIT` | `0` |
 
 ## `0x5009` — `MWV207REG_BLT_DEST_CONFIG`
 
@@ -2254,10 +2254,10 @@
 
 | 位置 | 宏 | 值表达式 |
 |---|---|---|
-| `mwv207_blit.c:253` | `MWV207_EMIT` | `config` |
-| `mwv207_blit.c:399` | `MWV207_EMIT` | `levelInfo->config` |
-| `mwv207_blit.c:550` | `MWV207_EMIT` | `(ALIGN_BIT((uint32_t) (dst_level->stride), 0x0) & (0x1FFFFF)) \|       (ALIGN_BIT((uint32_t) (dst_blit_desc.format), 0x15) & (0x7E00000)) \|       (ALIGN_BIT((uint32_t) (dst_msaa_mode), 0x1B) & (0x18000000)) \|       (ALIGN_BIT((uint32_t) ((dst->mode == MWV207_SUPERTILED)), 0x1D) & (0x20000000)) \|       (ALIGN_BIT((uint32_t) ((dst->mode == MWV207_SUPERTILED)), 0x1E) & (0x40000000))` |
-| `mwv207_blit.c:656` | `MWV207_EMIT` | `src_level->config` |
+| `mwv207_blit.c:254` | `MWV207_EMIT` | `config` |
+| `mwv207_blit.c:400` | `MWV207_EMIT` | `levelInfo->config` |
+| `mwv207_blit.c:551` | `MWV207_EMIT` | `(ALIGN_BIT((uint32_t) (dst_level->stride), 0x0) & (0x1FFFFF)) \|       (ALIGN_BIT((uint32_t) (dst_blit_desc.format), 0x15) & (0x7E00000)) \|       (ALIGN_BIT((uint32_t) (dst_msaa_mode), 0x1B) & (0x18000000)) \|       (ALIGN_BIT((uint32_t) ((dst->mode == MWV207_SUPERTILED)), 0x1D) & (0x20000000)) \|       (ALIGN_BIT((uint32_t) ((dst->mode == MWV207_SUPERTILED)), 0x1E) & (0x40000000))` |
+| `mwv207_blit.c:657` | `MWV207_EMIT` | `src_level->config` |
 
 ## `0x500a` — `MWV207REG_BLT_DEST_CONFIG_EX`
 
@@ -2295,10 +2295,10 @@
 
 | 位置 | 宏 | 值表达式 |
 |---|---|---|
-| `mwv207_blit.c:254` | `MWV207_EMIT` | `dst_configex` |
-| `mwv207_blit.c:400` | `MWV207_EMIT` | `dst_configex \|       (ALIGN_BIT((uint32_t) (fast_clear), 0x0) & (0x1)) \|       (ALIGN_BIT((uint32_t) (dst->sample_info.is_msaa ? ENABLE : DISABLE), 0x1E) & (0x40000000))` |
-| `mwv207_blit.c:556` | `MWV207_EMIT` | `dst_configex \|       (ALIGN_BIT((uint32_t) (dst_blit_desc.srgb), 0x8) & (0x100)) \|       (ALIGN_BIT(0x1, 0x16) & (0x400000)) \|       (ALIGN_BIT((uint32_t) (info.flip_y), 0x13) & (0x80000))` |
-| `mwv207_blit.c:657` | `MWV207_EMIT` | `src_level->dst_configex` |
+| `mwv207_blit.c:255` | `MWV207_EMIT` | `dst_configex` |
+| `mwv207_blit.c:401` | `MWV207_EMIT` | `dst_configex \|       (ALIGN_BIT((uint32_t) (fast_clear), 0x0) & (0x1)) \|       (ALIGN_BIT((uint32_t) (dst->sample_info.is_msaa ? ENABLE : DISABLE), 0x1E) & (0x40000000))` |
+| `mwv207_blit.c:557` | `MWV207_EMIT` | `dst_configex \|       (ALIGN_BIT((uint32_t) (dst_blit_desc.srgb), 0x8) & (0x100)) \|       (ALIGN_BIT(0x1, 0x16) & (0x400000)) \|       (ALIGN_BIT((uint32_t) (info.flip_y), 0x13) & (0x80000))` |
+| `mwv207_blit.c:658` | `MWV207_EMIT` | `src_level->dst_configex` |
 
 ## `0x500b` — `MWV207REG_BLT_DEST_ORIGIN`
 
@@ -2315,8 +2315,8 @@
 
 | 位置 | 宏 | 值表达式 |
 |---|---|---|
-| `mwv207_blit.c:131` | `MWV207_EMIT` | `(ALIGN_BIT((uint32_t) (dst_startx), 0x0) & (0xFFFF)) \|                (ALIGN_BIT((uint32_t) (dst_starty), 0x10) & (0xFFFF0000))` |
-| `mwv207_blit.c:288` | `MWV207_EMIT` | `(ALIGN_BIT((uint32_t) (0), 0x0) & (0xFFFF)) \|          (ALIGN_BIT((uint32_t) (0), 0x10) & (0xFFFF0000))` |
+| `mwv207_blit.c:132` | `MWV207_EMIT` | `(ALIGN_BIT((uint32_t) (dst_startx), 0x0) & (0xFFFF)) \|                (ALIGN_BIT((uint32_t) (dst_starty), 0x10) & (0xFFFF0000))` |
+| `mwv207_blit.c:289` | `MWV207_EMIT` | `(ALIGN_BIT((uint32_t) (0), 0x0) & (0xFFFF)) \|          (ALIGN_BIT((uint32_t) (0), 0x10) & (0xFFFF0000))` |
 
 ## `0x500c` — `MWV207REG_BLT_WINDOW_SIZE`
 
@@ -2333,9 +2333,9 @@
 
 | 位置 | 宏 | 值表达式 |
 |---|---|---|
-| `mwv207_blit.c:135` | `MWV207_EMIT` | `(ALIGN_BIT((uint32_t) (task_width), 0x0) & (0xFFFF)) \|                (ALIGN_BIT((uint32_t) (task_height), 0x10) & (0xFFFF0000))` |
-| `mwv207_blit.c:292` | `MWV207_EMIT` | `(ALIGN_BIT((uint32_t) (extra_size / sizeof(uint32_t)), 0x0) & (0xFFFF)) \|          (ALIGN_BIT((uint32_t) (1), 0x10) & (0xFFFF0000))` |
-| `mwv207_blit.c:662` | `MWV207_EMIT` | `(ALIGN_BIT((uint32_t) (src_level->width), 0x0) & (0xFFFF)) \|       (ALIGN_BIT((uint32_t) (src_level->height), 0x10) & (0xFFFF0000))` |
+| `mwv207_blit.c:136` | `MWV207_EMIT` | `(ALIGN_BIT((uint32_t) (task_width), 0x0) & (0xFFFF)) \|                (ALIGN_BIT((uint32_t) (task_height), 0x10) & (0xFFFF0000))` |
+| `mwv207_blit.c:293` | `MWV207_EMIT` | `(ALIGN_BIT((uint32_t) (extra_size / sizeof(uint32_t)), 0x0) & (0xFFFF)) \|          (ALIGN_BIT((uint32_t) (1), 0x10) & (0xFFFF0000))` |
+| `mwv207_blit.c:663` | `MWV207_EMIT` | `(ALIGN_BIT((uint32_t) (src_level->width), 0x0) & (0xFFFF)) \|       (ALIGN_BIT((uint32_t) (src_level->height), 0x10) & (0xFFFF0000))` |
 
 ## `0x500d` — `MWV207REG_BLT_SRC_CLEAR_VALUE`
 
@@ -2351,8 +2351,8 @@
 
 | 位置 | 宏 | 值表达式 |
 |---|---|---|
-| `mwv207_blit.c:434` | `MWV207_EMITS` | `2` |
-| `mwv207_blit.c:544` | `MWV207_EMIT` | `src->ts.clear_values[0]` |
+| `mwv207_blit.c:435` | `MWV207_EMITS` | `2` |
+| `mwv207_blit.c:545` | `MWV207_EMIT` | `src->ts.clear_values[0]` |
 
 ## `0x500f` — `MWV207REG_BLT_DST_CLEAR_VALUE`
 
@@ -2368,8 +2368,8 @@
 
 | 位置 | 宏 | 值表达式 |
 |---|---|---|
-| `mwv207_blit.c:433` | `MWV207_EMITS` | `2` |
-| `mwv207_blit.c:797` | `MWV207_EMITS` | `2` |
+| `mwv207_blit.c:434` | `MWV207_EMITS` | `2` |
+| `mwv207_blit.c:798` | `MWV207_EMITS` | `2` |
 
 ## `0x5011` — `MWV207REG_BLT_NEW_CLEAR_VALUE`
 
@@ -2385,8 +2385,8 @@
 
 | 位置 | 宏 | 值表达式 |
 |---|---|---|
-| `mwv207_blit.c:258` | `MWV207_EMITS` | `2` |
-| `mwv207_blit.c:425` | `MWV207_EMITS` | `2` |
+| `mwv207_blit.c:259` | `MWV207_EMITS` | `2` |
+| `mwv207_blit.c:426` | `MWV207_EMITS` | `2` |
 
 ## `0x5013` — `MWV207REG_BLT_CLEAR_MASK`
 
@@ -2402,8 +2402,8 @@
 
 | 位置 | 宏 | 值表达式 |
 |---|---|---|
-| `mwv207_blit.c:259` | `MWV207_EMIT` | `0xFFFFFFFF` |
-| `mwv207_blit.c:426` | `MWV207_EMITS` | `2` |
+| `mwv207_blit.c:260` | `MWV207_EMIT` | `0xFFFFFFFF` |
+| `mwv207_blit.c:427` | `MWV207_EMITS` | `2` |
 
 ## `0x5015` — `MWV207REG_BLT_COPY_SIZE`
 
@@ -2419,7 +2419,7 @@
 
 | 位置 | 宏 | 值表达式 |
 |---|---|---|
-| `mwv207_blit.c:180` | `MWV207_EMIT` | `(uint32_t)copy_size` |
+| `mwv207_blit.c:181` | `MWV207_EMIT` | `(uint32_t)copy_size` |
 
 ## `0x5016` — `MWV207REG_BLT_DITHER_LOW`
 
@@ -2442,8 +2442,8 @@
 
 | 位置 | 宏 | 值表达式 |
 |---|---|---|
-| `mwv207_blit.c:588` | `MWV207_EMIT` | `~0U` |
-| `mwv207_blit.c:640` | `MWV207_EMIT` | `~0U` |
+| `mwv207_blit.c:589` | `MWV207_EMIT` | `~0U` |
+| `mwv207_blit.c:641` | `MWV207_EMIT` | `~0U` |
 
 ## `0x5017` — `MWV207REG_BLT_DITHER_HIGH`
 
@@ -2466,8 +2466,8 @@
 
 | 位置 | 宏 | 值表达式 |
 |---|---|---|
-| `mwv207_blit.c:589` | `MWV207_EMIT` | `~0U` |
-| `mwv207_blit.c:641` | `MWV207_EMIT` | `~0U` |
+| `mwv207_blit.c:590` | `MWV207_EMIT` | `~0U` |
+| `mwv207_blit.c:642` | `MWV207_EMIT` | `~0U` |
 
 ## `0x5018` — `MWV207REG_BLT_EXECUTE`
 
@@ -2521,11 +2521,11 @@
 
 | 位置 | 宏 | 值表达式 |
 |---|---|---|
-| `mwv207_blit.c:256` | `MWV207_EMIT` | `blit_config` |
-| `mwv207_blit.c:397` | `MWV207_EMIT` | `levelInfo->blit_config` |
-| `mwv207_blit.c:496` | `MWV207_EMIT` | `blit_config` |
-| `mwv207_blit.c:638` | `MWV207_EMIT` | `blit_config` |
-| `mwv207_blit.c:795` | `MWV207_EMIT` | `general_config` |
+| `mwv207_blit.c:257` | `MWV207_EMIT` | `blit_config` |
+| `mwv207_blit.c:398` | `MWV207_EMIT` | `levelInfo->blit_config` |
+| `mwv207_blit.c:497` | `MWV207_EMIT` | `blit_config` |
+| `mwv207_blit.c:639` | `MWV207_EMIT` | `blit_config` |
+| `mwv207_blit.c:796` | `MWV207_EMIT` | `general_config` |
 
 ## `0x501a` — `MWV207REG_BLT_TILE_FILLER_COUNT`
 
@@ -2541,7 +2541,7 @@
 
 | 位置 | 宏 | 值表达式 |
 |---|---|---|
-| `mwv207_blit.c:817` | `MWV207_EMIT` | `tile_count` |
+| `mwv207_blit.c:818` | `MWV207_EMIT` | `tile_count` |
 
 ## `0x5027` — `MWV207REG_BLT_BLOCK_SIZE`
 
@@ -2558,8 +2558,8 @@
 
 | 位置 | 宏 | 值表达式 |
 |---|---|---|
-| `mwv207_blit.c:537` | `MWV207_EMIT` | `(ALIGN_BIT((uint32_t) (0x40), 0x0) & (0xFFFF)) \|       (ALIGN_BIT((uint32_t) (0x40), 0x10) & (0xFFFF0000))` |
-| `mwv207_blit.c:670` | `MWV207_EMIT` | `(ALIGN_BIT((uint32_t) (0x40), 0x0) & (0xFFFF)) \|       (ALIGN_BIT((uint32_t) (0x40), 0x10) & (0xFFFF0000))` |
+| `mwv207_blit.c:538` | `MWV207_EMIT` | `(ALIGN_BIT((uint32_t) (0x40), 0x0) & (0xFFFF)) \|       (ALIGN_BIT((uint32_t) (0x40), 0x10) & (0xFFFF0000))` |
+| `mwv207_blit.c:671` | `MWV207_EMIT` | `(ALIGN_BIT((uint32_t) (0x40), 0x0) & (0xFFFF)) \|       (ALIGN_BIT((uint32_t) (0x40), 0x10) & (0xFFFF0000))` |
 
 ## `0x5028` — `MWV207REG_BLT_TILE_SIZE`
 
@@ -2576,8 +2576,8 @@
 
 | 位置 | 宏 | 值表达式 |
 |---|---|---|
-| `mwv207_blit.c:533` | `MWV207_EMIT` | `(ALIGN_BIT((uint32_t) (4), 0x0) & (0xFFFF)) \|       (ALIGN_BIT((uint32_t) (4), 0x10) & (0xFFFF0000))` |
-| `mwv207_blit.c:666` | `MWV207_EMIT` | `(ALIGN_BIT((uint32_t) (4), 0x0) & (0xFFFF)) \|       (ALIGN_BIT((uint32_t) (4), 0x10) & (0xFFFF0000))` |
+| `mwv207_blit.c:534` | `MWV207_EMIT` | `(ALIGN_BIT((uint32_t) (4), 0x0) & (0xFFFF)) \|       (ALIGN_BIT((uint32_t) (4), 0x10) & (0xFFFF0000))` |
+| `mwv207_blit.c:667` | `MWV207_EMIT` | `(ALIGN_BIT((uint32_t) (4), 0x0) & (0xFFFF)) \|       (ALIGN_BIT((uint32_t) (4), 0x10) & (0xFFFF0000))` |
 
 ## `0x502b` — `MWV207REG_BLT_CACHE_FLUSH`
 
@@ -2614,7 +2614,7 @@
 
 | 位置 | 宏 | 值表达式 |
 |---|---|---|
-| `mwv207_blit.c:685` | `MWV207_EMIT` | `((ALIGN_BIT((uint32_t) (info.src_info.level_count), 0x0) & (0xF)) \| (~(0xF \| 0x10))) &       ((ALIGN_BIT((uint32_t) (1), 0x5) & (0x20)) \| (~(0x20 \| 0x40)))` |
+| `mwv207_blit.c:686` | `MWV207_EMIT` | `((ALIGN_BIT((uint32_t) (info.src_info.level_count), 0x0) & (0xF)) \| (~(0xF \| 0x10))) &       ((ALIGN_BIT((uint32_t) (1), 0x5) & (0x20)) \| (~(0x20 \| 0x40)))` |
 
 ## `0x502e` — `MWV207REG_BLT_GENERAL_CONTROL`
 
@@ -2656,8 +2656,8 @@
 
 | 位置 | 宏 | 值表达式 |
 |---|---|---|
-| `mwv207_blit.c:530` | `MWV207_EMIT` | `src_blit_desc.swizzle \|       (dst_blit_desc.swizzle << 0xC)` |
-| `mwv207_blit.c:659` | `MWV207_EMIT` | `src_blit_desc.swizzle \|       (dst_blit_desc.swizzle << 0xC)` |
+| `mwv207_blit.c:531` | `MWV207_EMIT` | `src_blit_desc.swizzle \|       (dst_blit_desc.swizzle << 0xC)` |
+| `mwv207_blit.c:660` | `MWV207_EMIT` | `src_blit_desc.swizzle \|       (dst_blit_desc.swizzle << 0xC)` |
 
 ## `0x50ce` — `MWV207REG_BLT_CLUSTER_CONTROL`
 
@@ -2673,12 +2673,12 @@
 
 | 位置 | 宏 | 值表达式 |
 |---|---|---|
-| `mwv207_blit.c:124` | `MWV207_EMIT` | `(ALIGN_BIT((uint32_t) ((1 << set_count)), 0x0) & (0xFF))` |
-| `mwv207_blit.c:151` | `MWV207_EMIT` | `(ALIGN_BIT((uint32_t) (used_cluster_mask), 0x0) & (0xFF))` |
-| `mwv207_blit.c:174` | `MWV207_EMIT` | `(ALIGN_BIT((uint32_t) ((1 << set_count)), 0x0) & (0xFF))` |
-| `mwv207_blit.c:191` | `MWV207_EMIT` | `(ALIGN_BIT((uint32_t) (ctx->ws->cluster_mask), 0x0) & (0xFF))` |
-| `mwv207_blit.c:811` | `MWV207_EMIT` | `(ALIGN_BIT((uint32_t) ((1 << set_count)), 0x0) & (0xFF))` |
-| `mwv207_blit.c:828` | `MWV207_EMIT` | `(ALIGN_BIT((uint32_t) (ctx->ws->cluster_mask), 0x0) & (0xFF))` |
+| `mwv207_blit.c:125` | `MWV207_EMIT` | `(ALIGN_BIT((uint32_t) ((1 << set_count)), 0x0) & (0xFF))` |
+| `mwv207_blit.c:152` | `MWV207_EMIT` | `(ALIGN_BIT((uint32_t) (used_cluster_mask), 0x0) & (0xFF))` |
+| `mwv207_blit.c:175` | `MWV207_EMIT` | `(ALIGN_BIT((uint32_t) ((1 << set_count)), 0x0) & (0xFF))` |
+| `mwv207_blit.c:192` | `MWV207_EMIT` | `(ALIGN_BIT((uint32_t) (ctx->ws->cluster_mask), 0x0) & (0xFF))` |
+| `mwv207_blit.c:812` | `MWV207_EMIT` | `(ALIGN_BIT((uint32_t) ((1 << set_count)), 0x0) & (0xFF))` |
+| `mwv207_blit.c:829` | `MWV207_EMIT` | `(ALIGN_BIT((uint32_t) (ctx->ws->cluster_mask), 0x0) & (0xFF))` |
 | `include/mwv207_cmd.h:129` | `MWV207_EMIT` | `\       (ALIGN_BIT((uint32_t) (ctx->ws->cluster_mask), 0x0) & (0xFF))` |
 | `include/mwv207_cmd.h:145` | `MWV207_EMIT` | `(ALIGN_BIT((uint32_t) (cluster_mask), 0x0) & (0xFF))` |
 
@@ -2697,7 +2697,7 @@
 
 | 位置 | 宏 | 值表达式 |
 |---|---|---|
-| `mwv207_blit.c:565` | `MWV207_EMIT` | `(ALIGN_BIT((uint32_t) (info.dst_box.y), 0x0) & (0xFFFF)) \|          (ALIGN_BIT((uint32_t) ((info.dst_box.y + info.dst_box.height)), 0x10) & (0xFFFF0000))` |
+| `mwv207_blit.c:566` | `MWV207_EMIT` | `(ALIGN_BIT((uint32_t) (info.dst_box.y), 0x0) & (0xFFFF)) \|          (ALIGN_BIT((uint32_t) ((info.dst_box.y + info.dst_box.height)), 0x10) & (0xFFFF0000))` |
 
 ## `0x5280` — `MWV207REG_TCS_START`
 
@@ -3118,7 +3118,7 @@
 
 | 位置 | 宏 | 值表达式 |
 |---|---|---|
-| `mwv207_sampler.c:608` | `MWV207_EMIT` | `(ALIGN_BIT((uint32_t) (ENABLE), 0x0) & (0x1))` |
+| `mwv207_sampler.c:677` | `MWV207_EMIT` | `(ALIGN_BIT((uint32_t) (ENABLE), 0x0) & (0x1))` |
 
 ## `0x5311` — `MWV207REG_TX_GPIPE_COMMAND`
 

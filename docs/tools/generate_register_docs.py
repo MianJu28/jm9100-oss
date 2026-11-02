@@ -3,8 +3,9 @@
 import json, re, os
 from collections import defaultdict, Counter
 
-BASE = "/home/admin/jm9100-oss/docs/registers"
-db = json.load(open(os.path.join(BASE, "register-db.json")))
+HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.normpath(os.path.join(HERE, '..', 'registers'))
+db = json.load(open(os.path.join(ROOT, "register-db.json")))
 regs, join = db["registers"], db["driver_join"]
 
 # Block = the part of the register name before the first underscore
@@ -113,7 +114,7 @@ w("要点：**位域含义未知，改动前必须以实测为准。**")
 w("")
 w("| 驱动号 | 应有地址(<<2) | 写入次数 | 使用位置 |")
 w("|---|---|---|---|")
-allusage = json.load(open(os.path.join(BASE, "command-registers.json")))
+allusage = json.load(open(os.path.join(ROOT, "command-registers.json")))
 for key, uses in sorted(allusage.items(), key=lambda kv: -len(kv[1])):
     m = re.match(r"^0x([0-9a-f]+)$", key)
     if not m:
@@ -125,7 +126,7 @@ for key, uses in sorted(allusage.items(), key=lambda kv: -len(kv[1])):
     w("| `%s` | `0x%05X` | %d | %s |" %
       (key, rid << 2, len(uses), ", ".join("%s:%d" % (k, v) for k, v in fl.most_common(3))))
 w("")
-open(os.path.join(BASE, "REGISTERS.md"), "w").write("\n".join(out) + "\n")
+open(os.path.join(ROOT, "REGISTERS.md"), "w").write("\n".join(out) + "\n")
 
 # ---- field detail ----
 out = []
@@ -163,7 +164,7 @@ for rid, key, name, r, uses in used_regs():
     if len(uses) > 20:
         w("| … | | 其余 %d 处见 `command-registers.json` |" % (len(uses) - 20))
     w("")
-open(os.path.join(BASE, "REGISTERS-FIELDS.md"), "w").write("\n".join(out) + "\n")
+open(os.path.join(ROOT, "REGISTERS-FIELDS.md"), "w").write("\n".join(out) + "\n")
 
 print("wrote REGISTERS.md and REGISTERS-FIELDS.md")
 print("mapped registers in detail doc:", len(used_regs()))

@@ -75365,15 +75365,15 @@
    "uses": [
     {
      "file": "mwv207_draw.c",
-     "line": 1007,
+     "line": 1010,
      "macro": "MWV207_EMIT",
      "value": "ra_control |\n            (ALIGN_BIT((uint32_t) (DISABLE), 0x2) & (0x4)) |\n            (ALIGN_BIT((uint32_t) (true), 0x1A) & (0x4000000)) |\n            (ALIGN_BIT((uint32_t) (true), 0x18) & (0x1000000))"
     },
     {
      "file": "mwv207_draw.c",
-     "line": 1018,
+     "line": 1029,
      "macro": "MWV207_EMIT",
-     "value": "ra_control |\n            (ALIGN_BIT(0x1, 0x1E) & (0xC0000000)) |\n            (ALIGN_BIT((uint32_t) (DISABLE), 0x1C) & (0x30000000)) |\n            (ALIGN_BIT((uint32_t) (use_w), 0x1A) & (0x4000000)) |\n            (ALIGN_BIT((uint32_t) (fs->useFragCoord), 0x18) & (0x1000000))"
+     "value": "ra_control |\n            (ALIGN_BIT(0x1, 0x1E) & (0xC0000000)) |\n            (ALIGN_BIT((uint32_t) (DISABLE), 0x1C) & (0x30000000)) |\n            (ALIGN_BIT((uint32_t) (use_w), 0x1A) & (0x4000000)) |\n            (ALIGN_BIT((uint32_t) (fs ? fs->useFragCoord : false), 0x18) & (0x1000000))"
     }
    ]
   },
@@ -75555,7 +75555,7 @@
     },
     {
      "file": "mwv207_draw.c",
-     "line": 968,
+     "line": 971,
      "macro": "MWV207_EMIT",
      "value": "((ALIGN_BIT((uint32_t) (ctx->blend_state->blend_state.alpha_to_coverage), 0xC) & (0x1000)) | (~(0x1000 | 0x8000)))"
     }
@@ -75917,37 +75917,37 @@
    "uses": [
     {
      "file": "mwv207_blit.c",
-     "line": 248,
+     "line": 249,
      "macro": "MWV207_EMIT",
      "value": "config"
     },
     {
      "file": "mwv207_blit.c",
-     "line": 407,
+     "line": 408,
      "macro": "MWV207_EMIT",
      "value": "levelInfo->config"
     },
     {
      "file": "mwv207_blit.c",
-     "line": 499,
+     "line": 500,
      "macro": "MWV207_EMIT",
      "value": "(ALIGN_BIT((uint32_t) (src_level->stride), 0x0) & (0x1FFFFF)) |\n         (ALIGN_BIT((uint32_t) (src_blit_desc.format), 0x15) & (0x7E00000)) |\n         (ALIGN_BIT((uint32_t) (src_msaa_mode), 0x1B) & (0x18000000))"
     },
     {
      "file": "mwv207_blit.c",
-     "line": 510,
+     "line": 511,
      "macro": "MWV207_EMIT",
      "value": "(ALIGN_BIT((uint32_t) (src_level->stride), 0x0) & (0x1FFFFF)) |\n         (ALIGN_BIT((uint32_t) (src_blit_desc.format), 0x15) & (0x7E00000)) |\n         (ALIGN_BIT((uint32_t) ((src->mode == MWV207_SUPERTILED)), 0x1D) & (0x20000000)) |\n         (ALIGN_BIT((uint32_t) ((src->mode == MWV207_SUPERTILED)), 0x1E) & (0x40000000))"
     },
     {
      "file": "mwv207_blit.c",
-     "line": 519,
+     "line": 520,
      "macro": "MWV207_EMIT",
      "value": "(ALIGN_BIT((uint32_t) (src_level->stride), 0x0) & (0x1FFFFF)) |\n         (ALIGN_BIT((uint32_t) (src_blit_desc.format), 0x15) & (0x7E00000)) |\n         (ALIGN_BIT((uint32_t) (src_msaa_mode), 0x1B) & (0x18000000)) |\n         (ALIGN_BIT((uint32_t) ((src->mode == MWV207_SUPERTILED)), 0x1D) & (0x20000000)) |\n         (ALIGN_BIT((uint32_t) ((src->mode == MWV207_SUPERTILED)), 0x1E) & (0x40000000))"
     },
     {
      "file": "mwv207_blit.c",
-     "line": 651,
+     "line": 652,
      "macro": "MWV207_EMIT",
      "value": "src_level->config"
     }
@@ -75961,37 +75961,37 @@
    "uses": [
     {
      "file": "mwv207_blit.c",
-     "line": 249,
+     "line": 250,
      "macro": "MWV207_EMIT",
      "value": "src_configex"
     },
     {
      "file": "mwv207_blit.c",
-     "line": 408,
+     "line": 409,
      "macro": "MWV207_EMIT",
      "value": "src_configex |\n      (ALIGN_BIT((uint32_t) (fast_clear), 0x0) & (0x1))"
     },
     {
      "file": "mwv207_blit.c",
-     "line": 503,
+     "line": 504,
      "macro": "MWV207_EMIT",
      "value": "(ALIGN_BIT((uint32_t) ((util_format_get_blocksize(src->base.format) == 8)), 0x13) & (0x80000)) |\n         (ALIGN_BIT((uint32_t) (src_blit_desc.srgb), 0x8) & (0x100)) |\n         (ALIGN_BIT((uint32_t) ((CACHE_MODE == 0x1)), 0x11) & (0x20000))"
     },
     {
      "file": "mwv207_blit.c",
-     "line": 515,
+     "line": 516,
      "macro": "MWV207_EMIT",
      "value": "src_configex |\n         (ALIGN_BIT((uint32_t) (src_blit_desc.srgb), 0x8) & (0x100))"
     },
     {
      "file": "mwv207_blit.c",
-     "line": 525,
+     "line": 526,
      "macro": "MWV207_EMIT",
      "value": "src_configex |\n         (ALIGN_BIT((uint32_t) (src_blit_desc.srgb), 0x8) & (0x100))"
     },
     {
      "file": "mwv207_blit.c",
-     "line": 652,
+     "line": 653,
      "macro": "MWV207_EMIT",
      "value": "src_configex"
     }
@@ -76005,13 +76005,13 @@
    "uses": [
     {
      "file": "mwv207_blit.c",
-     "line": 169,
+     "line": 170,
      "macro": "MWV207_EMIT",
      "value": "0"
     },
     {
      "file": "mwv207_blit.c",
-     "line": 649,
+     "line": 650,
      "macro": "MWV207_EMIT",
      "value": "0"
     }
@@ -76025,13 +76025,13 @@
    "uses": [
     {
      "file": "mwv207_blit.c",
-     "line": 127,
+     "line": 128,
      "macro": "MWV207_EMIT",
      "value": "(ALIGN_BIT((uint32_t) (src_startx), 0x0) & (0xFFFF)) |\n               (ALIGN_BIT((uint32_t) (src_starty), 0x10) & (0xFFFF0000))"
     },
     {
      "file": "mwv207_blit.c",
-     "line": 284,
+     "line": 285,
      "macro": "MWV207_EMIT",
      "value": "(ALIGN_BIT((uint32_t) (0), 0x0) & (0xFFFF)) |\n         (ALIGN_BIT((uint32_t) (0), 0x10) & (0xFFFF0000))"
     }
@@ -76045,7 +76045,7 @@
    "uses": [
     {
      "file": "mwv207_blit.c",
-     "line": 654,
+     "line": 655,
      "macro": "MWV207_EMIT",
      "value": "0"
     }
@@ -76059,13 +76059,13 @@
    "uses": [
     {
      "file": "mwv207_blit.c",
-     "line": 170,
+     "line": 171,
      "macro": "MWV207_EMIT",
      "value": "0"
     },
     {
      "file": "mwv207_blit.c",
-     "line": 655,
+     "line": 656,
      "macro": "MWV207_EMIT",
      "value": "0"
     }
@@ -76079,25 +76079,25 @@
    "uses": [
     {
      "file": "mwv207_blit.c",
-     "line": 253,
+     "line": 254,
      "macro": "MWV207_EMIT",
      "value": "config"
     },
     {
      "file": "mwv207_blit.c",
-     "line": 399,
+     "line": 400,
      "macro": "MWV207_EMIT",
      "value": "levelInfo->config"
     },
     {
      "file": "mwv207_blit.c",
-     "line": 550,
+     "line": 551,
      "macro": "MWV207_EMIT",
      "value": "(ALIGN_BIT((uint32_t) (dst_level->stride), 0x0) & (0x1FFFFF)) |\n      (ALIGN_BIT((uint32_t) (dst_blit_desc.format), 0x15) & (0x7E00000)) |\n      (ALIGN_BIT((uint32_t) (dst_msaa_mode), 0x1B) & (0x18000000)) |\n      (ALIGN_BIT((uint32_t) ((dst->mode == MWV207_SUPERTILED)), 0x1D) & (0x20000000)) |\n      (ALIGN_BIT((uint32_t) ((dst->mode == MWV207_SUPERTILED)), 0x1E) & (0x40000000))"
     },
     {
      "file": "mwv207_blit.c",
-     "line": 656,
+     "line": 657,
      "macro": "MWV207_EMIT",
      "value": "src_level->config"
     }
@@ -76111,25 +76111,25 @@
    "uses": [
     {
      "file": "mwv207_blit.c",
-     "line": 254,
+     "line": 255,
      "macro": "MWV207_EMIT",
      "value": "dst_configex"
     },
     {
      "file": "mwv207_blit.c",
-     "line": 400,
+     "line": 401,
      "macro": "MWV207_EMIT",
      "value": "dst_configex |\n      (ALIGN_BIT((uint32_t) (fast_clear), 0x0) & (0x1)) |\n      (ALIGN_BIT((uint32_t) (dst->sample_info.is_msaa ? ENABLE : DISABLE), 0x1E) & (0x40000000))"
     },
     {
      "file": "mwv207_blit.c",
-     "line": 556,
+     "line": 557,
      "macro": "MWV207_EMIT",
      "value": "dst_configex |\n      (ALIGN_BIT((uint32_t) (dst_blit_desc.srgb), 0x8) & (0x100)) |\n      (ALIGN_BIT(0x1, 0x16) & (0x400000)) |\n      (ALIGN_BIT((uint32_t) (info.flip_y), 0x13) & (0x80000))"
     },
     {
      "file": "mwv207_blit.c",
-     "line": 657,
+     "line": 658,
      "macro": "MWV207_EMIT",
      "value": "src_level->dst_configex"
     }
@@ -76143,13 +76143,13 @@
    "uses": [
     {
      "file": "mwv207_blit.c",
-     "line": 131,
+     "line": 132,
      "macro": "MWV207_EMIT",
      "value": "(ALIGN_BIT((uint32_t) (dst_startx), 0x0) & (0xFFFF)) |\n               (ALIGN_BIT((uint32_t) (dst_starty), 0x10) & (0xFFFF0000))"
     },
     {
      "file": "mwv207_blit.c",
-     "line": 288,
+     "line": 289,
      "macro": "MWV207_EMIT",
      "value": "(ALIGN_BIT((uint32_t) (0), 0x0) & (0xFFFF)) |\n         (ALIGN_BIT((uint32_t) (0), 0x10) & (0xFFFF0000))"
     }
@@ -76163,19 +76163,19 @@
    "uses": [
     {
      "file": "mwv207_blit.c",
-     "line": 135,
+     "line": 136,
      "macro": "MWV207_EMIT",
      "value": "(ALIGN_BIT((uint32_t) (task_width), 0x0) & (0xFFFF)) |\n               (ALIGN_BIT((uint32_t) (task_height), 0x10) & (0xFFFF0000))"
     },
     {
      "file": "mwv207_blit.c",
-     "line": 292,
+     "line": 293,
      "macro": "MWV207_EMIT",
      "value": "(ALIGN_BIT((uint32_t) (extra_size / sizeof(uint32_t)), 0x0) & (0xFFFF)) |\n         (ALIGN_BIT((uint32_t) (1), 0x10) & (0xFFFF0000))"
     },
     {
      "file": "mwv207_blit.c",
-     "line": 662,
+     "line": 663,
      "macro": "MWV207_EMIT",
      "value": "(ALIGN_BIT((uint32_t) (src_level->width), 0x0) & (0xFFFF)) |\n      (ALIGN_BIT((uint32_t) (src_level->height), 0x10) & (0xFFFF0000))"
     }
@@ -76189,13 +76189,13 @@
    "uses": [
     {
      "file": "mwv207_blit.c",
-     "line": 434,
+     "line": 435,
      "macro": "MWV207_EMITS",
      "value": "2"
     },
     {
      "file": "mwv207_blit.c",
-     "line": 544,
+     "line": 545,
      "macro": "MWV207_EMIT",
      "value": "src->ts.clear_values[0]"
     }
@@ -76209,13 +76209,13 @@
    "uses": [
     {
      "file": "mwv207_blit.c",
-     "line": 433,
+     "line": 434,
      "macro": "MWV207_EMITS",
      "value": "2"
     },
     {
      "file": "mwv207_blit.c",
-     "line": 797,
+     "line": 798,
      "macro": "MWV207_EMITS",
      "value": "2"
     }
@@ -76229,13 +76229,13 @@
    "uses": [
     {
      "file": "mwv207_blit.c",
-     "line": 258,
+     "line": 259,
      "macro": "MWV207_EMITS",
      "value": "2"
     },
     {
      "file": "mwv207_blit.c",
-     "line": 425,
+     "line": 426,
      "macro": "MWV207_EMITS",
      "value": "2"
     }
@@ -76249,13 +76249,13 @@
    "uses": [
     {
      "file": "mwv207_blit.c",
-     "line": 259,
+     "line": 260,
      "macro": "MWV207_EMIT",
      "value": "0xFFFFFFFF"
     },
     {
      "file": "mwv207_blit.c",
-     "line": 426,
+     "line": 427,
      "macro": "MWV207_EMITS",
      "value": "2"
     }
@@ -76269,7 +76269,7 @@
    "uses": [
     {
      "file": "mwv207_blit.c",
-     "line": 180,
+     "line": 181,
      "macro": "MWV207_EMIT",
      "value": "(uint32_t)copy_size"
     }
@@ -76283,13 +76283,13 @@
    "uses": [
     {
      "file": "mwv207_blit.c",
-     "line": 588,
+     "line": 589,
      "macro": "MWV207_EMIT",
      "value": "~0U"
     },
     {
      "file": "mwv207_blit.c",
-     "line": 640,
+     "line": 641,
      "macro": "MWV207_EMIT",
      "value": "~0U"
     }
@@ -76303,13 +76303,13 @@
    "uses": [
     {
      "file": "mwv207_blit.c",
-     "line": 589,
+     "line": 590,
      "macro": "MWV207_EMIT",
      "value": "~0U"
     },
     {
      "file": "mwv207_blit.c",
-     "line": 641,
+     "line": 642,
      "macro": "MWV207_EMIT",
      "value": "~0U"
     }
@@ -76337,31 +76337,31 @@
    "uses": [
     {
      "file": "mwv207_blit.c",
-     "line": 256,
+     "line": 257,
      "macro": "MWV207_EMIT",
      "value": "blit_config"
     },
     {
      "file": "mwv207_blit.c",
-     "line": 397,
+     "line": 398,
      "macro": "MWV207_EMIT",
      "value": "levelInfo->blit_config"
     },
     {
      "file": "mwv207_blit.c",
-     "line": 496,
+     "line": 497,
      "macro": "MWV207_EMIT",
      "value": "blit_config"
     },
     {
      "file": "mwv207_blit.c",
-     "line": 638,
+     "line": 639,
      "macro": "MWV207_EMIT",
      "value": "blit_config"
     },
     {
      "file": "mwv207_blit.c",
-     "line": 795,
+     "line": 796,
      "macro": "MWV207_EMIT",
      "value": "general_config"
     }
@@ -76375,7 +76375,7 @@
    "uses": [
     {
      "file": "mwv207_blit.c",
-     "line": 817,
+     "line": 818,
      "macro": "MWV207_EMIT",
      "value": "tile_count"
     }
@@ -76389,13 +76389,13 @@
    "uses": [
     {
      "file": "mwv207_blit.c",
-     "line": 537,
+     "line": 538,
      "macro": "MWV207_EMIT",
      "value": "(ALIGN_BIT((uint32_t) (0x40), 0x0) & (0xFFFF)) |\n      (ALIGN_BIT((uint32_t) (0x40), 0x10) & (0xFFFF0000))"
     },
     {
      "file": "mwv207_blit.c",
-     "line": 670,
+     "line": 671,
      "macro": "MWV207_EMIT",
      "value": "(ALIGN_BIT((uint32_t) (0x40), 0x0) & (0xFFFF)) |\n      (ALIGN_BIT((uint32_t) (0x40), 0x10) & (0xFFFF0000))"
     }
@@ -76409,13 +76409,13 @@
    "uses": [
     {
      "file": "mwv207_blit.c",
-     "line": 533,
+     "line": 534,
      "macro": "MWV207_EMIT",
      "value": "(ALIGN_BIT((uint32_t) (4), 0x0) & (0xFFFF)) |\n      (ALIGN_BIT((uint32_t) (4), 0x10) & (0xFFFF0000))"
     },
     {
      "file": "mwv207_blit.c",
-     "line": 666,
+     "line": 667,
      "macro": "MWV207_EMIT",
      "value": "(ALIGN_BIT((uint32_t) (4), 0x0) & (0xFFFF)) |\n      (ALIGN_BIT((uint32_t) (4), 0x10) & (0xFFFF0000))"
     }
@@ -76449,7 +76449,7 @@
    "uses": [
     {
      "file": "mwv207_blit.c",
-     "line": 685,
+     "line": 686,
      "macro": "MWV207_EMIT",
      "value": "((ALIGN_BIT((uint32_t) (info.src_info.level_count), 0x0) & (0xF)) | (~(0xF | 0x10))) &\n      ((ALIGN_BIT((uint32_t) (1), 0x5) & (0x20)) | (~(0x20 | 0x40)))"
     }
@@ -76495,13 +76495,13 @@
    "uses": [
     {
      "file": "mwv207_blit.c",
-     "line": 530,
+     "line": 531,
      "macro": "MWV207_EMIT",
      "value": "src_blit_desc.swizzle |\n      (dst_blit_desc.swizzle << 0xC)"
     },
     {
      "file": "mwv207_blit.c",
-     "line": 659,
+     "line": 660,
      "macro": "MWV207_EMIT",
      "value": "src_blit_desc.swizzle |\n      (dst_blit_desc.swizzle << 0xC)"
     }
@@ -76515,37 +76515,37 @@
    "uses": [
     {
      "file": "mwv207_blit.c",
-     "line": 124,
+     "line": 125,
      "macro": "MWV207_EMIT",
      "value": "(ALIGN_BIT((uint32_t) ((1 << set_count)), 0x0) & (0xFF))"
     },
     {
      "file": "mwv207_blit.c",
-     "line": 151,
+     "line": 152,
      "macro": "MWV207_EMIT",
      "value": "(ALIGN_BIT((uint32_t) (used_cluster_mask), 0x0) & (0xFF))"
     },
     {
      "file": "mwv207_blit.c",
-     "line": 174,
+     "line": 175,
      "macro": "MWV207_EMIT",
      "value": "(ALIGN_BIT((uint32_t) ((1 << set_count)), 0x0) & (0xFF))"
     },
     {
      "file": "mwv207_blit.c",
-     "line": 191,
+     "line": 192,
      "macro": "MWV207_EMIT",
      "value": "(ALIGN_BIT((uint32_t) (ctx->ws->cluster_mask), 0x0) & (0xFF))"
     },
     {
      "file": "mwv207_blit.c",
-     "line": 811,
+     "line": 812,
      "macro": "MWV207_EMIT",
      "value": "(ALIGN_BIT((uint32_t) ((1 << set_count)), 0x0) & (0xFF))"
     },
     {
      "file": "mwv207_blit.c",
-     "line": 828,
+     "line": 829,
      "macro": "MWV207_EMIT",
      "value": "(ALIGN_BIT((uint32_t) (ctx->ws->cluster_mask), 0x0) & (0xFF))"
     },
@@ -76571,7 +76571,7 @@
    "uses": [
     {
      "file": "mwv207_blit.c",
-     "line": 565,
+     "line": 566,
      "macro": "MWV207_EMIT",
      "value": "(ALIGN_BIT((uint32_t) (info.dst_box.y), 0x0) & (0xFFFF)) |\n         (ALIGN_BIT((uint32_t) ((info.dst_box.y + info.dst_box.height)), 0x10) & (0xFFFF0000))"
     }
@@ -76605,9 +76605,9 @@
     },
     {
      "file": "mwv207_draw.c",
-     "line": 1032,
+     "line": 1052,
      "macro": "MWV207_EMIT",
-     "value": "ctx->stencil_ref.stencil_back_reference[ctx->rast_state->base.front_ccw]"
+     "value": "ctx->stencil_ref.stencil_back_reference[0]"
     }
    ]
   },
@@ -77113,7 +77113,7 @@
    "uses": [
     {
      "file": "mwv207_draw.c",
-     "line": 1035,
+     "line": 1055,
      "macro": "MWV207_EMIT",
      "value": "ctx->zsa->stencil_back_config[ctx->rast_state->base.front_ccw]"
     }
@@ -77155,7 +77155,7 @@
    "uses": [
     {
      "file": "mwv207_sampler.c",
-     "line": 608,
+     "line": 677,
      "macro": "MWV207_EMIT",
      "value": "(ALIGN_BIT((uint32_t) (ENABLE), 0x0) & (0x1))"
     }
@@ -77591,7 +77591,7 @@
    "uses": [
     {
      "file": "mwv207_draw.c",
-     "line": 907,
+     "line": 909,
      "macro": "MWV207_EMIT",
      "value": "draw_count++"
     }
