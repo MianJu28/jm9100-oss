@@ -53,22 +53,22 @@
 
 | 工具 | 作用 |
 |---|---|
-| [tools/extract_regs.py](tools/extract_regs.py) | 扫描驱动源码，提取所有 `MWV207_EMIT*` 写入点（寄存器号、值表达式、文件:行号） |
-| [tools/map_regs.py](tools/map_regs.py) | 验证"寄存器号 = 厂商地址 >> 2"的映射关系 |
-| [tools/build_register_db.py](tools/build_register_db.py) | 解析厂商头文件构建寄存器数据库并与驱动用法关联 |
-| [tools/generate_register_docs.py](tools/generate_register_docs.py) | 生成 `REGISTERS.md` / `REGISTERS-FIELDS.md` |
-| [tools/generate_register_map.py](tools/generate_register_map.py) | 生成厂商视角的 `REGISTER-MAP.md`（全部 1392 个寄存器） |
-| [tools/generate_register_arrays.py](tools/generate_register_arrays.py) | 生成 `REGISTER-ARRAYS.md`（多实例寄存器文件 + 未映射寄存器分析） |
-| [tools/generate_symbol_index.py](tools/generate_symbol_index.py) | 生成 `api/09-SYMBOL-INDEX.md`（函数/结构体/宏索引） |
-| [tools/check_coverage.py](tools/check_coverage.py) | 文档覆盖率自检：驱动源文件是否被文档引用 |
-| [tools/generate_block_overview.py](tools/generate_block_overview.py) | 生成 `api/10-HARDWARE-BLOCKS.md`（按块的寄存器统计与功能推断） |
-| [tools/validate_register_map.py](tools/validate_register_map.py) | **映射自校验**：驱动号×4=厂商地址、vendor 名存在、每条 file:line 真实存在 |
-| [tools/generate_isa_opcodes.py](tools/generate_isa_opcodes.py) | 生成 `registers/ISA-OPCODES.md`（厂商 ISA 操作码 + 驱动交叉验证） |
-| [tools/validate_doc_citations.py](tools/validate_doc_citations.py) | 校验所有文档中的 `文件:行号` 引用是否可解析且不越界 |
+| [docs/tools/extract_regs.py](docs/tools/extract_regs.py) | 扫描驱动源码，提取所有 `MWV207_EMIT*` 写入点（寄存器号、值表达式、文件:行号） |
+| [docs/tools/map_regs.py](docs/tools/map_regs.py) | 验证"寄存器号 = 厂商地址 >> 2"的映射关系 |
+| [docs/tools/build_register_db.py](docs/tools/build_register_db.py) | 解析厂商头文件构建寄存器数据库并与驱动用法关联 |
+| [docs/tools/generate_register_docs.py](docs/tools/generate_register_docs.py) | 生成 `REGISTERS.md` / `REGISTERS-FIELDS.md` |
+| [docs/tools/generate_register_map.py](docs/tools/generate_register_map.py) | 生成厂商视角的 `REGISTER-MAP.md`（全部 1392 个寄存器） |
+| [docs/tools/generate_register_arrays.py](docs/tools/generate_register_arrays.py) | 生成 `REGISTER-ARRAYS.md`（多实例寄存器文件 + 未映射寄存器分析） |
+| [docs/tools/generate_symbol_index.py](docs/tools/generate_symbol_index.py) | 生成 `api/09-SYMBOL-INDEX.md`（函数/结构体/宏索引） |
+| [docs/tools/check_coverage.py](docs/tools/check_coverage.py) | 文档覆盖率自检：驱动源文件是否被文档引用 |
+| [docs/tools/generate_block_overview.py](docs/tools/generate_block_overview.py) | 生成 `api/10-HARDWARE-BLOCKS.md`（按块的寄存器统计与功能推断） |
+| [docs/tools/validate_register_map.py](docs/tools/validate_register_map.py) | **映射自校验**：驱动号×4=厂商地址、vendor 名存在、每条 file:line 真实存在 |
+| [docs/tools/generate_isa_opcodes.py](docs/tools/generate_isa_opcodes.py) | 生成 `registers/ISA-OPCODES.md`（厂商 ISA 操作码 + 驱动交叉验证） |
+| [docs/tools/validate_doc_citations.py](docs/tools/validate_doc_citations.py) | 校验所有文档中的 `文件:行号` 引用是否可解析且不越界 |
 
 ## 校验结果
 
-`python3 tools/validate_register_map.py` 通过：
+`python3 docs/tools/validate_register_map.py` 通过：
 
 ```
 驱动寄存器号（进入 driver_join）：170
@@ -76,20 +76,24 @@
 uses 引用点：                    292（异常 0）
 映射等式错误：                   0
 其他错误：                       0
+提示（不阻断）：                 0
 结论： 全部映射自洽
 ```
 
 即：170 条 `驱动号 × 4 == 厂商 _Address` 等式全部成立，292 处
 `文件:行号` 引用全部在源码中有界有效。
 
-`python3 tools/validate_doc_citations.py` 通过：
+`python3 docs/tools/validate_doc_citations.py` 通过：
 
 ```
-引用总数：4354   可解析：4354   越界：0   找不到文件：0
+引用总数：4442   可解析：2880   越界：0   找不到文件：1562
 结论： 无行号越界
 ```
 
-即：全部文档中的 **4354 处 `文件:行号` 引用（含厂商头文件）全部可解析且在界内**。
+其中 1562 条"找不到文件"全部是 `jmgpu_*.h` 厂商头引用 —— 厂商头需从
+`ref/vendor-1.8.0/` 的 deb 解到 `/tmp`（脚本按 `/tmp/dpkg/gg`、`/tmp/v180` 等
+候选路径查找，`/tmp` 清理后会降级为提示，不影响结论）。补齐厂商头后应为
+"可解析 = 总数、找不到 = 0"。
 
 两项校验只覆盖**可机械判定**的部分（映射等式、行号存在性与边界）；
 寄存器/字段**语义**的正确性仍依赖 `REGISTERS-FIELDS.md` 中的人工对照，

@@ -4,10 +4,15 @@
 用法: python3 docs/tools/check_coverage.py
 输出: 未覆盖率与未提及文件清单（按目录分组）。
 """
-import os, re, collections
+import os, collections, sys
 
-SRC = '/home/admin/jm9100-oss/src/oh-mesa/User_source_code/mesa-24.1.2/src/gallium'
-DOCS = '/home/admin/jm9100-oss/docs'
+# 2026-11-02 起 UMD 适配代码已迁出 oh-mesa，独立存放在 src/mwv207-umd/
+# （上游树里的同名目录只是指向它的符号链接，os.walk 默认不跟符号链接，所以不能再走 oh-mesa）。
+HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.normpath(os.path.join(HERE, '..'))          # docs/
+REPO = os.path.normpath(os.path.join(ROOT, '..'))          # 仓库根
+SRC = os.path.join(REPO, 'src', 'mwv207-umd')
+DOCS = ROOT
 SUBS = ('drivers/mwv207', 'winsys/mwv207')
 
 # 汇总所有文档正文
@@ -32,6 +37,10 @@ for sub in SUBS:
             rel = os.path.relpath(p, SRC)
             n = sum(1 for _ in open(p, encoding='utf-8', errors='replace'))
             files.append((rel, n))
+
+if not files:
+    print(f'[FAIL] 在 {SRC}/{{drivers,winsys}}/mwv207 下没找到驱动源文件 —— 路径失效')
+    sys.exit(1)
 
 miss = [(rel, n) for rel, n in files if os.path.basename(rel) not in blob]
 ok = len(files) - len(miss)

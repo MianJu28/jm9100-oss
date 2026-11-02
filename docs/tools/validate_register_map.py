@@ -15,9 +15,10 @@ import re
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.path.normpath(os.path.join(HERE, '..'))
-UMD = os.path.normpath(os.path.join(ROOT, '..', 'src', 'oh-mesa', 'User_source_code',
-                                    'mesa-24.1.2', 'src', 'gallium'))
+ROOT = os.path.normpath(os.path.join(HERE, '..'))          # docs/
+# 2026-11-02 起 UMD 适配代码独立存放在 src/mwv207-umd/（oh-mesa 里的同名目录是符号
+# 链接；os.walk 不跟符号链接，原先走 oh-mesa 会一个文件都找不到）。
+UMD = os.path.normpath(os.path.join(ROOT, '..', 'src', 'mwv207-umd'))
 DB = json.load(open(os.path.join(ROOT, 'registers', 'register-db.json'), encoding='utf-8'))
 regs = DB['registers']
 join = DB['driver_join']
