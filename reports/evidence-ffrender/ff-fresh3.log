@@ -1,0 +1,1120 @@
+[1699134, Main Thread] WARNING: g_value_set_boxed: assertion 'G_VALUE_HOLDS_BOXED (value)' failed: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): GLib-GObject-CRITICAL **: 15:05:51.627: g_value_set_boxed: assertion 'G_VALUE_HOLDS_BOXED (value)' failed
+[1699134, Main Thread] WARNING: g_value_set_boxed: assertion 'G_VALUE_HOLDS_BOXED (value)' failed: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): GLib-GObject-CRITICAL **: 15:05:51.628: g_value_set_boxed: assertion 'G_VALUE_HOLDS_BOXED (value)' failed
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:243:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.937: Theme parsing error: gtk-dark.css:243:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:250:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.937: Theme parsing error: gtk-dark.css:250:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:261:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.937: Theme parsing error: gtk-dark.css:261:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:268:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.937: Theme parsing error: gtk-dark.css:268:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:279:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.937: Theme parsing error: gtk-dark.css:279:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:286:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.937: Theme parsing error: gtk-dark.css:286:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:302:74: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.937: Theme parsing error: gtk-dark.css:302:74: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:312:62: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.937: Theme parsing error: gtk-dark.css:312:62: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:316:73: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.937: Theme parsing error: gtk-dark.css:316:73: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:1481:71: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.940: Theme parsing error: gtk-dark.css:1481:71: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:1530:74: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.940: Theme parsing error: gtk-dark.css:1530:74: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:1547:74: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.940: Theme parsing error: gtk-dark.css:1547:74: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:1552:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.940: Theme parsing error: gtk-dark.css:1552:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:1565:74: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.940: Theme parsing error: gtk-dark.css:1565:74: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:1570:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.940: Theme parsing error: gtk-dark.css:1570:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:2002:73: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.942: Theme parsing error: gtk-dark.css:2002:73: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:2015:62: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.942: Theme parsing error: gtk-dark.css:2015:62: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:2021:74: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.942: Theme parsing error: gtk-dark.css:2021:74: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:2206:62: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.942: Theme parsing error: gtk-dark.css:2206:62: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:2214:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.942: Theme parsing error: gtk-dark.css:2214:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:2220:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.942: Theme parsing error: gtk-dark.css:2220:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:2745:11: Not using units is deprecated. Assuming 'px'.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.943: Theme parsing error: gtk-dark.css:2745:11: Not using units is deprecated. Assuming 'px'.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:2745:11: Expected a string.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.944: Theme parsing error: gtk-dark.css:2745:11: Expected a string.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:3347:35: '-gtk-gradient' is not a valid color name: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.945: Theme parsing error: gtk-dark.css:3347:35: '-gtk-gradient' is not a valid color name
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:3682:53: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.946: Theme parsing error: gtk-dark.css:3682:53: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:3721:53: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.946: Theme parsing error: gtk-dark.css:3721:53: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:3725:59: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.946: Theme parsing error: gtk-dark.css:3725:59: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:3731:53: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.946: Theme parsing error: gtk-dark.css:3731:53: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:3731:87: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.946: Theme parsing error: gtk-dark.css:3731:87: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:4073:10: not a number: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.947: Theme parsing error: gtk-dark.css:4073:10: not a number
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:4073:19: Using Pango syntax for the font: style property is deprecated; please use CSS syntax: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.947: Theme parsing error: gtk-dark.css:4073:19: Using Pango syntax for the font: style property is deprecated; please use CSS syntax
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:4494:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.948: Theme parsing error: gtk-dark.css:4494:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:4860:73: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.948: Theme parsing error: gtk-dark.css:4860:73: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:4870:62: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.948: Theme parsing error: gtk-dark.css:4870:62: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:4874:74: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.949: Theme parsing error: gtk-dark.css:4874:74: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:4884:54: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.949: Theme parsing error: gtk-dark.css:4884:54: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:4970:60: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.949: Theme parsing error: gtk-dark.css:4970:60: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:4985:67: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.949: Theme parsing error: gtk-dark.css:4985:67: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:4989:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.949: Theme parsing error: gtk-dark.css:4989:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5001:62: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.949: Theme parsing error: gtk-dark.css:5001:62: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5206:10: not a number: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.949: Theme parsing error: gtk-dark.css:5206:10: not a number
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5206:22: Using Pango syntax for the font: style property is deprecated; please use CSS syntax: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.949: Theme parsing error: gtk-dark.css:5206:22: Using Pango syntax for the font: style property is deprecated; please use CSS syntax
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5226:37: 'linear-gradient' is not a valid color name: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.949: Theme parsing error: gtk-dark.css:5226:37: 'linear-gradient' is not a valid color name
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5238:10: not a number: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.950: Theme parsing error: gtk-dark.css:5238:10: not a number
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5238:24: Using Pango syntax for the font: style property is deprecated; please use CSS syntax: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.950: Theme parsing error: gtk-dark.css:5238:24: Using Pango syntax for the font: style property is deprecated; please use CSS syntax
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5241:10: not a number: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.950: Theme parsing error: gtk-dark.css:5241:10: not a number
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5241:30: Using Pango syntax for the font: style property is deprecated; please use CSS syntax: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.950: Theme parsing error: gtk-dark.css:5241:30: Using Pango syntax for the font: style property is deprecated; please use CSS syntax
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5244:10: not a number: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.950: Theme parsing error: gtk-dark.css:5244:10: not a number
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5244:24: Using Pango syntax for the font: style property is deprecated; please use CSS syntax: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.950: Theme parsing error: gtk-dark.css:5244:24: Using Pango syntax for the font: style property is deprecated; please use CSS syntax
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5261:14: not a number: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.950: Theme parsing error: gtk-dark.css:5261:14: not a number
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5261:14: Expected a string.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.950: Theme parsing error: gtk-dark.css:5261:14: Expected a string.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5268:14: not a number: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.950: Theme parsing error: gtk-dark.css:5268:14: not a number
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5268:14: Expected a string.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.950: Theme parsing error: gtk-dark.css:5268:14: Expected a string.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5277:16: not a number: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.950: Theme parsing error: gtk-dark.css:5277:16: not a number
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5277:16: Expected a string.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.950: Theme parsing error: gtk-dark.css:5277:16: Expected a string.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5282:16: not a number: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.950: Theme parsing error: gtk-dark.css:5282:16: not a number
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5282:16: Expected a string.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.950: Theme parsing error: gtk-dark.css:5282:16: Expected a string.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5359:14: Expected a string.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.950: Theme parsing error: gtk-dark.css:5359:14: Expected a string.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5362:16: not a number: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.950: Theme parsing error: gtk-dark.css:5362:16: not a number
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5362:16: Expected a string.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.950: Theme parsing error: gtk-dark.css:5362:16: Expected a string.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5414:14: not a number: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.950: Theme parsing error: gtk-dark.css:5414:14: not a number
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5414:14: Expected a string.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.950: Theme parsing error: gtk-dark.css:5414:14: Expected a string.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5417:68: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.950: Theme parsing error: gtk-dark.css:5417:68: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5647:74: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.951: Theme parsing error: gtk-dark.css:5647:74: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5657:62: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.951: Theme parsing error: gtk-dark.css:5657:62: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5661:73: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.951: Theme parsing error: gtk-dark.css:5661:73: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:243:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.989: Theme parsing error: gtk-dark.css:243:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:250:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.989: Theme parsing error: gtk-dark.css:250:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:261:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.989: Theme parsing error: gtk-dark.css:261:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:268:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.989: Theme parsing error: gtk-dark.css:268:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:279:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.989: Theme parsing error: gtk-dark.css:279:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:286:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.989: Theme parsing error: gtk-dark.css:286:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:302:74: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.989: Theme parsing error: gtk-dark.css:302:74: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:312:62: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.989: Theme parsing error: gtk-dark.css:312:62: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:316:73: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.989: Theme parsing error: gtk-dark.css:316:73: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:1481:71: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.992: Theme parsing error: gtk-dark.css:1481:71: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:1530:74: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.992: Theme parsing error: gtk-dark.css:1530:74: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:1547:74: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.992: Theme parsing error: gtk-dark.css:1547:74: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:1552:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.992: Theme parsing error: gtk-dark.css:1552:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:1565:74: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.992: Theme parsing error: gtk-dark.css:1565:74: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:1570:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.992: Theme parsing error: gtk-dark.css:1570:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:2002:73: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.994: Theme parsing error: gtk-dark.css:2002:73: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:2015:62: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.994: Theme parsing error: gtk-dark.css:2015:62: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:2021:74: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.994: Theme parsing error: gtk-dark.css:2021:74: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:2206:62: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.994: Theme parsing error: gtk-dark.css:2206:62: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:2214:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.994: Theme parsing error: gtk-dark.css:2214:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:2220:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.994: Theme parsing error: gtk-dark.css:2220:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:2745:11: Not using units is deprecated. Assuming 'px'.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.995: Theme parsing error: gtk-dark.css:2745:11: Not using units is deprecated. Assuming 'px'.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:2745:11: Expected a string.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.996: Theme parsing error: gtk-dark.css:2745:11: Expected a string.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:3347:35: '-gtk-gradient' is not a valid color name: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.997: Theme parsing error: gtk-dark.css:3347:35: '-gtk-gradient' is not a valid color name
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:3682:53: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.998: Theme parsing error: gtk-dark.css:3682:53: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:3721:53: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.998: Theme parsing error: gtk-dark.css:3721:53: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:3725:59: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.998: Theme parsing error: gtk-dark.css:3725:59: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:3731:53: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.998: Theme parsing error: gtk-dark.css:3731:53: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:3731:87: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.998: Theme parsing error: gtk-dark.css:3731:87: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:4073:10: not a number: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.998: Theme parsing error: gtk-dark.css:4073:10: not a number
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:4073:19: Using Pango syntax for the font: style property is deprecated; please use CSS syntax: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:51.999: Theme parsing error: gtk-dark.css:4073:19: Using Pango syntax for the font: style property is deprecated; please use CSS syntax
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:4494:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.000: Theme parsing error: gtk-dark.css:4494:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:4860:73: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.000: Theme parsing error: gtk-dark.css:4860:73: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:4870:62: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.001: Theme parsing error: gtk-dark.css:4870:62: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:4874:74: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.001: Theme parsing error: gtk-dark.css:4874:74: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:4884:54: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.001: Theme parsing error: gtk-dark.css:4884:54: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:4970:60: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.001: Theme parsing error: gtk-dark.css:4970:60: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:4985:67: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.001: Theme parsing error: gtk-dark.css:4985:67: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:4989:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.001: Theme parsing error: gtk-dark.css:4989:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5001:62: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.001: Theme parsing error: gtk-dark.css:5001:62: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5206:10: not a number: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.001: Theme parsing error: gtk-dark.css:5206:10: not a number
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5206:22: Using Pango syntax for the font: style property is deprecated; please use CSS syntax: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.001: Theme parsing error: gtk-dark.css:5206:22: Using Pango syntax for the font: style property is deprecated; please use CSS syntax
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5226:37: 'linear-gradient' is not a valid color name: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.001: Theme parsing error: gtk-dark.css:5226:37: 'linear-gradient' is not a valid color name
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5238:10: not a number: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.002: Theme parsing error: gtk-dark.css:5238:10: not a number
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5238:24: Using Pango syntax for the font: style property is deprecated; please use CSS syntax: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.002: Theme parsing error: gtk-dark.css:5238:24: Using Pango syntax for the font: style property is deprecated; please use CSS syntax
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5241:10: not a number: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.002: Theme parsing error: gtk-dark.css:5241:10: not a number
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5241:30: Using Pango syntax for the font: style property is deprecated; please use CSS syntax: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.002: Theme parsing error: gtk-dark.css:5241:30: Using Pango syntax for the font: style property is deprecated; please use CSS syntax
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5244:10: not a number: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.002: Theme parsing error: gtk-dark.css:5244:10: not a number
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5244:24: Using Pango syntax for the font: style property is deprecated; please use CSS syntax: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.002: Theme parsing error: gtk-dark.css:5244:24: Using Pango syntax for the font: style property is deprecated; please use CSS syntax
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5261:14: not a number: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.002: Theme parsing error: gtk-dark.css:5261:14: not a number
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5261:14: Expected a string.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.002: Theme parsing error: gtk-dark.css:5261:14: Expected a string.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5268:14: not a number: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.002: Theme parsing error: gtk-dark.css:5268:14: not a number
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5268:14: Expected a string.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.002: Theme parsing error: gtk-dark.css:5268:14: Expected a string.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5277:16: not a number: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.002: Theme parsing error: gtk-dark.css:5277:16: not a number
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5277:16: Expected a string.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.002: Theme parsing error: gtk-dark.css:5277:16: Expected a string.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5282:16: not a number: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.002: Theme parsing error: gtk-dark.css:5282:16: not a number
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5282:16: Expected a string.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.002: Theme parsing error: gtk-dark.css:5282:16: Expected a string.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5359:14: Expected a string.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.002: Theme parsing error: gtk-dark.css:5359:14: Expected a string.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5362:16: not a number: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.002: Theme parsing error: gtk-dark.css:5362:16: not a number
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5362:16: Expected a string.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.002: Theme parsing error: gtk-dark.css:5362:16: Expected a string.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5414:14: not a number: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.002: Theme parsing error: gtk-dark.css:5414:14: not a number
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5414:14: Expected a string.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.002: Theme parsing error: gtk-dark.css:5414:14: Expected a string.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5417:68: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.002: Theme parsing error: gtk-dark.css:5417:68: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5647:74: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.003: Theme parsing error: gtk-dark.css:5647:74: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5657:62: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.003: Theme parsing error: gtk-dark.css:5657:62: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5661:73: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.003: Theme parsing error: gtk-dark.css:5661:73: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:243:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.322: Theme parsing error: gtk-dark.css:243:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:250:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.322: Theme parsing error: gtk-dark.css:250:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:261:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.322: Theme parsing error: gtk-dark.css:261:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:268:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.322: Theme parsing error: gtk-dark.css:268:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:279:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.322: Theme parsing error: gtk-dark.css:279:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:286:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.322: Theme parsing error: gtk-dark.css:286:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:302:74: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.322: Theme parsing error: gtk-dark.css:302:74: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:312:62: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.322: Theme parsing error: gtk-dark.css:312:62: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:316:73: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.322: Theme parsing error: gtk-dark.css:316:73: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:1481:71: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.325: Theme parsing error: gtk-dark.css:1481:71: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:1530:74: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.325: Theme parsing error: gtk-dark.css:1530:74: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:1547:74: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.325: Theme parsing error: gtk-dark.css:1547:74: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:1552:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.325: Theme parsing error: gtk-dark.css:1552:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:1565:74: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.325: Theme parsing error: gtk-dark.css:1565:74: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:1570:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.325: Theme parsing error: gtk-dark.css:1570:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:2002:73: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.327: Theme parsing error: gtk-dark.css:2002:73: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:2015:62: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.327: Theme parsing error: gtk-dark.css:2015:62: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:2021:74: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.327: Theme parsing error: gtk-dark.css:2021:74: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:2206:62: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.327: Theme parsing error: gtk-dark.css:2206:62: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:2214:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.327: Theme parsing error: gtk-dark.css:2214:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:2220:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.327: Theme parsing error: gtk-dark.css:2220:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:2745:11: Not using units is deprecated. Assuming 'px'.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.329: Theme parsing error: gtk-dark.css:2745:11: Not using units is deprecated. Assuming 'px'.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:2745:11: Expected a string.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.329: Theme parsing error: gtk-dark.css:2745:11: Expected a string.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:3347:35: '-gtk-gradient' is not a valid color name: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.330: Theme parsing error: gtk-dark.css:3347:35: '-gtk-gradient' is not a valid color name
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:3682:53: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.331: Theme parsing error: gtk-dark.css:3682:53: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:3721:53: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.331: Theme parsing error: gtk-dark.css:3721:53: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:3725:59: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.331: Theme parsing error: gtk-dark.css:3725:59: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:3731:53: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.331: Theme parsing error: gtk-dark.css:3731:53: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:3731:87: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.331: Theme parsing error: gtk-dark.css:3731:87: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:4073:10: not a number: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.332: Theme parsing error: gtk-dark.css:4073:10: not a number
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:4073:19: Using Pango syntax for the font: style property is deprecated; please use CSS syntax: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.332: Theme parsing error: gtk-dark.css:4073:19: Using Pango syntax for the font: style property is deprecated; please use CSS syntax
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:4494:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.333: Theme parsing error: gtk-dark.css:4494:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:4860:73: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.334: Theme parsing error: gtk-dark.css:4860:73: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:4870:62: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.334: Theme parsing error: gtk-dark.css:4870:62: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:4874:74: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.334: Theme parsing error: gtk-dark.css:4874:74: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:4884:54: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.334: Theme parsing error: gtk-dark.css:4884:54: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:4970:60: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.334: Theme parsing error: gtk-dark.css:4970:60: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:4985:67: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.334: Theme parsing error: gtk-dark.css:4985:67: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:4989:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.334: Theme parsing error: gtk-dark.css:4989:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5001:62: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.334: Theme parsing error: gtk-dark.css:5001:62: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5206:10: not a number: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.335: Theme parsing error: gtk-dark.css:5206:10: not a number
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5206:22: Using Pango syntax for the font: style property is deprecated; please use CSS syntax: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.335: Theme parsing error: gtk-dark.css:5206:22: Using Pango syntax for the font: style property is deprecated; please use CSS syntax
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5226:37: 'linear-gradient' is not a valid color name: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.335: Theme parsing error: gtk-dark.css:5226:37: 'linear-gradient' is not a valid color name
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5238:10: not a number: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.335: Theme parsing error: gtk-dark.css:5238:10: not a number
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5238:24: Using Pango syntax for the font: style property is deprecated; please use CSS syntax: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.335: Theme parsing error: gtk-dark.css:5238:24: Using Pango syntax for the font: style property is deprecated; please use CSS syntax
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5241:10: not a number: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.335: Theme parsing error: gtk-dark.css:5241:10: not a number
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5241:30: Using Pango syntax for the font: style property is deprecated; please use CSS syntax: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.335: Theme parsing error: gtk-dark.css:5241:30: Using Pango syntax for the font: style property is deprecated; please use CSS syntax
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5244:10: not a number: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.335: Theme parsing error: gtk-dark.css:5244:10: not a number
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5244:24: Using Pango syntax for the font: style property is deprecated; please use CSS syntax: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.335: Theme parsing error: gtk-dark.css:5244:24: Using Pango syntax for the font: style property is deprecated; please use CSS syntax
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5261:14: not a number: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.335: Theme parsing error: gtk-dark.css:5261:14: not a number
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5261:14: Expected a string.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.335: Theme parsing error: gtk-dark.css:5261:14: Expected a string.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5268:14: not a number: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.335: Theme parsing error: gtk-dark.css:5268:14: not a number
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5268:14: Expected a string.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.335: Theme parsing error: gtk-dark.css:5268:14: Expected a string.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5277:16: not a number: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.335: Theme parsing error: gtk-dark.css:5277:16: not a number
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5277:16: Expected a string.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.335: Theme parsing error: gtk-dark.css:5277:16: Expected a string.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5282:16: not a number: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.335: Theme parsing error: gtk-dark.css:5282:16: not a number
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5282:16: Expected a string.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.335: Theme parsing error: gtk-dark.css:5282:16: Expected a string.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5359:14: Expected a string.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.336: Theme parsing error: gtk-dark.css:5359:14: Expected a string.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5362:16: not a number: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.336: Theme parsing error: gtk-dark.css:5362:16: not a number
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5362:16: Expected a string.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.336: Theme parsing error: gtk-dark.css:5362:16: Expected a string.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5414:14: not a number: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.336: Theme parsing error: gtk-dark.css:5414:14: not a number
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5414:14: Expected a string.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.336: Theme parsing error: gtk-dark.css:5414:14: Expected a string.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5417:68: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.336: Theme parsing error: gtk-dark.css:5417:68: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5647:74: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.336: Theme parsing error: gtk-dark.css:5647:74: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5657:62: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.336: Theme parsing error: gtk-dark.css:5657:62: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5661:73: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.336: Theme parsing error: gtk-dark.css:5661:73: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:243:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.373: Theme parsing error: gtk-dark.css:243:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:250:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.374: Theme parsing error: gtk-dark.css:250:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:261:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.374: Theme parsing error: gtk-dark.css:261:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:268:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.374: Theme parsing error: gtk-dark.css:268:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:279:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.374: Theme parsing error: gtk-dark.css:279:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:286:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.374: Theme parsing error: gtk-dark.css:286:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:302:74: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.374: Theme parsing error: gtk-dark.css:302:74: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:312:62: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.374: Theme parsing error: gtk-dark.css:312:62: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:316:73: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.374: Theme parsing error: gtk-dark.css:316:73: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:1481:71: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.377: Theme parsing error: gtk-dark.css:1481:71: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:1530:74: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.377: Theme parsing error: gtk-dark.css:1530:74: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:1547:74: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.377: Theme parsing error: gtk-dark.css:1547:74: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:1552:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.377: Theme parsing error: gtk-dark.css:1552:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:1565:74: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.377: Theme parsing error: gtk-dark.css:1565:74: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:1570:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.377: Theme parsing error: gtk-dark.css:1570:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:2002:73: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.378: Theme parsing error: gtk-dark.css:2002:73: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:2015:62: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.378: Theme parsing error: gtk-dark.css:2015:62: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:2021:74: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.378: Theme parsing error: gtk-dark.css:2021:74: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:2206:62: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.379: Theme parsing error: gtk-dark.css:2206:62: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:2214:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.379: Theme parsing error: gtk-dark.css:2214:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:2220:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.379: Theme parsing error: gtk-dark.css:2220:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:2745:11: Not using units is deprecated. Assuming 'px'.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.380: Theme parsing error: gtk-dark.css:2745:11: Not using units is deprecated. Assuming 'px'.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:2745:11: Expected a string.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.380: Theme parsing error: gtk-dark.css:2745:11: Expected a string.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:3347:35: '-gtk-gradient' is not a valid color name: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.382: Theme parsing error: gtk-dark.css:3347:35: '-gtk-gradient' is not a valid color name
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:3682:53: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.382: Theme parsing error: gtk-dark.css:3682:53: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:3721:53: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.382: Theme parsing error: gtk-dark.css:3721:53: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:3725:59: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.382: Theme parsing error: gtk-dark.css:3725:59: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:3731:53: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.382: Theme parsing error: gtk-dark.css:3731:53: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:3731:87: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.383: Theme parsing error: gtk-dark.css:3731:87: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:4073:10: not a number: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.383: Theme parsing error: gtk-dark.css:4073:10: not a number
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:4073:19: Using Pango syntax for the font: style property is deprecated; please use CSS syntax: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.383: Theme parsing error: gtk-dark.css:4073:19: Using Pango syntax for the font: style property is deprecated; please use CSS syntax
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:4494:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.384: Theme parsing error: gtk-dark.css:4494:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:4860:73: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.385: Theme parsing error: gtk-dark.css:4860:73: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:4870:62: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.385: Theme parsing error: gtk-dark.css:4870:62: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:4874:74: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.385: Theme parsing error: gtk-dark.css:4874:74: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:4884:54: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.385: Theme parsing error: gtk-dark.css:4884:54: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:4970:60: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.386: Theme parsing error: gtk-dark.css:4970:60: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:4985:67: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.386: Theme parsing error: gtk-dark.css:4985:67: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:4989:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.386: Theme parsing error: gtk-dark.css:4989:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5001:62: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.386: Theme parsing error: gtk-dark.css:5001:62: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5206:10: not a number: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.386: Theme parsing error: gtk-dark.css:5206:10: not a number
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5206:22: Using Pango syntax for the font: style property is deprecated; please use CSS syntax: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.386: Theme parsing error: gtk-dark.css:5206:22: Using Pango syntax for the font: style property is deprecated; please use CSS syntax
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5226:37: 'linear-gradient' is not a valid color name: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.386: Theme parsing error: gtk-dark.css:5226:37: 'linear-gradient' is not a valid color name
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5238:10: not a number: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.386: Theme parsing error: gtk-dark.css:5238:10: not a number
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5238:24: Using Pango syntax for the font: style property is deprecated; please use CSS syntax: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.386: Theme parsing error: gtk-dark.css:5238:24: Using Pango syntax for the font: style property is deprecated; please use CSS syntax
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5241:10: not a number: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.386: Theme parsing error: gtk-dark.css:5241:10: not a number
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5241:30: Using Pango syntax for the font: style property is deprecated; please use CSS syntax: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.386: Theme parsing error: gtk-dark.css:5241:30: Using Pango syntax for the font: style property is deprecated; please use CSS syntax
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5244:10: not a number: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.386: Theme parsing error: gtk-dark.css:5244:10: not a number
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5244:24: Using Pango syntax for the font: style property is deprecated; please use CSS syntax: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.386: Theme parsing error: gtk-dark.css:5244:24: Using Pango syntax for the font: style property is deprecated; please use CSS syntax
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5261:14: not a number: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.386: Theme parsing error: gtk-dark.css:5261:14: not a number
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5261:14: Expected a string.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.387: Theme parsing error: gtk-dark.css:5261:14: Expected a string.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5268:14: not a number: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.387: Theme parsing error: gtk-dark.css:5268:14: not a number
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5268:14: Expected a string.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.387: Theme parsing error: gtk-dark.css:5268:14: Expected a string.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5277:16: not a number: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.387: Theme parsing error: gtk-dark.css:5277:16: not a number
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5277:16: Expected a string.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.387: Theme parsing error: gtk-dark.css:5277:16: Expected a string.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5282:16: not a number: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.387: Theme parsing error: gtk-dark.css:5282:16: not a number
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5282:16: Expected a string.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.387: Theme parsing error: gtk-dark.css:5282:16: Expected a string.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5359:14: Expected a string.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.387: Theme parsing error: gtk-dark.css:5359:14: Expected a string.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5362:16: not a number: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.387: Theme parsing error: gtk-dark.css:5362:16: not a number
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5362:16: Expected a string.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.387: Theme parsing error: gtk-dark.css:5362:16: Expected a string.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5414:14: not a number: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.387: Theme parsing error: gtk-dark.css:5414:14: not a number
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5414:14: Expected a string.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.387: Theme parsing error: gtk-dark.css:5414:14: Expected a string.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5417:68: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.387: Theme parsing error: gtk-dark.css:5417:68: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5647:74: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.388: Theme parsing error: gtk-dark.css:5647:74: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5657:62: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.388: Theme parsing error: gtk-dark.css:5657:62: Using one color stop with linear-gradient() is deprecated.
+[Parent 1699134, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5661:73: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file toolkit/xre/nsSigHandlers.cpp:187
+
+(firefox:1699134): Gtk-WARNING **: 15:05:52.388: Theme parsing error: gtk-dark.css:5661:73: Using one color stop with linear-gradient() is deprecated.
+Mesa: warning: internalformat = GL_BGRA8_EXT invalid by spec, but too many applications depend on it to error. Please fix the software that causes this problem.
+[MWV207-DBG] 驱动绘制路径已激活 pid=1699134 dumpwin=1
+[WINDUMP-TRY] w=1024 h=20 fmt=16 res=0xffff6bc91300 bo=0xffff6bc65820 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x20-f16.raw w=1024 h=20 fmt=16 off=0 size=1048576 n=81920
+[WINDUMP-TRY] w=2048 h=2048 fmt=49 res=0xffff6bc8cc00 bo=0xffff6efc7e80 linear=(nil)
+[WINDUMP] /tmp/windump/t-2048x2048-f49.raw w=2048 h=2048 fmt=49 off=0 size=4194304 n=4194304
+[WINDUMP-TRY] w=2048 h=2048 fmt=49 res=0xffff6bc8e100 bo=0xffff6efe4460 linear=(nil)
+[WINDUMP] /tmp/windump/t-2048x2048-f49.raw w=2048 h=2048 fmt=49 off=0 size=4194304 n=4194304
+[WINDUMP-TRY] w=2048 h=2048 fmt=49 res=0xffff6bc8e100 bo=0xffff6efe4460 linear=(nil)
+[WINDUMP] /tmp/windump/t-2048x2048-f49.raw w=2048 h=2048 fmt=49 off=0 size=4194304 n=4194304
+[WINDUMP-TRY] w=1024 h=1024 fmt=49 res=0xffff6bc8b300 bo=0xffff6efc72e0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x1024-f49.raw w=1024 h=1024 fmt=49 off=0 size=1048576 n=1048576
+[WINDUMP-TRY] w=2048 h=2048 fmt=53 res=0xffff6bc8d100 bo=0xffff6efc7220 linear=(nil)
+[WINDUMP] /tmp/windump/t-2048x2048-f53.raw w=2048 h=2048 fmt=53 off=0 size=16777216 n=16777216
+[WINDUMP-TRY] w=2048 h=2048 fmt=53 res=0xffff6bc8d100 bo=0xffff6efc7220 linear=(nil)
+[WINDUMP] /tmp/windump/t-2048x2048-f53.raw w=2048 h=2048 fmt=53 off=0 size=16777216 n=16777216
+[WINDUMP-TRY] w=2048 h=2048 fmt=49 res=0xffff6bc8cc00 bo=0xffff6efc7e80 linear=(nil)
+[WINDUMP] /tmp/windump/t-2048x2048-f49.raw w=2048 h=2048 fmt=49 off=0 size=4194304 n=4194304
+[WINDUMP-TRY] w=2048 h=2048 fmt=49 res=0xffff6bc8cc00 bo=0xffff6efc7e80 linear=(nil)
+[WINDUMP] /tmp/windump/t-2048x2048-f49.raw w=2048 h=2048 fmt=49 off=0 size=4194304 n=4194304
+[WINDUMP-TRY] w=2048 h=2048 fmt=53 res=0xffff6bc90400 bo=0xffff701ab460 linear=(nil)
+[WINDUMP] /tmp/windump/t-2048x2048-f53.raw w=2048 h=2048 fmt=53 off=0 size=16777216 n=16777216
+[WINDUMP-TRY] w=2048 h=2048 fmt=53 res=0xffff6bc90400 bo=0xffff701ab460 linear=(nil)
+[WINDUMP] /tmp/windump/t-2048x2048-f53.raw w=2048 h=2048 fmt=53 off=0 size=16777216 n=16777216
+[WINDUMP-TRY] w=2048 h=2048 fmt=53 res=0xffff6bc90400 bo=0xffff701ab460 linear=(nil)
+[WINDUMP] /tmp/windump/t-2048x2048-f53.raw w=2048 h=2048 fmt=53 off=0 size=16777216 n=16777216
+[WINDUMP-TRY] w=2048 h=2048 fmt=53 res=0xffff6bc8d100 bo=0xffff6efc7220 linear=(nil)
+[WINDUMP] /tmp/windump/t-2048x2048-f53.raw w=2048 h=2048 fmt=53 off=0 size=16777216 n=16777216
+[WINDUMP-TRY] w=2048 h=2048 fmt=53 res=0xffff6bc8d100 bo=0xffff6efc7220 linear=(nil)
+[WINDUMP] /tmp/windump/t-2048x2048-f53.raw w=2048 h=2048 fmt=53 off=0 size=16777216 n=16777216
+[WINDUMP-TRY] w=2048 h=2048 fmt=53 res=0xffff6bc8d100 bo=0xffff6efc7220 linear=(nil)
+[WINDUMP] /tmp/windump/t-2048x2048-f53.raw w=2048 h=2048 fmt=53 off=0 size=16777216 n=16777216
+[WINDUMP-TRY] w=2048 h=2048 fmt=49 res=0xffff6bc8e100 bo=0xffff6efe4460 linear=(nil)
+[WINDUMP] /tmp/windump/t-2048x2048-f49.raw w=2048 h=2048 fmt=49 off=0 size=4194304 n=4194304
+[WINDUMP-TRY] w=2048 h=2048 fmt=53 res=0xffff6bc8f000 bo=0xffff701abdc0 linear=(nil)
+[WINDUMP] /tmp/windump/t-2048x2048-f53.raw w=2048 h=2048 fmt=53 off=0 size=16777216 n=16777216
+[WINDUMP-TRY] w=2048 h=2048 fmt=53 res=0xffff6bc8f000 bo=0xffff701abdc0 linear=(nil)
+[WINDUMP] /tmp/windump/t-2048x2048-f53.raw w=2048 h=2048 fmt=53 off=0 size=16777216 n=16777216
+[WINDUMP-TRY] w=2048 h=2048 fmt=53 res=0xffff6bc8f000 bo=0xffff701abdc0 linear=(nil)
+[WINDUMP] /tmp/windump/t-2048x2048-f53.raw w=2048 h=2048 fmt=53 off=0 size=16777216 n=16777216
+[WINDUMP-TRY] w=2048 h=2048 fmt=53 res=0xffff6bc8f000 bo=0xffff701abdc0 linear=(nil)
+[WINDUMP] /tmp/windump/t-2048x2048-f53.raw w=2048 h=2048 fmt=53 off=0 size=16777216 n=16777216
+[WINDUMP-TRY] w=2048 h=2048 fmt=53 res=0xffff6bc8f000 bo=0xffff701abdc0 linear=(nil)
+[WINDUMP] /tmp/windump/t-2048x2048-f53.raw w=2048 h=2048 fmt=53 off=0 size=16777216 n=16777216
+[WINDUMP-TRY] w=2048 h=2048 fmt=53 res=0xffff6bc8f000 bo=0xffff701abdc0 linear=(nil)
+[WINDUMP] /tmp/windump/t-2048x2048-f53.raw w=2048 h=2048 fmt=53 off=0 size=16777216 n=16777216
+[WINDUMP-TRY] w=2048 h=2048 fmt=53 res=0xffff6bc8f000 bo=0xffff701abdc0 linear=(nil)
+[WINDUMP] /tmp/windump/t-2048x2048-f53.raw w=2048 h=2048 fmt=53 off=0 size=16777216 n=16777216
+[WINDUMP-TRY] w=2048 h=2048 fmt=53 res=0xffff6bc8f000 bo=0xffff701abdc0 linear=(nil)
+[WINDUMP] /tmp/windump/t-2048x2048-f53.raw w=2048 h=2048 fmt=53 off=0 size=16777216 n=16777216
+[WINDUMP-TRY] w=2048 h=2048 fmt=53 res=0xffff6bc8f000 bo=0xffff701abdc0 linear=(nil)
+[WINDUMP] /tmp/windump/t-2048x2048-f53.raw w=2048 h=2048 fmt=53 off=0 size=16777216 n=16777216
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7a600 bo=0xffff6efc79a0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7a600 bo=0xffff6efc79a0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7a600 bo=0xffff6efc79a0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7a600 bo=0xffff6efc79a0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7a600 bo=0xffff6efc79a0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7a600 bo=0xffff6efc79a0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7a600 bo=0xffff6efc79a0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7bf00 bo=0xffff6efc75e0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7bf00 bo=0xffff6efc75e0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7bf00 bo=0xffff6efc75e0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7bf00 bo=0xffff6efc75e0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7bf00 bo=0xffff6efc75e0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7bf00 bo=0xffff6efc75e0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7d300 bo=0xffff6efc70a0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7d300 bo=0xffff6efc70a0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7d300 bo=0xffff6efc70a0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7ec00 bo=0xffff6efc71c0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7ec00 bo=0xffff6efc71c0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7ec00 bo=0xffff6efc71c0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1280 h=929 fmt=54 res=0xffff6bc93600 bo=0xffff6bc65940 linear=(nil)
+[WINDUMP] /tmp/windump/t-1280x929-f54.raw w=1280 h=929 fmt=54 off=0 size=4915200 n=4756480
+[WINDUMP-TRY] w=1280 h=929 fmt=54 res=0xffff6bc93600 bo=0xffff6bc65940 linear=(nil)
+[WINDUMP] /tmp/windump/t-1280x929-f54.raw w=1280 h=929 fmt=54 off=0 size=4915200 n=4756480
+[WINDUMP-TRY] w=1280 h=929 fmt=54 res=0xffff6bc93600 bo=0xffff6bc65940 linear=(nil)
+[WINDUMP] /tmp/windump/t-1280x929-f54.raw w=1280 h=929 fmt=54 off=0 size=4915200 n=4756480
+[WINDUMP-TRY] w=1280 h=929 fmt=54 res=0xffff6bc93600 bo=0xffff6bc65940 linear=(nil)
+[WINDUMP] /tmp/windump/t-1280x929-f54.raw w=1280 h=929 fmt=54 off=0 size=4915200 n=4756480
+[WINDUMP-TRY] w=1024 h=20 fmt=16 res=0xffff6bc91300 bo=0xffff6bc65820 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x20-f16.raw w=1024 h=20 fmt=16 off=0 size=1048576 n=81920
+[WINDUMP-TRY] w=2048 h=2048 fmt=49 res=0xffff6bc8cc00 bo=0xffff6efc7e80 linear=(nil)
+[WINDUMP] /tmp/windump/t-2048x2048-f49.raw w=2048 h=2048 fmt=49 off=0 size=4194304 n=4194304
+[WINDUMP-TRY] w=2048 h=2048 fmt=49 res=0xffff6bc8cc00 bo=0xffff6efc7e80 linear=(nil)
+[WINDUMP] /tmp/windump/t-2048x2048-f49.raw w=2048 h=2048 fmt=49 off=0 size=4194304 n=4194304
+[WINDUMP-TRY] w=2048 h=2048 fmt=49 res=0xffff6bc8cc00 bo=0xffff6efc7e80 linear=(nil)
+[WINDUMP] /tmp/windump/t-2048x2048-f49.raw w=2048 h=2048 fmt=49 off=0 size=4194304 n=4194304
+[WINDUMP-TRY] w=2048 h=2048 fmt=53 res=0xffff6bc90400 bo=0xffff701ab460 linear=(nil)
+[WINDUMP] /tmp/windump/t-2048x2048-f53.raw w=2048 h=2048 fmt=53 off=0 size=16777216 n=16777216
+[WINDUMP-TRY] w=2048 h=2048 fmt=53 res=0xffff6bc90400 bo=0xffff701ab460 linear=(nil)
+[WINDUMP] /tmp/windump/t-2048x2048-f53.raw w=2048 h=2048 fmt=53 off=0 size=16777216 n=16777216
+[WINDUMP-TRY] w=2048 h=2048 fmt=53 res=0xffff6bc90400 bo=0xffff701ab460 linear=(nil)
+[WINDUMP] /tmp/windump/t-2048x2048-f53.raw w=2048 h=2048 fmt=53 off=0 size=16777216 n=16777216
+[WINDUMP-TRY] w=2048 h=2048 fmt=53 res=0xffff6bc90400 bo=0xffff701ab460 linear=(nil)
+[WINDUMP] /tmp/windump/t-2048x2048-f53.raw w=2048 h=2048 fmt=53 off=0 size=16777216 n=16777216
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7a600 bo=0xffff6efc79a0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7a600 bo=0xffff6efc79a0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7a600 bo=0xffff6efc79a0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7a600 bo=0xffff6efc79a0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7a600 bo=0xffff6efc79a0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7a600 bo=0xffff6efc79a0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7a600 bo=0xffff6efc79a0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7a600 bo=0xffff6efc79a0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7a600 bo=0xffff6efc79a0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7a600 bo=0xffff6efc79a0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7a600 bo=0xffff6efc79a0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7bf00 bo=0xffff6efc75e0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7bf00 bo=0xffff6efc75e0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7bf00 bo=0xffff6efc75e0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7bf00 bo=0xffff6efc75e0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7bf00 bo=0xffff6efc75e0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1280 h=929 fmt=54 res=0xffff6bc93600 bo=0xffff6bc65940 linear=(nil)
+[WINDUMP] /tmp/windump/t-1280x929-f54.raw w=1280 h=929 fmt=54 off=0 size=4915200 n=4756480
+[WINDUMP-TRY] w=1280 h=929 fmt=54 res=0xffff6bc93600 bo=0xffff6bc65940 linear=(nil)
+[WINDUMP] /tmp/windump/t-1280x929-f54.raw w=1280 h=929 fmt=54 off=0 size=4915200 n=4756480
+[WINDUMP-TRY] w=1280 h=929 fmt=54 res=0xffff6bc93600 bo=0xffff6bc65940 linear=(nil)
+[WINDUMP] /tmp/windump/t-1280x929-f54.raw w=1280 h=929 fmt=54 off=0 size=4915200 n=4756480
+[WINDUMP-TRY] w=1024 h=20 fmt=16 res=0xffff6bc91300 bo=0xffff6bc65820 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x20-f16.raw w=1024 h=20 fmt=16 off=0 size=1048576 n=81920
+[WINDUMP-TRY] w=2048 h=2048 fmt=53 res=0xffff6bc8d100 bo=0xffff6efc7220 linear=(nil)
+[WINDUMP] /tmp/windump/t-2048x2048-f53.raw w=2048 h=2048 fmt=53 off=0 size=16777216 n=16777216
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6403a100 bo=0xffff5fb60b20 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6403a100 bo=0xffff5fb60b20 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6403a100 bo=0xffff5fb60b20 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1280 h=929 fmt=54 res=0xffff6bc93600 bo=0xffff6bc65940 linear=(nil)
+[WINDUMP] /tmp/windump/t-1280x929-f54.raw w=1280 h=929 fmt=54 off=0 size=4915200 n=4756480
+[WINDUMP-TRY] w=1280 h=929 fmt=54 res=0xffff6bc93600 bo=0xffff6bc65940 linear=(nil)
+[WINDUMP] /tmp/windump/t-1280x929-f54.raw w=1280 h=929 fmt=54 off=0 size=4915200 n=4756480
+[WINDUMP-TRY] w=1280 h=929 fmt=54 res=0xffff6bc93600 bo=0xffff6bc65940 linear=(nil)
+[WINDUMP] /tmp/windump/t-1280x929-f54.raw w=1280 h=929 fmt=54 off=0 size=4915200 n=4756480
+[WINDUMP-TRY] w=1280 h=929 fmt=54 res=0xffff6bc93600 bo=0xffff6bc65940 linear=(nil)
+[WINDUMP] /tmp/windump/t-1280x929-f54.raw w=1280 h=929 fmt=54 off=0 size=4915200 n=4756480
+[WINDUMP-TRY] w=1024 h=20 fmt=16 res=0xffff6bc91300 bo=0xffff6bc65820 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x20-f16.raw w=1024 h=20 fmt=16 off=0 size=1048576 n=81920
+[WINDUMP-TRY] w=2048 h=2048 fmt=49 res=0xffff6bc8cc00 bo=0xffff6efc7e80 linear=(nil)
+[WINDUMP] /tmp/windump/t-2048x2048-f49.raw w=2048 h=2048 fmt=49 off=0 size=4194304 n=4194304
+[WINDUMP-TRY] w=2048 h=2048 fmt=49 res=0xffff6bc8cc00 bo=0xffff6efc7e80 linear=(nil)
+[WINDUMP] /tmp/windump/t-2048x2048-f49.raw w=2048 h=2048 fmt=49 off=0 size=4194304 n=4194304
+[WINDUMP-TRY] w=2048 h=2048 fmt=49 res=0xffff6bc8cc00 bo=0xffff6efc7e80 linear=(nil)
+[WINDUMP] /tmp/windump/t-2048x2048-f49.raw w=2048 h=2048 fmt=49 off=0 size=4194304 n=4194304
+[WINDUMP-TRY] w=2048 h=2048 fmt=53 res=0xffff6bc90400 bo=0xffff701ab460 linear=(nil)
+[WINDUMP] /tmp/windump/t-2048x2048-f53.raw w=2048 h=2048 fmt=53 off=0 size=16777216 n=16777216
+[WINDUMP-TRY] w=2048 h=2048 fmt=53 res=0xffff6bc90400 bo=0xffff701ab460 linear=(nil)
+[WINDUMP] /tmp/windump/t-2048x2048-f53.raw w=2048 h=2048 fmt=53 off=0 size=16777216 n=16777216
+[WINDUMP-TRY] w=2048 h=2048 fmt=53 res=0xffff6bc90400 bo=0xffff701ab460 linear=(nil)
+[WINDUMP] /tmp/windump/t-2048x2048-f53.raw w=2048 h=2048 fmt=53 off=0 size=16777216 n=16777216
+[WINDUMP-TRY] w=2048 h=2048 fmt=53 res=0xffff6bc90400 bo=0xffff701ab460 linear=(nil)
+[WINDUMP] /tmp/windump/t-2048x2048-f53.raw w=2048 h=2048 fmt=53 off=0 size=16777216 n=16777216
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7a600 bo=0xffff6efc79a0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7a600 bo=0xffff6efc79a0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7a600 bo=0xffff6efc79a0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7a600 bo=0xffff6efc79a0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7a600 bo=0xffff6efc79a0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7a600 bo=0xffff6efc79a0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7a600 bo=0xffff6efc79a0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7a600 bo=0xffff6efc79a0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7a600 bo=0xffff6efc79a0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7a600 bo=0xffff6efc79a0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7bf00 bo=0xffff6efc75e0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7bf00 bo=0xffff6efc75e0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7bf00 bo=0xffff6efc75e0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7bf00 bo=0xffff6efc75e0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7bf00 bo=0xffff6efc75e0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1280 h=929 fmt=54 res=0xffff5fc5fd00 bo=0xffff5fb5d760 linear=(nil)
+[WINDUMP] /tmp/windump/t-1280x929-f54.raw w=1280 h=929 fmt=54 off=0 size=4915200 n=4756480
+[WINDUMP-TRY] w=1280 h=929 fmt=54 res=0xffff5fc5fd00 bo=0xffff5fb5d760 linear=(nil)
+[WINDUMP] /tmp/windump/t-1280x929-f54.raw w=1280 h=929 fmt=54 off=0 size=4915200 n=4756480
+[WINDUMP-TRY] w=1280 h=929 fmt=54 res=0xffff5fc5fd00 bo=0xffff5fb5d760 linear=(nil)
+[WINDUMP] /tmp/windump/t-1280x929-f54.raw w=1280 h=929 fmt=54 off=0 size=4915200 n=4756480
+[WINDUMP-TRY] w=1280 h=929 fmt=54 res=0xffff5fc5fd00 bo=0xffff5fb5d760 linear=(nil)
+[WINDUMP] /tmp/windump/t-1280x929-f54.raw w=1280 h=929 fmt=54 off=0 size=4915200 n=4756480
+[WINDUMP-TRY] w=1024 h=20 fmt=16 res=0xffff6bc91300 bo=0xffff6bc65820 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x20-f16.raw w=1024 h=20 fmt=16 off=0 size=1048576 n=81920
+[WINDUMP-TRY] w=2048 h=2048 fmt=49 res=0xffff6bc8cc00 bo=0xffff6efc7e80 linear=(nil)
+[WINDUMP] /tmp/windump/t-2048x2048-f49.raw w=2048 h=2048 fmt=49 off=0 size=4194304 n=4194304
+[WINDUMP-TRY] w=2048 h=2048 fmt=49 res=0xffff6bc8cc00 bo=0xffff6efc7e80 linear=(nil)
+[WINDUMP] /tmp/windump/t-2048x2048-f49.raw w=2048 h=2048 fmt=49 off=0 size=4194304 n=4194304
+[WINDUMP-TRY] w=2048 h=2048 fmt=49 res=0xffff6bc8cc00 bo=0xffff6efc7e80 linear=(nil)
+[WINDUMP] /tmp/windump/t-2048x2048-f49.raw w=2048 h=2048 fmt=49 off=0 size=4194304 n=4194304
+[WINDUMP-TRY] w=2048 h=2048 fmt=53 res=0xffff6bc90400 bo=0xffff701ab460 linear=(nil)
+[WINDUMP] /tmp/windump/t-2048x2048-f53.raw w=2048 h=2048 fmt=53 off=0 size=16777216 n=16777216
+[WINDUMP-TRY] w=2048 h=2048 fmt=53 res=0xffff6bc90400 bo=0xffff701ab460 linear=(nil)
+[WINDUMP] /tmp/windump/t-2048x2048-f53.raw w=2048 h=2048 fmt=53 off=0 size=16777216 n=16777216
+[WINDUMP-TRY] w=2048 h=2048 fmt=53 res=0xffff6bc90400 bo=0xffff701ab460 linear=(nil)
+[WINDUMP] /tmp/windump/t-2048x2048-f53.raw w=2048 h=2048 fmt=53 off=0 size=16777216 n=16777216
+[WINDUMP-TRY] w=2048 h=2048 fmt=53 res=0xffff6bc90400 bo=0xffff701ab460 linear=(nil)
+[WINDUMP] /tmp/windump/t-2048x2048-f53.raw w=2048 h=2048 fmt=53 off=0 size=16777216 n=16777216
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7a600 bo=0xffff6efc79a0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7a600 bo=0xffff6efc79a0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7a600 bo=0xffff6efc79a0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7a600 bo=0xffff6efc79a0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7a600 bo=0xffff6efc79a0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7a600 bo=0xffff6efc79a0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7a600 bo=0xffff6efc79a0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7a600 bo=0xffff6efc79a0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7a600 bo=0xffff6efc79a0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7a600 bo=0xffff6efc79a0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7a600 bo=0xffff6efc79a0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1280 h=929 fmt=54 res=0xffff6bc93600 bo=0xffff6bc65940 linear=(nil)
+[WINDUMP] /tmp/windump/t-1280x929-f54.raw w=1280 h=929 fmt=54 off=0 size=4915200 n=4756480
+[WINDUMP-TRY] w=1280 h=929 fmt=54 res=0xffff6bc93600 bo=0xffff6bc65940 linear=(nil)
+[WINDUMP] /tmp/windump/t-1280x929-f54.raw w=1280 h=929 fmt=54 off=0 size=4915200 n=4756480
+[WINDUMP-TRY] w=1280 h=929 fmt=54 res=0xffff6bc93600 bo=0xffff6bc65940 linear=(nil)
+[WINDUMP] /tmp/windump/t-1280x929-f54.raw w=1280 h=929 fmt=54 off=0 size=4915200 n=4756480
+[WINDUMP-TRY] w=1280 h=929 fmt=54 res=0xffff6bc93600 bo=0xffff6bc65940 linear=(nil)
+[WINDUMP] /tmp/windump/t-1280x929-f54.raw w=1280 h=929 fmt=54 off=0 size=4915200 n=4756480
+[WINDUMP-TRY] w=1280 h=929 fmt=54 res=0xffff6bc93600 bo=0xffff6bc65940 linear=(nil)
+[WINDUMP] /tmp/windump/t-1280x929-f54.raw w=1280 h=929 fmt=54 off=0 size=4915200 n=4756480
+[WINDUMP-TRY] w=1024 h=20 fmt=16 res=0xffff6bc91300 bo=0xffff6bc65820 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x20-f16.raw w=1024 h=20 fmt=16 off=0 size=1048576 n=81920
+[WINDUMP-TRY] w=2048 h=2048 fmt=49 res=0xffff6bc8cc00 bo=0xffff6efc7e80 linear=(nil)
+[WINDUMP] /tmp/windump/t-2048x2048-f49.raw w=2048 h=2048 fmt=49 off=0 size=4194304 n=4194304
+[WINDUMP-TRY] w=2048 h=2048 fmt=49 res=0xffff6bc8cc00 bo=0xffff6efc7e80 linear=(nil)
+[WINDUMP] /tmp/windump/t-2048x2048-f49.raw w=2048 h=2048 fmt=49 off=0 size=4194304 n=4194304
+[WINDUMP-TRY] w=2048 h=2048 fmt=49 res=0xffff6bc8cc00 bo=0xffff6efc7e80 linear=(nil)
+[WINDUMP] /tmp/windump/t-2048x2048-f49.raw w=2048 h=2048 fmt=49 off=0 size=4194304 n=4194304
+[WINDUMP-TRY] w=2048 h=2048 fmt=53 res=0xffff6bc90400 bo=0xffff701ab460 linear=(nil)
+[WINDUMP] /tmp/windump/t-2048x2048-f53.raw w=2048 h=2048 fmt=53 off=0 size=16777216 n=16777216
+[WINDUMP-TRY] w=2048 h=2048 fmt=53 res=0xffff6bc90400 bo=0xffff701ab460 linear=(nil)
+[WINDUMP] /tmp/windump/t-2048x2048-f53.raw w=2048 h=2048 fmt=53 off=0 size=16777216 n=16777216
+[WINDUMP-TRY] w=2048 h=2048 fmt=53 res=0xffff6bc90400 bo=0xffff701ab460 linear=(nil)
+[WINDUMP] /tmp/windump/t-2048x2048-f53.raw w=2048 h=2048 fmt=53 off=0 size=16777216 n=16777216
+[WINDUMP-TRY] w=2048 h=2048 fmt=53 res=0xffff6bc90400 bo=0xffff701ab460 linear=(nil)
+[WINDUMP] /tmp/windump/t-2048x2048-f53.raw w=2048 h=2048 fmt=53 off=0 size=16777216 n=16777216
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7a600 bo=0xffff6efc79a0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7a600 bo=0xffff6efc79a0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7a600 bo=0xffff6efc79a0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7a600 bo=0xffff6efc79a0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7a600 bo=0xffff6efc79a0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7a600 bo=0xffff6efc79a0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7a600 bo=0xffff6efc79a0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7a600 bo=0xffff6efc79a0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7a600 bo=0xffff6efc79a0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7a600 bo=0xffff6efc79a0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1024 h=512 fmt=53 res=0xffff6bc7a600 bo=0xffff6efc79a0 linear=(nil)
+[WINDUMP] /tmp/windump/t-1024x512-f53.raw w=1024 h=512 fmt=53 off=0 size=2097152 n=2097152
+[WINDUMP-TRY] w=1280 h=929 fmt=54 res=0xffff5fc5fd00 bo=0xffff5fb5d760 linear=(nil)
+[WINDUMP] /tmp/windump/t-1280x929-f54.raw w=1280 h=929 fmt=54 off=0 size=4915200 n=4756480
+[WINDUMP-TRY] w=1280 h=929 fmt=54 res=0xffff5fc5fd00 bo=0xffff5fb5d760 linear=(nil)
+[WINDUMP] /tmp/windump/t-1280x929-f54.raw w=1280 h=929 fmt=54 off=0 size=4915200 n=4756480
+[WINDUMP-TRY] w=1280 h=929 fmt=54 res=0xffff5fc5fd00 bo=0xffff5fb5d760 linear=(nil)
+[WINDUMP] /tmp/windump/t-1280x929-f54.raw w=1280 h=929 fmt=54 off=0 size=4915200 n=4756480
+[WINDUMP-TRY] w=1280 h=929 fmt=54 res=0xffff6bc93600 bo=0xffff6bc65940 linear=(nil)
+[WINDUMP] /tmp/windump/t-1280x929-f54.raw w=1280 h=929 fmt=54 off=0 size=4915200 n=4756480
+[WINDUMP-TRY] w=1280 h=929 fmt=54 res=0xffff6bc93600 bo=0xffff6bc65940 linear=(nil)
+[WINDUMP] /tmp/windump/t-1280x929-f54.raw w=1280 h=929 fmt=54 off=0 size=4915200 n=4756480
+[WINDUMP-TRY] w=1280 h=929 fmt=54 res=0xffff6bc93600 bo=0xffff6bc65940 linear=(nil)
+[WINDUMP] /tmp/windump/t-1280x929-f54.raw w=1280 h=929 fmt=54 off=0 size=4915200 n=4756480
