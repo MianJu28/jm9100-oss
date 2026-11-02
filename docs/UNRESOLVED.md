@@ -198,3 +198,14 @@
   [reverse/05-OCCLUSION-QUERY.md](reverse/05-OCCLUSION-QUERY.md)
 - KMD 6.6 移植：[../reports/KMD-6.6-PORT-REPORT.md](../reports/KMD-6.6-PORT-REPORT.md)
 - 验证工具：`tests/query/run-query-tests.sh`、`tests/run-all.sh`
+
+## 火狐浏览器自身 UI 的文字错位（r8 起可见）
+
+- 现状：页面内容（WebRender）在 r8 下已完全正确；浏览器界面（标签栏 / 地址栏）
+  的文字呈"字符被打乱"状（`file:///tmp/diagpage.html` → `fi fhi;ap: t.lp|/tg/e d l`）。
+  r7 时整个 chrome 区域全黑（完全不渲染），r8 修复后才暴露出来。
+- 已排除：双源混合（`/tmp/dsrc`）、亚像素抗锯齿逐通道覆盖率（`/tmp/dsrc2`），
+  两者与 llvmpipe 逐字节一致。
+- 疑点方向：chrome 文字用 R8 字形图集，其 UV / 取样位置可能有问题；与
+  128 位纹理路径无关（那条路径已修好并有回归）。
+- 参考：`reports/FF-RENDER-20261102.md` 第 11.7 节。
