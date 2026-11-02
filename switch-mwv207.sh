@@ -929,6 +929,8 @@ start_display() {
     if systemctl list-unit-files 2>/dev/null | grep -q '^lightdm\.service'; then
         run systemctl start lightdm
     fi
+    # 换模块时把 VT 控制台解绑过, 这里绑回新模块的 framebuffer
+    fbcon_bind 1
 }
 
 wait_x_ok() {
@@ -992,6 +994,39 @@ wait_for_dri_free() {
     return 1
 }
 
+# 内核 VT 控制台 (fbcon) 会一直占着 GPU 的 DRM framebuffer, 于是给 mwv207 记着
+# 1 个模块引用 —— 这就是"没有任何进程开着 /dev/dri、modprobe -r 仍报 in use"的真因。
+# 本机实测: 停 lightdm 后 refcnt 稳定在 1、/dev/dri 占用进程 0, 而 /proc/fb 是
+# mwv207drmfb, /sys/class/vtconsole/vtcon1 name 为 "(M) frame buffer device" 且 bind=1。
+# 换模块前先解绑、之后再绑回 (nvidia 等闭源驱动同款做法)。
+fbcon_bind() {
+    local want="$1" v cur n
+    for v in /sys/class/vtconsole/vtcon*/; do
+        [ -f "$v/name" ] || continue
+        n=$(cat "$v/name" 2>/dev/null)
+        case "$n" in *"frame buffer device"*) ;; *) continue ;; esac
+        cur=$(cat "$v/bind" 2>/dev/null)
+        [ "$cur" = "$want" ] && continue
+        if run sh -c "echo $want > '$v/bind'"; then
+            log "  VT 控制台 $(basename "$v") bind=$want ($n)"
+        else
+            warn "  无法写 $v/bind (期望 $want)"
+        fi
+    done
+    return 0
+}
+
+# 等模块引用计数归零。返回 0 表示可以 rmmod。
+wait_for_refcnt_zero() {
+    local waited=0 max="${1:-15}" rc
+    while [ "$waited" -lt "$max" ]; do
+        rc=$(cat /sys/module/mwv207/refcnt 2>/dev/null) || return 0
+        [ "$rc" = 0 ] && return 0
+        sleep 1; waited=$((waited + 1))
+    done
+    return 1
+}
+
 # 纯换模块：**不管显示管理器**（调用方负责停/起）。
 # 拆出来的原因：全栈切换要"停一次 lightdm、中间换模块、再由 umd 统一拉起"，
 # 若用 kmd_swap_module 则会多一轮 start_display。
@@ -1018,9 +1053,17 @@ kmd_reload_module() {
         fi
     fi
 
+        # 即使 /dev/dri 已无人占用, 模块引用也不会归零 —— 内核 VT 控制台 (fbcon)
+    # 绑在 GPU 的 DRM framebuffer 上, 常驻 1 个引用。必须先解绑。
+    fbcon_bind 0
+    if ! wait_for_refcnt_zero 15; then
+        warn "  模块引用仍未归零 (refcnt=$(cat /sys/module/mwv207/refcnt 2>/dev/null)); 仍尝试 rmmod"
+    fi
+
     log "  卸载旧模块并加载新模块"
     if ! run modprobe -r mwv207; then
-        warn "  modprobe -r 失败（仍被占用）"
+        warn "  modprobe -r 失败（refcnt=$(cat /sys/module/mwv207/refcnt 2>/dev/null)）"
+        fbcon_bind 1
         return 1
     fi
     if ! run modprobe mwv207; then
@@ -1028,6 +1071,7 @@ kmd_reload_module() {
         return 1
     fi
     sleep 1
+    fbcon_bind 1
     local lv; lv=$(loaded_srcver)
     if [ "$lv" != "$installed" ]; then
         warn "  加载后 srcversion=$lv，期望 $installed"
