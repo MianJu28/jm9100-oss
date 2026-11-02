@@ -1,0 +1,662 @@
+[476238, Main Thread] WARNING: g_value_set_boxed: assertion 'G_VALUE_HOLDS_BOXED (value)' failed: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): GLib-GObject-CRITICAL **: 12:30:57.145: g_value_set_boxed: assertion 'G_VALUE_HOLDS_BOXED (value)' failed
+[476238, Main Thread] WARNING: g_value_set_boxed: assertion 'G_VALUE_HOLDS_BOXED (value)' failed: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): GLib-GObject-CRITICAL **: 12:30:57.145: g_value_set_boxed: assertion 'G_VALUE_HOLDS_BOXED (value)' failed
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:243:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.250: Theme parsing error: gtk-dark.css:243:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:250:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.250: Theme parsing error: gtk-dark.css:250:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:261:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.250: Theme parsing error: gtk-dark.css:261:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:268:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.250: Theme parsing error: gtk-dark.css:268:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:279:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.250: Theme parsing error: gtk-dark.css:279:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:286:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.250: Theme parsing error: gtk-dark.css:286:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:302:74: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.250: Theme parsing error: gtk-dark.css:302:74: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:312:62: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.250: Theme parsing error: gtk-dark.css:312:62: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:316:73: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.250: Theme parsing error: gtk-dark.css:316:73: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:1481:71: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.253: Theme parsing error: gtk-dark.css:1481:71: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:1530:74: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.253: Theme parsing error: gtk-dark.css:1530:74: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:1547:74: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.253: Theme parsing error: gtk-dark.css:1547:74: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:1552:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.253: Theme parsing error: gtk-dark.css:1552:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:1565:74: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.253: Theme parsing error: gtk-dark.css:1565:74: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:1570:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.253: Theme parsing error: gtk-dark.css:1570:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:2002:73: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.254: Theme parsing error: gtk-dark.css:2002:73: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:2015:62: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.254: Theme parsing error: gtk-dark.css:2015:62: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:2021:74: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.254: Theme parsing error: gtk-dark.css:2021:74: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:2206:62: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.255: Theme parsing error: gtk-dark.css:2206:62: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:2214:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.255: Theme parsing error: gtk-dark.css:2214:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:2220:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.255: Theme parsing error: gtk-dark.css:2220:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:2745:11: Not using units is deprecated. Assuming 'px'.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.256: Theme parsing error: gtk-dark.css:2745:11: Not using units is deprecated. Assuming 'px'.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:2745:11: Expected a string.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.256: Theme parsing error: gtk-dark.css:2745:11: Expected a string.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:3347:35: '-gtk-gradient' is not a valid color name: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.257: Theme parsing error: gtk-dark.css:3347:35: '-gtk-gradient' is not a valid color name
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:3682:53: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.258: Theme parsing error: gtk-dark.css:3682:53: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:3721:53: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.258: Theme parsing error: gtk-dark.css:3721:53: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:3725:59: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.258: Theme parsing error: gtk-dark.css:3725:59: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:3731:53: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.258: Theme parsing error: gtk-dark.css:3731:53: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:3731:87: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.258: Theme parsing error: gtk-dark.css:3731:87: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:4073:10: not a number: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.258: Theme parsing error: gtk-dark.css:4073:10: not a number
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:4073:19: Using Pango syntax for the font: style property is deprecated; please use CSS syntax: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.259: Theme parsing error: gtk-dark.css:4073:19: Using Pango syntax for the font: style property is deprecated; please use CSS syntax
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:4494:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.259: Theme parsing error: gtk-dark.css:4494:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:4860:73: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.260: Theme parsing error: gtk-dark.css:4860:73: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:4870:62: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.260: Theme parsing error: gtk-dark.css:4870:62: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:4874:74: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.260: Theme parsing error: gtk-dark.css:4874:74: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:4884:54: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.260: Theme parsing error: gtk-dark.css:4884:54: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:4970:60: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.260: Theme parsing error: gtk-dark.css:4970:60: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:4985:67: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.261: Theme parsing error: gtk-dark.css:4985:67: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:4989:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.261: Theme parsing error: gtk-dark.css:4989:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5001:62: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.261: Theme parsing error: gtk-dark.css:5001:62: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5206:10: not a number: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.261: Theme parsing error: gtk-dark.css:5206:10: not a number
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5206:22: Using Pango syntax for the font: style property is deprecated; please use CSS syntax: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.261: Theme parsing error: gtk-dark.css:5206:22: Using Pango syntax for the font: style property is deprecated; please use CSS syntax
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5226:37: 'linear-gradient' is not a valid color name: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.261: Theme parsing error: gtk-dark.css:5226:37: 'linear-gradient' is not a valid color name
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5238:10: not a number: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.261: Theme parsing error: gtk-dark.css:5238:10: not a number
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5238:24: Using Pango syntax for the font: style property is deprecated; please use CSS syntax: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.261: Theme parsing error: gtk-dark.css:5238:24: Using Pango syntax for the font: style property is deprecated; please use CSS syntax
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5241:10: not a number: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.261: Theme parsing error: gtk-dark.css:5241:10: not a number
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5241:30: Using Pango syntax for the font: style property is deprecated; please use CSS syntax: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.261: Theme parsing error: gtk-dark.css:5241:30: Using Pango syntax for the font: style property is deprecated; please use CSS syntax
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5244:10: not a number: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.261: Theme parsing error: gtk-dark.css:5244:10: not a number
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5244:24: Using Pango syntax for the font: style property is deprecated; please use CSS syntax: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.261: Theme parsing error: gtk-dark.css:5244:24: Using Pango syntax for the font: style property is deprecated; please use CSS syntax
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5261:14: not a number: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.261: Theme parsing error: gtk-dark.css:5261:14: not a number
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5261:14: Expected a string.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.261: Theme parsing error: gtk-dark.css:5261:14: Expected a string.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5268:14: not a number: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.261: Theme parsing error: gtk-dark.css:5268:14: not a number
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5268:14: Expected a string.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.261: Theme parsing error: gtk-dark.css:5268:14: Expected a string.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5277:16: not a number: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.261: Theme parsing error: gtk-dark.css:5277:16: not a number
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5277:16: Expected a string.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.261: Theme parsing error: gtk-dark.css:5277:16: Expected a string.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5282:16: not a number: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.262: Theme parsing error: gtk-dark.css:5282:16: not a number
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5282:16: Expected a string.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.262: Theme parsing error: gtk-dark.css:5282:16: Expected a string.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5359:14: Expected a string.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.262: Theme parsing error: gtk-dark.css:5359:14: Expected a string.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5362:16: not a number: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.262: Theme parsing error: gtk-dark.css:5362:16: not a number
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5362:16: Expected a string.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.262: Theme parsing error: gtk-dark.css:5362:16: Expected a string.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5414:14: not a number: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.262: Theme parsing error: gtk-dark.css:5414:14: not a number
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5414:14: Expected a string.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.262: Theme parsing error: gtk-dark.css:5414:14: Expected a string.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5417:68: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.262: Theme parsing error: gtk-dark.css:5417:68: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5647:74: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.262: Theme parsing error: gtk-dark.css:5647:74: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5657:62: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.263: Theme parsing error: gtk-dark.css:5657:62: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5661:73: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.263: Theme parsing error: gtk-dark.css:5661:73: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:243:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.292: Theme parsing error: gtk-dark.css:243:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:250:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.292: Theme parsing error: gtk-dark.css:250:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:261:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.292: Theme parsing error: gtk-dark.css:261:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:268:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.292: Theme parsing error: gtk-dark.css:268:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:279:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.292: Theme parsing error: gtk-dark.css:279:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:286:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.292: Theme parsing error: gtk-dark.css:286:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:302:74: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.292: Theme parsing error: gtk-dark.css:302:74: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:312:62: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.292: Theme parsing error: gtk-dark.css:312:62: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:316:73: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.292: Theme parsing error: gtk-dark.css:316:73: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:1481:71: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.295: Theme parsing error: gtk-dark.css:1481:71: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:1530:74: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.295: Theme parsing error: gtk-dark.css:1530:74: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:1547:74: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.295: Theme parsing error: gtk-dark.css:1547:74: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:1552:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.295: Theme parsing error: gtk-dark.css:1552:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:1565:74: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.295: Theme parsing error: gtk-dark.css:1565:74: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:1570:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.295: Theme parsing error: gtk-dark.css:1570:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:2002:73: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.296: Theme parsing error: gtk-dark.css:2002:73: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:2015:62: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.296: Theme parsing error: gtk-dark.css:2015:62: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:2021:74: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.297: Theme parsing error: gtk-dark.css:2021:74: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:2206:62: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.297: Theme parsing error: gtk-dark.css:2206:62: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:2214:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.297: Theme parsing error: gtk-dark.css:2214:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:2220:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.297: Theme parsing error: gtk-dark.css:2220:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:2745:11: Not using units is deprecated. Assuming 'px'.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.298: Theme parsing error: gtk-dark.css:2745:11: Not using units is deprecated. Assuming 'px'.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:2745:11: Expected a string.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.298: Theme parsing error: gtk-dark.css:2745:11: Expected a string.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:3347:35: '-gtk-gradient' is not a valid color name: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.299: Theme parsing error: gtk-dark.css:3347:35: '-gtk-gradient' is not a valid color name
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:3682:53: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.300: Theme parsing error: gtk-dark.css:3682:53: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:3721:53: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.300: Theme parsing error: gtk-dark.css:3721:53: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:3725:59: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.300: Theme parsing error: gtk-dark.css:3725:59: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:3731:53: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.300: Theme parsing error: gtk-dark.css:3731:53: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:3731:87: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.300: Theme parsing error: gtk-dark.css:3731:87: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:4073:10: not a number: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.301: Theme parsing error: gtk-dark.css:4073:10: not a number
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:4073:19: Using Pango syntax for the font: style property is deprecated; please use CSS syntax: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.301: Theme parsing error: gtk-dark.css:4073:19: Using Pango syntax for the font: style property is deprecated; please use CSS syntax
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:4494:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.302: Theme parsing error: gtk-dark.css:4494:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:4860:73: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.302: Theme parsing error: gtk-dark.css:4860:73: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:4870:62: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.302: Theme parsing error: gtk-dark.css:4870:62: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:4874:74: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.302: Theme parsing error: gtk-dark.css:4874:74: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:4884:54: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.302: Theme parsing error: gtk-dark.css:4884:54: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:4970:60: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.303: Theme parsing error: gtk-dark.css:4970:60: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:4985:67: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.303: Theme parsing error: gtk-dark.css:4985:67: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:4989:56: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.303: Theme parsing error: gtk-dark.css:4989:56: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5001:62: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.303: Theme parsing error: gtk-dark.css:5001:62: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5206:10: not a number: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.303: Theme parsing error: gtk-dark.css:5206:10: not a number
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5206:22: Using Pango syntax for the font: style property is deprecated; please use CSS syntax: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.303: Theme parsing error: gtk-dark.css:5206:22: Using Pango syntax for the font: style property is deprecated; please use CSS syntax
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5226:37: 'linear-gradient' is not a valid color name: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.303: Theme parsing error: gtk-dark.css:5226:37: 'linear-gradient' is not a valid color name
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5238:10: not a number: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.303: Theme parsing error: gtk-dark.css:5238:10: not a number
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5238:24: Using Pango syntax for the font: style property is deprecated; please use CSS syntax: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.303: Theme parsing error: gtk-dark.css:5238:24: Using Pango syntax for the font: style property is deprecated; please use CSS syntax
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5241:10: not a number: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.303: Theme parsing error: gtk-dark.css:5241:10: not a number
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5241:30: Using Pango syntax for the font: style property is deprecated; please use CSS syntax: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.303: Theme parsing error: gtk-dark.css:5241:30: Using Pango syntax for the font: style property is deprecated; please use CSS syntax
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5244:10: not a number: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.303: Theme parsing error: gtk-dark.css:5244:10: not a number
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5244:24: Using Pango syntax for the font: style property is deprecated; please use CSS syntax: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.303: Theme parsing error: gtk-dark.css:5244:24: Using Pango syntax for the font: style property is deprecated; please use CSS syntax
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5261:14: not a number: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.304: Theme parsing error: gtk-dark.css:5261:14: not a number
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5261:14: Expected a string.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.304: Theme parsing error: gtk-dark.css:5261:14: Expected a string.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5268:14: not a number: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.304: Theme parsing error: gtk-dark.css:5268:14: not a number
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5268:14: Expected a string.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.304: Theme parsing error: gtk-dark.css:5268:14: Expected a string.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5277:16: not a number: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.304: Theme parsing error: gtk-dark.css:5277:16: not a number
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5277:16: Expected a string.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.304: Theme parsing error: gtk-dark.css:5277:16: Expected a string.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5282:16: not a number: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.304: Theme parsing error: gtk-dark.css:5282:16: not a number
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5282:16: Expected a string.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.304: Theme parsing error: gtk-dark.css:5282:16: Expected a string.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5359:14: Expected a string.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.304: Theme parsing error: gtk-dark.css:5359:14: Expected a string.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5362:16: not a number: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.304: Theme parsing error: gtk-dark.css:5362:16: not a number
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5362:16: Expected a string.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.304: Theme parsing error: gtk-dark.css:5362:16: Expected a string.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5414:14: not a number: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.304: Theme parsing error: gtk-dark.css:5414:14: not a number
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5414:14: Expected a string.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.304: Theme parsing error: gtk-dark.css:5414:14: Expected a string.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5417:68: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.304: Theme parsing error: gtk-dark.css:5417:68: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5647:74: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.305: Theme parsing error: gtk-dark.css:5647:74: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5657:62: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.305: Theme parsing error: gtk-dark.css:5657:62: Using one color stop with linear-gradient() is deprecated.
+[Parent 476238, Main Thread] WARNING: Theme parsing error: gtk-dark.css:5661:73: Using one color stop with linear-gradient() is deprecated.: 'glib warning', file checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:200
+
+(firefox:476238): Gtk-WARNING **: 12:30:57.305: Theme parsing error: gtk-dark.css:5661:73: Using one color stop with linear-gradient() is deprecated.
+libGL: Can't open configuration file /usr/local/etc/drirc: 没有那个文件或目录.
+libGL: Can't open configuration file /home/admin/.drirc: 没有那个文件或目录.
+libGL: Can't open configuration file /usr/local/etc/drirc: 没有那个文件或目录.
+libGL: Can't open configuration file /home/admin/.drirc: 没有那个文件或目录.
+[     1] Failed to open device: 没有那个文件或目录, Try again...
+[     2] Failed to open device: 没有那个文件或目录, Try again...
+[     3] Failed to open device: 没有那个文件或目录, Try again...
+[     4] Failed to open device: 没有那个文件或目录, Try again...
+[     5] _OpenDevice(1160): FATAL: Failed to open device, errno=没有那个文件或目录.
+[     6] veglGetModule: Fail to load library: libOpenVG.so!
+[     7] Failed ES_Common API GetProcAddress: forward_glActiveTexture !
+[     8] Failed ES_Common API GetProcAddress: forward_glBindBuffer !
+[     9] Failed ES_Common API GetProcAddress: forward_glBindTexture !
+[    10] Failed ES_Common API GetProcAddress: forward_glBlendFunc !
+[    11] Failed ES_Common API GetProcAddress: forward_glBufferData !
+[    12] Failed ES_Common API GetProcAddress: forward_glBufferSubData !
+[    13] Failed ES_Common API GetProcAddress: forward_glClear !
+[    14] Failed ES_Common API GetProcAddress: forward_glClearColor !
+[    15] Failed ES_Common API GetProcAddress: forward_glClearDepthf !
+[    16] Failed ES_Common API GetProcAddress: forward_glClearStencil !
+[    17] Failed ES_Common API GetProcAddress: forward_glColorMask !
+[    18] Failed ES_Common API GetProcAddress: forward_glCompressedTexImage2D !
+[    19] Failed ES_Common API GetProcAddress: forward_glCompressedTexSubImage2D !
+[    20] Failed ES_Common API GetProcAddress: forward_glCopyTexImage2D !
+[    21] Failed ES_Common API GetProcAddress: forward_glCopyTexSubImage2D !
+[    22] Failed ES_Common API GetProcAddress: forward_glCullFace !
+[    23] Failed ES_Common API GetProcAddress: forward_glDeleteBuffers !
+[    24] Failed ES_Common API GetProcAddress: forward_glDeleteTextures !
+[    25] Failed ES_Common API GetProcAddress: forward_glDepthFunc !
+[    26] Failed ES_Common API GetProcAddress: forward_glDepthMask !
+[    27] Failed ES_Common API GetProcAddress: forward_glDepthRangef !
+[    28] Failed ES_Common API GetProcAddress: forward_glDisable !
+[    29] Failed ES_Common API GetProcAddress: forward_glDrawArrays !
+[    30] Failed ES_Common API GetProcAddress: forward_glDrawElements !
+[    31] Failed ES_Common API GetProcAddress: forward_glEnable !
+[    32] Failed ES_Common API GetProcAddress: forward_glFinish !
+[    33] Failed ES_Common API GetProcAddress: forward_glFlush !
+[    34] Failed ES_Common API GetProcAddress: forward_glFrontFace !
+[    35] Failed ES_Common API GetProcAddress: forward_glGenBuffers !
+[    36] Failed ES_Common API GetProcAddress: forward_glGenTextures !
+[    37] Failed ES_Common API GetProcAddress: forward_glGetBooleanv !
+[    38] Failed ES_Common API GetProcAddress: forward_glGetBufferParameteriv !
+[    39] Failed ES_Common API GetProcAddress: forward_glGetError !
+[    40] Failed ES_Common API GetProcAddress: forward_glGetFloatv !
+[    41] Failed ES_Common API GetProcAddress: forward_glGetIntegerv !
+[    42] Failed ES_Common API GetProcAddress: forward_glGetPointerv !
+[    43] Failed ES_Common API GetProcAddress: forward_glGetString !
+[    44] Failed ES_Common API GetProcAddress: forward_glGetTexParameterfv !
+[    45] Failed ES_Common API GetProcAddress: forward_glGetTexParameteriv !
+[    46] Failed ES_Common API GetProcAddress: forward_glHint !
+[    47] Failed ES_Common API GetProcAddress: forward_glIsBuffer !
+[    48] Failed ES_Common API GetProcAddress: forward_glIsEnabled !
+[    49] Failed ES_Common API GetProcAddress: forward_glIsTexture !
+[    50] Failed ES_Common API GetProcAddress: forward_glLineWidth !
+[    51] Failed ES_Common API GetProcAddress: forward_glPixelStorei !
+[    52] Failed ES_Common API GetProcAddress: forward_glPolygonOffset !
+[    53] Failed ES_Common API GetProcAddress: forward_glReadPixels !
+[    54] Failed ES_Common API GetProcAddress: forward_glSampleCoverage !
+[    55] Failed ES_Common API GetProcAddress: forward_glScissor !
+[    56] Failed ES_Common API GetProcAddress: forward_glStencilFunc !
+[    57] Failed ES_Common API GetProcAddress: forward_glStencilMask !
+[    58] Failed ES_Common API GetProcAddress: forward_glStencilOp !
+[    59] Failed ES_Common API GetProcAddress: forward_glTexImage2D !
+[    60] Failed ES_Common API GetProcAddress: forward_glTexParameterf !
+[    61] Failed ES_Common API GetProcAddress: forward_glTexParameterfv !
+[    62] Failed ES_Common API GetProcAddress: forward_glTexParameteri !
+[    63] Failed ES_Common API GetProcAddress: forward_glTexParameteriv !
+[    64] Failed ES_Common API GetProcAddress: forward_glTexSubImage2D !
+[    65] Failed ES_Common API GetProcAddress: forward_glViewport !
+[    66] Failed ES_Common API GetProcAddress: forward_glMapBufferOES !
+[    67] Failed ES_Common API GetProcAddress: forward_glUnmapBufferOES !
+[    68] Failed ES_Common API GetProcAddress: forward_glEGLImageTargetTexture2DOES !
+[    69] Failed ES_Common API GetProcAddress: forward_glEGLImageTargetRenderbufferStorageOES !
+[    70] Failed ES_Common API GetProcAddress: forward_glMultiDrawArraysEXT !
+[    71] Failed ES_Common API GetProcAddress: forward_glMultiDrawElementsEXT !
+[    72] Failed ES_Common API GetProcAddress: forward_glTexDirectJM !
+[    73] Failed ES_Common API GetProcAddress: forward_glTexDirectInvalidateJM !
+[    74] Failed ES_Common API GetProcAddress: forward_glTexDirectJMMap !
+[    75] Failed ES_Common API GetProcAddress: forward_glTexDirectTiledMapJM !
+[    76] Failed ES_Common API GetProcAddress: forward_glTexExportDMABUFJM !
+[    77] Failed GLES11 API GetProcAddress: glAlphaFuncxOES !
+[    78] Failed GLES11 API GetProcAddress: glBindFramebufferOES !
+[    79] Failed GLES11 API GetProcAddress: glBindRenderbufferOES !
+[    80] Failed GLES11 API GetProcAddress: glBlendFuncSeparateOES !
+[    81] Failed GLES11 API GetProcAddress: glBlendEquationOES !
+[    82] Failed GLES11 API GetProcAddress: glBlendEquationSeparateOES !
+[    83] Failed GLES11 API GetProcAddress: glCheckFramebufferStatusOES !
+[    84] Failed GLES11 API GetProcAddress: glClearColorxOES !
+[    85] Failed GLES11 API GetProcAddress: glClearDepthxOES !
+[    86] Failed GLES11 API GetProcAddress: glClipPlanexOES !
+[    87] Failed GLES11 API GetProcAddress: glClipPlanexIMG !
+[    88] Failed GLES11 API GetProcAddress: glColor4xOES !
+[    89] Failed GLES11 API GetProcAddress: glCurrentPaletteMatrixOES !
+[    90] Failed GLES11 API GetProcAddress: glDeleteFramebuffersOES !
+[    91] Failed GLES11 API GetProcAddress: glDeleteRenderbuffersOES !
+[    92] Failed GLES11 API GetProcAddress: glDepthRangexOES !
+[    93] Failed GLES11 API GetProcAddress: glDrawTexiOES !
+[    94] Failed GLES11 API GetProcAddress: glDrawTexivOES !
+[    95] Failed GLES11 API GetProcAddress: glDrawTexsOES !
+[    96] Failed GLES11 API GetProcAddress: glDrawTexsvOES !
+[    97] Failed GLES11 API GetProcAddress: glDrawTexxOES !
+[    98] Failed GLES11 API GetProcAddress: glDrawTexxvOES !
+[    99] Failed GLES11 API GetProcAddress: glEGLImageTargetRenderbufferStorageOES !
+[   100] Failed GLES11 API GetProcAddress: glEGLImageTargetTexture2DOES !
+[   101] Failed GLES11 API GetProcAddress: glFogxOES !
+[   102] Failed GLES11 API GetProcAddress: glFogxvOES !
+[   103] Failed GLES11 API GetProcAddress: glFramebufferRenderbufferOES !
+[   104] Failed GLES11 API GetProcAddress: glFramebufferTexture2DOES !
+[   105] Failed GLES11 API GetProcAddress: glFrustumxOES !
+[   106] Failed GLES11 API GetProcAddress: glGenerateMipmapOES !
+[   107] Failed GLES11 API GetProcAddress: glGenFramebuffersOES !
+[   108] Failed GLES11 API GetProcAddress: glGenRenderbuffersOES !
+[   109] Failed GLES11 API GetProcAddress: glGetClipPlanexOES !
+[   110] Failed GLES11 API GetProcAddress: glGetFixedvOES !
+[   111] Failed GLES11 API GetProcAddress: glGetFramebufferAttachmentParameterivOES !
+[   112] Failed GLES11 API GetProcAddress: glGetLightxvOES !
+[   113] Failed GLES11 API GetProcAddress: glGetMaterialxvOES !
+[   114] Failed GLES11 API GetProcAddress: glGetRenderbufferParameterivOES !
+[   115] Failed GLES11 API GetProcAddress: glGetTexEnvxvOES !
+[   116] Failed GLES11 API GetProcAddress: glGetTexGenivOES !
+[   117] Failed GLES11 API GetProcAddress: glGetTexGenxvOES !
+[   118] Failed GLES11 API GetProcAddress: glGetTexParameterxvOES !
+[   119] Failed GLES11 API GetProcAddress: glIsFramebufferOES !
+[   120] Failed GLES11 API GetProcAddress: glIsRenderbufferOES !
+[   121] Failed GLES11 API GetProcAddress: glLightModelxOES !
+[   122] Failed GLES11 API GetProcAddress: glLightModelxvOES !
+[   123] Failed GLES11 API GetProcAddress: glLightxOES !
+[   124] Failed GLES11 API GetProcAddress: glLightxvOES !
+[   125] Failed GLES11 API GetProcAddress: glLineWidthxOES !
+[   126] Failed GLES11 API GetProcAddress: glLoadMatrixxOES !
+[   127] Failed GLES11 API GetProcAddress: glLoadPaletteFromModelViewMatrixOES !
+[   128] Failed GLES11 API GetProcAddress: glMaterialxOES !
+[   129] Failed GLES11 API GetProcAddress: glMaterialxvOES !
+[   130] Failed GLES11 API GetProcAddress: glMatrixIndexPointerOES !
+[   131] Failed GLES11 API GetProcAddress: glMultMatrixxOES !
+[   132] Failed GLES11 API GetProcAddress: glMultiDrawArraysEXT !
+[   133] Failed GLES11 API GetProcAddress: glMultiDrawElementsEXT !
+[   134] Failed GLES11 API GetProcAddress: glMultiTexCoord4xOES !
+[   135] Failed GLES11 API GetProcAddress: glNormal3xOES !
+[   136] Failed GLES11 API GetProcAddress: glOrthoxOES !
+[   137] Failed GLES11 API GetProcAddress: glPointParameterxOES !
+[   138] Failed GLES11 API GetProcAddress: glPointParameterxvOES !
+[   139] Failed GLES11 API GetProcAddress: glPointSizexOES !
+[   140] Failed GLES11 API GetProcAddress: glPolygonOffsetxOES !
+[   141] Failed GLES11 API GetProcAddress: glQueryMatrixxOES !
+[   142] Failed GLES11 API GetProcAddress: glRenderbufferStorageOES !
+[   143] Failed GLES11 API GetProcAddress: glRotatexOES !
+[   144] Failed GLES11 API GetProcAddress: glSampleCoveragexOES !
+[   145] Failed GLES11 API GetProcAddress: glScalexOES !
+[   146] Failed GLES11 API GetProcAddress: glTexDirectInvalidateJM !
+[   147] Failed GLES11 API GetProcAddress: glTexDirectJM !
+[   148] Failed GLES11 API GetProcAddress: glTexDirectJMMap !
+[   149] Failed GLES11 API GetProcAddress: glTexDirectMapJM !
+[   150] Failed GLES11 API GetProcAddress: glTexDirectTiledMapJM !
+[   151] Failed GLES11 API GetProcAddress: glTexEnvxOES !
+[   152] Failed GLES11 API GetProcAddress: glTexEnvxvOES !
+[   153] Failed GLES11 API GetProcAddress: glTexGeniOES !
+[   154] Failed GLES11 API GetProcAddress: glTexGenivOES !
+[   155] Failed GLES11 API GetProcAddress: glTexGenxOES !
+[   156] Failed GLES11 API GetProcAddress: glTexGenxvOES !
+[   157] Failed GLES11 API GetProcAddress: glTexParameterxOES !
+[   158] Failed GLES11 API GetProcAddress: glTexParameterxvOES !
+[   159] Failed GLES11 API GetProcAddress: glTranslatexOES !
+[   160] Failed GLES11 API GetProcAddress: glWeightPointerOES !
+[   161] Failed GLES11 API GetProcAddress: glBindBufferARB !
+[   162] Failed GLES11 API GetProcAddress: glBufferDataARB !
+[   163] Failed GLES11 API GetProcAddress: glBufferSubDataARB !
+[   164] Failed GLES11 API GetProcAddress: glDeleteBuffersARB !
+[   165] Failed GLES11 API GetProcAddress: glGenBuffersARB !
+[   166] Failed GLES11 API GetProcAddress: glGetBufferParameterivARB !
+[   167] Failed GLES11 API GetProcAddress: glClearDepthfOES !
+[   168] Failed GLES11 API GetProcAddress: glClipPlanefOES !
+[   169] Failed GLES11 API GetProcAddress: glClipPlanefIMG !
+[   170] Failed GLES11 API GetProcAddress: glDepthRangefOES !
+[   171] Failed GLES11 API GetProcAddress: glDrawTexfOES !
+[   172] Failed GLES11 API GetProcAddress: glDrawTexfvOES !
+[   173] Failed GLES11 API GetProcAddress: glFrustumfOES !
+[   174] Failed GLES11 API GetProcAddress: glGetClipPlanefOES !
+[   175] Failed GLES11 API GetProcAddress: glGetTexGenfvOES !
+[   176] Failed GLES11 API GetProcAddress: glOrthofOES !
+[   177] Failed GLES11 API GetProcAddress: glTexGenfOES !
+[   178] Failed GLES11 API GetProcAddress: glTexGenfvOES !
+[   179] Failed GLES11 API GetProcAddress: glMapBufferOES !
+[   180] Failed GLES11 API GetProcAddress: glUnmapBufferOES !
+[   181] Failed GLES11 API GetProcAddress: glGetBufferPointervOES !
+[   182] Failed GLES32 API GetProcAddress: glEGLImageTargetTexture2DOES !
+[   183] Failed GLES32 API GetProcAddress: glEGLImageTargetRenderbufferStorageOES !
+[   184] Failed GLES32 API GetProcAddress: glMultiDrawArraysEXT !
+[   185] Failed GLES32 API GetProcAddress: glMultiDrawElementsEXT !
+[   186] Failed GLES32 API GetProcAddress: glMultiDrawElementsBaseVertexEXT !
+[   187] Failed GLES32 API GetProcAddress: glGetBufferPointervOES !
+[   188] Failed GLES32 API GetProcAddress: glMapBufferOES !
+[   189] Failed GLES32 API GetProcAddress: glUnmapBufferOES !
+[   190] Failed GLES32 API GetProcAddress: glDiscardFramebufferEXT !
+[   191] Failed GLES32 API GetProcAddress: glRenderbufferStorageMultisampleEXT !
+[   192] Failed GLES32 API GetProcAddress: glFramebufferTexture2DMultisampleEXT !
+[   193] Failed GLES32 API GetProcAddress: glTexDirectJM !
+[   194] Failed GLES32 API GetProcAddress: glTexDirectInvalidateJM !
+[   195] Failed GLES32 API GetProcAddress: glTexDirectJMMap !
+[   196] Failed GLES32 API GetProcAddress: glTexDirectTiledMapJM !
+[   197] Failed GLES32 API GetProcAddress: glTexDirectCacheOperationJM !
+[   198] Failed GLES32 API GetProcAddress: glTexDirectWithTileStatusMapJM !
+[   199] Failed GLES32 API GetProcAddress: glTexDirectWithTileStatusJM !
+[   200] Failed GLES32 API GetProcAddress: glMultiDrawArraysIndirectEXT !
+[   201] Failed GLES32 API GetProcAddress: glMultiDrawElementsIndirectEXT !
+[   202] Failed GLES32 API GetProcAddress: glGetTexImage !
+[   203] Failed GLES32 API GetProcAddress: glGetQueryObjecti64vEXT !
+[   204] Failed GLES32 API GetProcAddress: glGetQueryObjectui64vEXT !
+[   205] Failed GLES32 API GetProcAddress: glTexExportDMABUFJM !
+[   206] Failed ES Common GLES11 API GetProcAddress: glMapBufferOES !
+[   207] Failed ES Common GLES2X API GetProcAddress: glMapBufferOES !
+[   208] Failed ES Common GLES11 API GetProcAddress: glUnmapBufferOES !
+[   209] Failed ES Common GLES2X API GetProcAddress: glUnmapBufferOES !
+[   210] Failed ES Common GLES11 API GetProcAddress: glEGLImageTargetTexture2DOES !
+[   211] Failed ES Common GLES2X API GetProcAddress: glEGLImageTargetTexture2DOES !
+[   212] Failed ES Common GLES11 API GetProcAddress: glEGLImageTargetRenderbufferStorageOES !
+[   213] Failed ES Common GLES2X API GetProcAddress: glEGLImageTargetRenderbufferStorageOES !
+[   214] Failed ES Common GLES11 API GetProcAddress: glMultiDrawArraysEXT !
+[   215] Failed ES Common GLES2X API GetProcAddress: glMultiDrawArraysEXT !
+[   216] Failed ES Common GLES11 API GetProcAddress: glMultiDrawElementsEXT !
+[   217] Failed ES Common GLES2X API GetProcAddress: glMultiDrawElementsEXT !
+[   218] Failed ES Common GLES11 API GetProcAddress: glTexDirectJM !
+[   219] Failed ES Common GLES2X API GetProcAddress: glTexDirectJM !
+[   220] Failed ES Common GLES11 API GetProcAddress: glTexDirectInvalidateJM !
+[   221] Failed ES Common GLES2X API GetProcAddress: glTexDirectInvalidateJM !
+[   222] Failed ES Common GLES11 API GetProcAddress: glTexDirectJMMap !
+[   223] Failed ES Common GLES2X API GetProcAddress: glTexDirectJMMap !
+[   224] Failed ES Common GLES11 API GetProcAddress: glTexDirectTiledMapJM !
+[   225] Failed ES Common GLES2X API GetProcAddress: glTexDirectTiledMapJM !
+[   226] Failed ES Common GLES11 API GetProcAddress: glTexExportDMABUFJM !
+[   227] Failed ES Common GLES2X API GetProcAddress: glTexExportDMABUFJM !
+libGL: Can't open configuration file /etc/drirc: 没有那个文件或目录.
+libGL: Can't open configuration file /home/admin/.drirc: 没有那个文件或目录.
+libGL: Can't open configuration file /etc/drirc: 没有那个文件或目录.
+libGL: Can't open configuration file /home/admin/.drirc: 没有那个文件或目录.
+libEGL warning: egl: failed to create dri2 screen
+libGL: Can't open configuration file /etc/drirc: 没有那个文件或目录.
+libGL: Can't open configuration file /home/admin/.drirc: 没有那个文件或目录.
+libGL: Can't open configuration file /etc/drirc: 没有那个文件或目录.
+libGL: Can't open configuration file /home/admin/.drirc: 没有那个文件或目录.
+libEGL warning: egl: failed to create dri2 screen
+libGL: Can't open configuration file /etc/drirc: 没有那个文件或目录.
+libGL: Can't open configuration file /home/admin/.drirc: 没有那个文件或目录.
+libGL: Can't open configuration file /etc/drirc: 没有那个文件或目录.
+libGL: Can't open configuration file /home/admin/.drirc: 没有那个文件或目录.
+Mesa: warning: failed to remap glTexStorageAttribs2DEXT
+Mesa: warning: failed to remap glTexStorageAttribs3DEXT
+Mesa: warning: failed to remap glFramebufferTextureMultiviewOVR
+Mesa: warning: failed to remap glNamedFramebufferTextureMultiviewOVR
+Mesa: warning: failed to remap glFramebufferTextureMultisampleMultiviewOVR
+[   228] veglGetModule: Fail to load library: libOpenVG.so!
+Mesa: error: GL_INVALID_ENUM in glGetIntegerv(pname=GL_MAX_VIEWS_OVR)
+GetShaderInfoLog() ->
+0:2(12): error: extension `GL_EXT_shader_texture_lod' unsupported in fragment shader
+
+GetShaderSource() ->
+
+#extension GL_EXT_shader_texture_lod: require
+void main() {}
+
