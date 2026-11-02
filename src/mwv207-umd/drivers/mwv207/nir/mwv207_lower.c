@@ -464,8 +464,16 @@ mwv207_lower_io(nir_shader *nir, struct mwv207_shader *shader)
 
                nir_builder_instr_insert(&b, &load->instr);
 
-               nir_def *new_coord = nir_fmul(&b, coord->ssa, &load->def);
-               nir_src_rewrite(coord, new_coord);
+               /* FIX(jm9100-oss): 矩形纹理（GL_TEXTURE_RECTANGLE）的坐标**不做缩放**。
+                * 硬件在采样器状态里已被 st 告知该视图的坐标是"未归一化"的
+                * （st_atom_sampler.c:80 对 GL_TEXTURE_RECTANGLE 置 unnormalized_coords=1，
+                * 驱动把它编到 sampler ctrl0 的 bit15：ALIGN_BIT(!unnormalized_coords,0xF)），
+                * 所以 text() 的像素坐标与 texelFetch() 的纹素索引都应当原样透传。
+                * 原来这里乘 1/size 会让坐标变成归一化值而硬件仍按未归一化解释：
+                * floor(0.875)=0 → 任何坐标都采到纹素 (0,0)（实测 sampler2DRect + texelFetch
+                * 四个不同坐标全返回 (0,0) 纹素，llvmpipe 正常）。这正是火狐 WebRender
+                * 矩形裁剪掩码恒取 0、图元全部不可见（"一半黑一半白"）的根因。 */
+               (void)coord;
             }
          }
       }

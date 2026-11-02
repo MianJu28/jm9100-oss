@@ -342,6 +342,18 @@ mwv207_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
       /* FIX(jm9100-oss): 反相谓词由 mwv207_check_render_cond() 的
        * render_cond_cond 分支直接支持，声明即可。 */
       return 1;
+   case PIPE_CAP_BUFFER_MAP_PERSISTENT_COHERENT:
+      /* FIX(jm9100-oss): 这里原本靠 gallium 默认值返回 1（见
+       * src/gallium/auxiliary/util/u_screen.c:213-214），于是 st 会让
+       * GL_ARB_buffer_storage 出现在扩展串里（st_extensions.c:761
+       * { o(ARB_buffer_storage), PIPE_CAP_BUFFER_MAP_PERSISTENT_COHERENT }）。
+       * 但驱动既没实现 pipe_context::buffer_storage，也没处理
+       * PIPE_MAP_PERSISTENT / COHERENT 的 transfer 语义；实测 Firefox 的
+       * WebRender 一看到该扩展就走"持久映射"的缓冲上传路径，对没有 data store
+       * 的 buffer 发 glMapBufferRange(WRITE|PERSISTENT|FLUSH_EXPLICIT)，Mesa 每次
+       * 都以 GL_INVALID_OPERATION 拒绝 → 顶点/实例数据传不上去，页面只剩底色、
+       * 图元全丢。真正支持持久映射之前，明确返回 0。 */
+      return 0;
    default:
       return u_pipe_screen_get_param_defaults(pscreen, param);
    }
