@@ -259,24 +259,53 @@ VA-API / VDPAU / FFmpeg  →  pipe_video_codec (st_vdpau/vl)
 
 ## 5. 构建、安装与加载
 
+**目录约定（2026-11-02 起）**：驱动源码在 `src/mwv207-umd/`，上游 Mesa 树在
+`ref/oh-mesa/User_source_code/mesa-24.1.2/`（只读参考 + 构建宿主），后者的
+`src/gallium/{drivers,winsys}/mwv207` 是指向 `src/mwv207-umd` 的符号链接。
+
 ```bash
-# 1) 配置（首次）
-meson setup build-full \
-  -Dgallium-drivers=softpipe,mwv207 -Dvulkan-drivers= \
-  -Dplatforms=x11 -Dglx=dri -Dllvmpipe=false \
-  -Dgallium-va=disabled -Dgallium-rusticl=false \
-  -Dbuild-tests=false -Dvideo-codecs= -Dllvm=disabled
+# 1) 配置（首次；这一套选项是"能装进 switch-mwv207.sh 布局"的唯一组合）
+meson setup ref/oh-mesa/User_source_code/mesa-24.1.2/build-full \
+  ref/oh-mesa/User_source_code/mesa-24.1.2 \
+  -Dgallium-drivers=mwv207 -Dvulkan-drivers= \
+  -Dplatforms=x11,wayland -Dglx=dri -Ddri3=enabled -Dgbm=enabled -Degl=enabled \
+  -Dglvnd=disabled -Dgles1=enabled -Dgles2=enabled -Dshared-glapi=enabled \
+  -Dtools=[] -Dvideo-codecs=all -Dshader-cache=enabled \
+  -Dgallium-va=enabled -Dgallium-vdpau=enabled -Dgallium-rusticl=true \
+  -Dgallium-xa=disabled -Dgallium-opencl=disabled -Dgallium-omx=disabled \
+  -Dllvm=enabled -Ddraw-use-llvm=true -Dshared-llvm=enabled \
+  -Dzstd=disabled -Dvalgrind=disabled -Dlibunwind=disabled -Dlmsensors=disabled \
+  --buildtype=debugoptimized
 
-# 2) 只编 DRI 驱动（增量约 5–20 秒）
-ninja -C build-full src/gallium/targets/dri/libmwv207_dri.so
+# 2) 构建（先保证符号链接在，再编）
+./tools/build-umd.sh build
 
-# 3) 免安装试跑（推荐）
-LIBGL_DRIVERS_PATH=$PWD/build-full/src/gallium/targets/dri \
-MESA_LOADER_DRIVER_OVERRIDE=mwv207 glxinfo -B
+# 3) 免安装试跑：装配一个"模拟安装目录"，所有库戳自洽
+./tools/build-umd.sh sim          # → /tmp/mwv207-sim
+DISPLAY=:0 LD_LIBRARY_PATH=/tmp/mwv207-sim LIBGL_DRIVERS_PATH=/tmp/mwv207-sim \
+  MESA_LOADER_DRIVER_OVERRIDE=mwv207 glxinfo -B
 
-# 4) 正式安装到系统
-#    产物 --> payload-24/ --> switch-mwv207.sh umd install
+# 4) 出载荷并正式安装
+./tools/make-payload.sh -v 24.1.2-fullstack-rN   # → payload-N/
+./switch-mwv207.sh umd check                     # 只读预检
+sudo ./switch-mwv207.sh umd install              # 会重启 lightdm
 ```
+
+**两个必须显式指定的选项**（否则产物名字/行为随环境漂移，装不进脚本布局）：
+
+- `-Dglvnd=disabled`：留给 `auto` 时，重配一次就可能变成 glvnd 模式，产物从
+  `libGL_mwv207.so.1.2.0` / `libGLESv2_mwv207.so.2.0.0` 变成
+  `libGLX_mwv207.so.0` / 不再生成 GLES，`switch-mwv207.sh` 的 `REAL_FILES`
+  期待的名字全部对不上。**踩过一次**：`meson setup --wipe` 后整个 GL 栈装不上。
+- `-Dgles1=enabled -Dgles2=enabled`：默认 `auto` 在 glvnd 模式下不产 GLES。
+
+**版本戳陷阱**：Mesa 的 `24.1.2 (git-<sha>)` 取自**上游树构建时的 git HEAD**。
+驱动加载器会逐字比对 DRI 驱动与 `libGL`/`libEGL` 的戳，不一致就
+`DRI driver not from this Mesa build` + 回退软件渲染 + `X Error BadValue
+(X_GLXCreateNewContext)`。所以：
+- 改了 `src/mwv207-umd/` 只重建 DRI → 戳不变（仍是上游树的 HEAD），可用；
+- 一旦上游树有新提交（如"驱动迁出"那次），重建后戳就变了 → 必须
+  `./tools/build-umd.sh sim` 或整体出载荷，让所有库用同一个戳。
 
 产物路径：`build-full/src/gallium/targets/dri/libmwv207_dri.so`，
 并有一份 `mwv207_dri.so` 符号链接（DRI 加载器按 `<driver>_dri.so` 查找）。

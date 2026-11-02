@@ -1,9 +1,15 @@
 #!/bin/bash
 # 遮挡查询 / 条件渲染 回归测试
 # 用法: DRI_DIR=<dri 目录> ./run-query-tests.sh
+#   DRI_DIR 既可以是安装后的 DRI 目录，也可以是 `tools/build-umd.sh sim` 造出来的
+#   模拟目录（后者同时含 libGL/libEGL，需要一并走 LD_LIBRARY_PATH，否则加载器会
+#   拿系统 libGL 来比版本戳 → DRI driver not from this Mesa build → 全部 FAIL）。
 set -u
-DRI_DIR=${DRI_DIR:-/tmp/wt-build/src/gallium/targets/dri}
+DRI_DIR=${DRI_DIR:-/tmp/mwv207-sim}
 export LIBGL_DRIVERS_PATH="$DRI_DIR" MESA_LOADER_DRIVER_OVERRIDE=mwv207
+if [ -f "$DRI_DIR/libGL.so.1" ]; then
+   export LD_LIBRARY_PATH="$DRI_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+fi
 cd "$(dirname "$0")" || exit 1
 pass=0; fail=0
 chk(){ if [ "$2" = "$3" ]; then echo "  [PASS] $1 = $2"; pass=$((pass+1)); else echo "  [FAIL] $1 = $2 (期望 $3)"; fail=$((fail+1)); fi; }

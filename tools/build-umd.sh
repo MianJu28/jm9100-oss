@@ -63,8 +63,61 @@ case "$cmd" in
       ninja -C "$BUILD"
       info "产物: $BUILD/src/gallium/targets/dri/libmwv207_dri.so"
       ;;
+   sim)
+      # 把构建产物装配成"可直接跑的模拟安装目录"。
+      #
+      # 为什么需要它：Mesa 加载器会比对 DRI 驱动与 libGL 的版本戳
+      # （`24.1.2 (git-<sha>)`，取自构建时上游树的 git HEAD）。一旦上游树有了新
+      # 提交（例如“驱动迁出”那次），构建树里的戳就和系统里已安装的 libGL 不一致，
+      # 直连 `LIBGL_DRIVERS_PATH=<构建树>` 会报
+      #   DRI driver not from this Mesa build ('X' vs 'Y')
+      # 而回退到软件渲染。把**所有**库都从同一棵构建树装配进一个目录、
+      # 用 LD_LIBRARY_PATH 一起覆盖，戳就自洽了。
+      SIM=${SIM_DIR:-/tmp/mwv207-sim}
+      [ -f "$BUILD/src/gallium/targets/dri/libmwv207_dri.so" ] || die "还没构建: $BUILD（先跑 build）"
+      rm -rf "$SIM"; mkdir -p "$SIM"
+      # 名字 → 构建树里的真实文件（与 switch-mwv207.sh 的 REAL_FILES 同源）
+      copy_one() {
+         local dst="$1"; shift
+         for cand in "$@"; do
+            if [ -f "$cand" ]; then cp -a "$cand" "$SIM/$dst"; return 0; fi
+         done
+         die "构建树里找不到 $dst 的源文件（试过: $*）"
+      }
+      copy_one libmwv207_dri.so       "$BUILD/src/gallium/targets/dri/libmwv207_dri.so"
+      copy_one libmwv207_drv_video.so "$BUILD/src/gallium/targets/va/libmwv207_drv_video.so"
+      copy_one libvdpau_mwv207.so.1.0.0 "$BUILD/src/gallium/targets/vdpau/libvdpau_mwv207.so.1.0.0"
+      copy_one libmwv207OpenCL.so.1.0.0 "$BUILD/src/gallium/targets/rusticl/libmwv207OpenCL.so.1.0.0"
+      copy_one libGL_mwv207.so.1.2.0  "$BUILD/src/glx/libGL_mwv207.so.1.2.0" "$BUILD/src/glx/libGL.so.1.2.0"
+      copy_one libEGL_mwv207.so.1.0.0 "$BUILD/src/egl/libEGL_mwv207.so.1.0.0" "$BUILD/src/egl/libEGL.so.1.0.0"
+      copy_one libgbm_mwv207.so.1.0.0 "$BUILD/src/gbm/libgbm_mwv207.so.1.0.0" "$BUILD/src/gbm/libgbm.so.1.0.0"
+      copy_one libGLESv2_mwv207.so.2.0.0  "$BUILD/src/mapi/es2api/libGLESv2_mwv207.so.2.0.0"
+      copy_one libGLESv1_CM_mwv207.so.1.1.0 "$BUILD/src/mapi/es1api/libGLESv1_CM_mwv207.so.1.1.0"
+      copy_one libglapi_mwv207.so.0.0.0 "$BUILD/src/mapi/shared-glapi/libglapi_mwv207.so.0.0.0"
+      # SONAME 软链 + 安装时生成的 glvnd 胶水名
+      for pair in libGL_mwv207.so.1:libGL_mwv207.so.1.2.0 libGL_mwv207.so:libGL_mwv207.so.1.2.0 \
+                  libEGL_mwv207.so.1:libEGL_mwv207.so.1.0.0 libEGL_mwv207.so:libEGL_mwv207.so.1.0.0 \
+                  libgbm_mwv207.so.1:libgbm_mwv207.so.1.0.0 libgbm_mwv207.so:libgbm_mwv207.so.1.0.0 \
+                  libGLESv2_mwv207.so.2:libGLESv2_mwv207.so.2.0.0 libGLESv1_CM_mwv207.so.1:libGLESv1_CM_mwv207.so.1.1.0 \
+                  libglapi_mwv207.so.0:libglapi_mwv207.so.0.0.0 libvdpau_mwv207.so.1:libvdpau_mwv207.so.1.0.0 \
+                  libmwv207OpenCL.so.1:libmwv207OpenCL.so.1.0.0 \
+                  mwv207_dri.so:libmwv207_dri.so libmwv207_drv_video.so:libmwv207_drv_video.so; do
+         ln -sfn "${pair#*:}" "$SIM/${pair%%:*}"
+      done
+      for pair in libGL.so.1:libGL_mwv207.so.1.2.0 libGL.so:libGL_mwv207.so.1.2.0 \
+                  libEGL.so.1:libEGL_mwv207.so.1.0.0 libgbm.so.1:libgbm_mwv207.so.1.0.0 \
+                  libGLESv2.so.2:libGLESv2_mwv207.so.2.0.0 libGLESv1_CM.so.1:libGLESv1_CM_mwv207.so.1.1.0; do
+         ln -sfn "${pair#*:}" "$SIM/${pair%%:*}"
+      done
+      # 版本戳自检：目录里出现多于一个 24.1.2 (git-xxxx) 就是装配错了
+      stamps=$(strings "$SIM"/*.so* 2>/dev/null | grep -oE '24\.1\.2 \(git-[0-9a-f]+\)' | sort -u)
+      n=$(printf '%s\n' "$stamps" | grep -c . || true)
+      [ "$n" -eq 1 ] || die "模拟目录里版本戳不一致（$n 种）: $stamps"
+      info "模拟目录: $SIM  版本戳: $stamps"
+      info "跑探针: DISPLAY=:0 LD_LIBRARY_PATH=$SIM LIBGL_DRIVERS_PATH=$SIM MESA_LOADER_DRIVER_OVERRIDE=mwv207 <程序>"
+      ;;
    *)
       sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//'
-      echo "用法: $(basename "$0") [build|relink|check]"
+      echo "用法: $(basename "$0") [build|relink|check|sim]"
       exit 1 ;;
 esac
