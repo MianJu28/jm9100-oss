@@ -247,3 +247,33 @@
   下一步应查 WebRender 的 `RenderBackend`/`Compositor` 帧调度，而不是继续优化
   GL 侧。
 - 参考：`reports/FF-RENDER-20261102.md` §13。
+
+## GBM / Wayland 平台不可用：`err=-13`（EACCES）—— 已定位根因，未修
+
+- 现象：`eglinfo -B` 的 **GBM platform** 与 **Wayland platform** 全部报
+  `mwv207: failed to create kernel context, fd=5 err=-13`，随后回落到
+  `kms_swrast`/`swrast`（我们没装，于是这两个平台完全不可用）。
+  X11 / Surfaceless / Device 平台正常。
+- 出错点：`src/mwv207-umd/winsys/mwv207/drm/mwv207_drm_winsys.c:139-144`
+  的 `mwv207_ws_init()` 里 `drmCommandWriteRead(ws->fd, 0x4, ...)`
+  （= `DRM_IOCTL_MWV207_CTX`，op=0 建内核上下文）返回 `-EACCES`。
+- **根因（2026-11-02 实测，`strace -f -y`）**：`/tmp/gbm2.strace` 里
+  `ioctl(5</dev/dri/card0>, ...0x44..., ...) = -1 EACCES (权限不够)` ——
+  即走 GBM 平台时 Mesa 把**主节点 `/dev/dri/card0`** 的 fd 交给赢思层，
+  而我们的 6 个私有 ioctl 在 `src/kernel-6.6/mwv207_drv.c:102-108` 都带
+  `DRM_AUTH|DRM_RENDER_ALLOW`；Linux 的 `drm_ioctl_permit()` 对
+  `DRM_AUTH` 的放行条件是「已认证 **或** render 客户端」，主节点上既非
+  master 也未 `drmAuthMagic` 的进程直接吃 `-EACCES`。
+  自写探针 `/tmp/ctxtest.c` 逐节点验证：
+  `/dev/dri/renderD128: ioctl ret=0 handle=0` / `/dev/dri/card0: ioctl ret=-1 errno=13`。
+  → **同一份 UMD，拿 render 节点能过，拿主节点必失败。**
+- 两条候选修法：
+  - **UMD 侧（可立即验证，推荐）**：在 `mwv207_ws_init()` 建 ctx 失败且
+    `errno == EACCES` 时，用 `drmGetRenderDeviceNameFromFd(ws->fd)` 取同卡
+    的 render 节点另开一个 fd 只用于本驱动的私有 ioctl（GEM_CREATE/MMAP/
+    WAIT/SUBMIT/CTX 在 render 节点上都合法），KMS 相关的仍走原 fd。
+  - **KMD 侧（要部署才生效）**：把 `mwv207_ioctls_drm[]` 的 `DRM_AUTH` 去掉，
+    只留 `DRM_RENDER_ALLOW`。代价是放宽权限（未认证客户端也能分配显存/提交），
+    单用户桌面可接受，但要重新评估。
+- 影响面：X11 桌面不受影响（走 DRI3，用 render 节点）；受影响的是一切**纯
+  GBM/Wayland** 的使用场景（Wayland 合成器、`kmscube`、容器内 GBM 应用）。
