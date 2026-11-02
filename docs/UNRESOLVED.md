@@ -15,21 +15,32 @@
 
 | 层 | 改了能立刻验证吗 | 阻塞原因 |
 |---|---|---|
-| **UMD**（Mesa 24.1.2，`src/oh-mesa/…/mesa-24.1.2`） | ✅ 能 | 源码完整在仓库；`LIBGL_DRIVERS_PATH` 可旁路加载 |
-| **KMD** | ❌ **不能** | 运行的 `mwv207.ko` 是内核内建版（`srcversion 90738AD2C689AD8A81F74D6`）；已把修复移植进 `src/kernel-6.6/` 并**构建通过**，但**从未真机加载** |
+| **UMD**（`src/mwv207-umd/`） | ✅ 能 | 源码完整在仓库；`LIBGL_DRIVERS_PATH` 可旁路加载，`umd install` 一键部署 |
+| **KMD**（`src/kernel-6.6/`） | ✅ 能（**已部署**） | 自建模块已装到 `/lib/modules/…/updates/dkms/mwv207.ko` 并在运行 |
 
-两层的卡点性质完全不同：**UMD 卡在"要不要改 / 改了是否诚实"**，
-**KMD 卡在"改完了敢不敢装"**（换显示驱动有黑屏风险，需 SSH/TTY 旁路与一键回滚）。
+两层的卡点性质不同：**UMD 卡在"要不要改 / 改了是否诚实"**，
+**KMD 已不再是卡点**（详见下）。
 
-### 部署缺口（所有 KMD 条目的共同前提）
+### KMD 部署状态（2026-11-02 复核，已更正）
 
-- 已就绪：`src/kernel-6.6/`（基线 `62ba212` + 移植提交 `b0479ba`，6 文件 +72 −20），
-  构建产物 5 857 816 B，`vermagic` 逐字匹配运行内核，`srcversion EC9AA08FD54F3FF748CAB5C`。
-- 已就绪：切换脚本 `switch-mwv207.sh`，`kmd` 全套子命令 + `--root` 假根演练
-  （四步全过：落点 / 回滚清除 / 内建 md5 不变 / depmod 优先 `updates/dkms`）；
-  另有 `all install` 一次切两层、lightdm 只停一次。
-- **未做**：真机 `kmd install`。本机无免密 sudo（`sudo -n true` 失败），需用户手动执行。
-- 结论：**K1/K3–K8/K10 的修复躺在 `src/kernel-6.6/` 里，只有装上去才算修好。**
+此前本节写作"从未真机加载"，**已过时**。实测：
+
+```
+cat /sys/module/mwv207/srcversion        -> D507FC2774D547E7BEBA182
+modinfo -n mwv207                        -> /lib/modules/6.6.155-…/updates/dkms/mwv207.ko
+modinfo src/kernel-6.6/mwv207.ko         -> srcversion D507FC2774D547E7BEBA182
+modinfo /lib/modules/…/updates/dkms/…    -> srcversion D507FC2774D547E7BEBA182
+```
+
+三方一致 ⇒ **运行中的就是自建版**，且包含：
+- `b0479ba` 移植的 K1 / K3 / K4 / K5 / K6 / K7 / K8 / K10 + patch 0008（softdep）；
+- `28bc73d` 修的 N15（零重定位提交未初始化 `drm_sched_job` → `BUG_ON(!entity)`）。
+
+因此 **§2 里标【待部署】的条目，K 系列修复已生效**，剩下的是从未做过修复的
+N1 / N14 / K11 / N2 / N4 / K9-① / K9-② / K12 / N10 / N9（见 §2）。
+自建模块会打印 `loading out-of-tree module taints kernel` 与
+`module verification failed: signature and/or required key missing`，属正常（未签名）；
+dmesg 里 GPU 相关错误计数为 0。
 
 ---
 
@@ -85,8 +96,10 @@
 
 ## 2. KMD — 未修复缺陷
 
-> 全部标 **【待部署】**：修复已移植进 `src/kernel-6.6/`，但真机未加载。
 > 行号以 **6.6 树** `src/kernel-6.6/` 为准（与 5.10 树的行号不同）。
+> **自建 KMD 已经在跑**（`srcversion D507FC2774D547E7BEBA182`，见 §0），
+> 所以下表全部是**真实存在于当前系统上**的未修缺陷，不是"待部署"的纸上问题。
+> 下表之外，K1–K8/K10 与 N15 均已修好并在运行。
 
 | # | 级别 | 位置 | 问题 |
 |---|---|---|---|
