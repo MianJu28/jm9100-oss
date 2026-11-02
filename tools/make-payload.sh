@@ -47,10 +47,24 @@ REAL_FILES=(
     libvdpau_mwv207.so.1.0.0
     libmwv207OpenCL.so.1.0.0
 )
-# 从构建树取的两个
+# 全部从构建树取 —— 不要"沿用上一份载荷"。
+# 原因(2026-11-02 实测): Mesa 把版本串 "24.1.2 (git-<sha>)" 编译进每个库。
+# 只重建 DRI 时, 构建树里的 libGL/libEGL/libgbm 仍是旧 sha; 若载荷混用
+# "新 DRI + 旧 libGL", 加载即报
+#   DRI driver not from this Mesa build ('…git-54993602f4' vs '…git-6cb20bd761')
+# 随后 fallback 到 swrast/zink → 桌面黑屏或软件渲染。
+# 故要求所有产物同源, 并由下方的一致性检查兜底。
 FROM_BUILD=(
+    "libGL_mwv207.so.1.2.0:src/glx/libGL_mwv207.so.1.2.0"
+    "libEGL_mwv207.so.1.0.0:src/egl/libEGL_mwv207.so.1.0.0"
+    "libgbm_mwv207.so.1.0.0:src/gbm/libgbm_mwv207.so.1.0.0"
+    "libGLESv2_mwv207.so.2.0.0:src/mapi/es2api/libGLESv2_mwv207.so.2.0.0"
+    "libGLESv1_CM_mwv207.so.1.1.0:src/mapi/es1api/libGLESv1_CM_mwv207.so.1.1.0"
+    "libglapi_mwv207.so.0.0.0:src/mapi/shared-glapi/libglapi_mwv207.so.0.0.0"
     "libmwv207_dri.so:src/gallium/targets/dri/libmwv207_dri.so"
     "libmwv207_drv_video.so:src/gallium/targets/va/libmwv207_drv_video.so"
+    "libvdpau_mwv207.so.1.0.0:src/gallium/targets/vdpau/libvdpau_mwv207.so.1.0.0"
+    "libmwv207OpenCL.so.1.0.0:src/gallium/targets/rusticl/libmwv207OpenCL.so.1.0.0"
 )
 # 内部 SONAME 软链 (与 switch-mwv207.sh 的 SONAME_LINKS 保持一致;
 # mwv207_dri.so 不在此列 —— 它由安装侧用 cp -l 建实体副本并打 $ORIGIN rpath)
@@ -93,7 +107,11 @@ done
 
 # 默认上游载荷 = 仓库内最新的 payload-*
 if [ -z "$FROM" ]; then
-    FROM=$(ls -d "$ROOT"/payload-* 2>/dev/null | sort -rV | head -1 || true)
+    # 只认"完整"的载荷 (有 MANIFEST + VERSION)。半成品目录(上次中途退出)
+    # 否则会被选成上游, 导致 cp 失败或照着残缺清单做差异对比。
+    for d in $(ls -d "$ROOT"/payload-* 2>/dev/null | sort -rV); do
+        if [ -f "$d/MANIFEST.sha256" ] && [ -f "$d/VERSION" ]; then FROM="$d"; break; fi
+    done
 fi
 [ -n "$FROM" ] && [ -f "$FROM/MANIFEST.sha256" ] || die "找不到上游载荷 (用 -f 指定)"
 
@@ -114,7 +132,7 @@ info "版本号   : $VER"
 
 mkdir -p "$OUT"
 
-# 1) 从构建树取会变的那两个
+# 1) 全部从构建树取
 for pair in "${FROM_BUILD[@]}"; do
     dst="${pair%%:*}"
     rel="${pair#*:}"
@@ -124,14 +142,37 @@ for pair in "${FROM_BUILD[@]}"; do
     info "取自构建树: $dst  <- $rel"
 done
 
-# 2) 其余 8 个沿用上一份载荷
+# 2) 兜底：FROM_BUILD 没覆盖到的 REAL_FILES 才沿用上游载荷（正常情况下应为空）
 for f in "${REAL_FILES[@]}"; do
-    case "$f" in
-        libmwv207_dri.so|libmwv207_drv_video.so) continue ;;
-    esac
+    [ -f "$OUT/$f" ] && continue
     [ -f "$FROM/$f" ] || die "上游载荷缺文件: $FROM/$f"
+    warn "沿用上游载荷（构建树未提供）: $f"
     cp -L "$FROM/$f" "$OUT/$f"
 done
+
+# 2.5) 一致性检查：所有带版本戳的库必须同源
+#      Mesa 的版本串编译进每个库；混用不同 git sha 的 libGL 与 DRI,
+#      加载时会报 "DRI driver not from this Mesa build" 并退回 swrast。
+#      这是唯一能在部署前拦住"黑屏"的检查, 不要删。
+STAMPS=$(for f in "$OUT"/*.so*; do
+            [ -f "$f" ] || continue
+            # 末尾 || true 必需: 无版本戳的库会让 grep 返回 1,
+            # 在 set -euo pipefail 下会静默杀掉整个脚本
+            strings -a "$f" 2>/dev/null | grep -oE '24\.1\.2 \(git-[0-9a-f]+\)' || true
+         done | sort -u)
+NSTAMP=$(printf '%s\n' "$STAMPS" | grep -c . || true)
+if [ "$NSTAMP" -gt 1 ]; then
+    printf '  发现 %s 个不同版本戳:\n' "$NSTAMP" >&2
+    for f in "$OUT"/*.so*; do
+        [ -f "$f" ] || continue
+        s=$(strings -a "$f" 2>/dev/null | grep -oE '24\.1\.2 \(git-[0-9a-f]+\)' | sort -u | tr '\n' ' ')
+        [ -n "$s" ] && printf '    %-34s %s\n' "$(basename "$f")" "$s" >&2
+    done
+    die "载荷内版本戳不一致 —— 部署会因 DRI/客户端版本握手失败而黑屏。请先在构建树跑完整 ninja"
+fi
+if [ "$NSTAMP" -eq 1 ]; then
+    info "版本戳一致性: $STAMPS（全部同源）"
+fi
 
 # 3) DRI 的 RUNPATH 必须改成 $ORIGIN
 #    构建树里它是 "$ORIGIN/../../../mapi/shared-glapi" (只在构建树成立),
