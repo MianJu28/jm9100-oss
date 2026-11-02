@@ -185,8 +185,16 @@ mwv207_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
       /* FIX(jm9100-oss): PIPE_CAP_VIDEO_MEMORY 的单位是 MB, 不是字节。
        * 原来返回 (1024 << 20) = 1 GiB 字节数, 于是 glxinfo -B 报
        * "Video memory: 1073741824MB" (约 1024 TiB), 所有按显存决定画质/
-       * 纹理预算的应用与游戏都会被误导。按 1 GiB 显存上报 1024 MB。 */
-      return 1024;
+       * 纹理预算的应用与游戏都会被误导。
+       * 先前只修了单位、数值仍写死 1024; 本机实际显存为 2 GiB ——
+       * KMD 的 mwv207_vram_size() 已从寄存器 0x9b0190 & 0x7 读出并打印
+       * "[drm] mwv207: 2048M of VRAM memory size" (见 dmesg)。
+       * 该值与硬件型号绑定 (KMD 支持 256/1024/2048/4096/8192M),
+       * 理想做法是由 KMD 经 DRM_IOCTL_MWV207_INFO 上报, 但目前
+       * drm_mwv207_info_key 只暴露 ACTIVE_*_NR 五个键, 故此处按实测上报。
+       * 需要改时报可通过 driconf 的 override_vram_size 覆盖
+       * (Mesa 在 dri_query_renderer.c 里会取 MIN2(override, 本值))。 */
+      return 2048;
    case PIPE_CAP_UMA:
       return 1;
    case PIPE_CAP_MAX_VERTEX_ATTRIB_STRIDE:
