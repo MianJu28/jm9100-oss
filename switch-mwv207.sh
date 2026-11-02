@@ -108,6 +108,18 @@ DRI_LINK="/usr/local/lib/aarch64-linux-gnu/dri/mwv207_dri.so"
 VA_LINK="/usr/lib/aarch64-linux-gnu/dri/mwv207_drv_video.so"
 VDPAU_LINK="/usr/lib/aarch64-linux-gnu/vdpau/libvdpau_mwv207.so.1"
 
+# glvnd EGL ICD —— 载荷里的 libEGL_jm.so.0 是"按 glvnd 构建"的 EGL 供应商。
+# 动机(2026-11-02): 系统的 libEGL.so.1 只是 glvnd 转发器, 它只认
+# /usr/share/glvnd/egl_vendor.d/*.json。没有我们的 json 时, 火狐等走 glvnd
+# 的应用拿不到硬件, 回退 llvmpipe(WebGL 渲染器报 llvmpipe)。厂商自带的
+# 10_mwv207.json 指向闭源 libEGL_mwv207.so.0 → 需要从未加载的 jmgpu.ko,
+# 实测必然失败(veglGetModule: Fail to load library / _OpenDevice FATAL)。
+EGL_ICD_DIR="/usr/share/glvnd/egl_vendor.d"
+EGL_ICD_JSON="$EGL_ICD_DIR/20_jm.json"
+EGL_ICD_JSON_DISABLED="$EGL_ICD_DIR/20_jm.json.oss-disabled"
+VENDOR_EGL_ICD_JSON="$EGL_ICD_DIR/10_mwv207.json"
+VENDOR_EGL_ICD_DISABLED="$EGL_ICD_DIR/10_mwv207.json.oss-disabled"
+
 XORG_LOG="/var/log/Xorg.0.log"
 # 注意: "Initialized DRISWRAST" 不可作失败标记! 2026-10-21 10:02 实证: glamor
 # 硬件加速点亮 (Xorg 日志含 glamor enabled on MWV207, glxinfo direct
@@ -121,6 +133,7 @@ PASS_MARKERS="glamor X acceleration enabled|glamor initialized|glamor: EGL versi
 # 载荷真实文件 (MANIFEST.sha256 校验对象)
 REAL_FILES=(
     libEGL_mwv207.so.1.0.0
+    libEGL_jm.so.0.0.0
     libgbm_mwv207.so.1.0.0
     libglapi_mwv207.so.0.0.0
     libGL_mwv207.so.1.2.0
@@ -135,6 +148,8 @@ REAL_FILES=(
 declare -A SONAME_LINKS=(
     [libEGL_mwv207.so.1]=libEGL_mwv207.so.1.0.0
     [libEGL_mwv207.so]=libEGL_mwv207.so.1.0.0
+    [libEGL_jm.so.0]=libEGL_jm.so.0.0.0
+    [libEGL_jm.so]=libEGL_jm.so.0.0.0
     [libgbm_mwv207.so.1]=libgbm_mwv207.so.1.0.0
     [libgbm_mwv207.so]=libgbm_mwv207.so.1.0.0
     [libglapi_mwv207.so.0]=libglapi_mwv207.so.0.0.0
@@ -181,6 +196,10 @@ MANAGED=(
     "$ENVIRONMENT_D"
     "$PROFILE_D"
     "$SYS_ENVIRONMENT"
+    "$EGL_ICD_JSON"
+    "$EGL_ICD_JSON_DISABLED"
+    "$VENDOR_EGL_ICD_JSON"
+    "$VENDOR_EGL_ICD_DISABLED"
 )
 
 
@@ -449,6 +468,14 @@ umd_deploy() {
 umd_deploy_files() {
     local force="${1:-0}"
 
+    # --dry-run 保护: 本函数的部署动作是普通文件操作(不走 run()), 若不拦会真改系统。
+    if [ "$DRY_RUN" = 1 ]; then
+        log "[dry-run] 将部署载荷 -> $INST_DIR; 写 $LDCONF; 建 DRI/VA/VDPAU 软链;"
+        log "[dry-run] 停用厂商 EGL ICD 并注册 $EGL_ICD_JSON; 写 $OPENCL_ICD; ldconfig"
+        UMD_DEPLOYED_VER="dry-run"
+        return 0
+    fi
+
     umd_check >/dev/null 2>&1 || { umd_check; die "预检未通过, 中止"; }
     local src; src=$(payload_src) || die "无载荷"
     local ver; ver=$(payload_version "$src")
@@ -489,6 +516,27 @@ umd_deploy_files() {
     echo "$INST_DIR/libmwv207OpenCL.so.1" > "$OPENCL_ICD"
     chmod 0644 "$OPENCL_ICD"
 
+    # 5.5) glvnd EGL ICD —— 让"走系统 glvnd 的应用"(火狐等) 吃到我们的硬件 EGL。
+    # 系统 libEGL.so.1 只是转发器, 真正提供驱动的是 egl_vendor.d/*.json 指向的
+    # ICD。厂商那条指向闭源 libEGL_mwv207.so.0, 需要从未加载的 jmgpu.ko,
+    # 实测必然失败, 故停用(可回滚)并换成我们 glvnd 构建的 libEGL_jm.so.0。
+    mkdir -p "$EGL_ICD_DIR"
+    if [ -f "$VENDOR_EGL_ICD_JSON" ]; then
+        mv -f "$VENDOR_EGL_ICD_JSON" "$VENDOR_EGL_ICD_DISABLED" \
+            || die "停用厂商 EGL ICD 失败: $VENDOR_EGL_ICD_JSON"
+        log "已停用厂商闭源 EGL ICD -> $(basename "$VENDOR_EGL_ICD_DISABLED")"
+    fi
+    cat > "$EGL_ICD_JSON" <<EOF
+{
+    "file_format_version" : "1.0.0",
+    "ICD" : {
+        "library_path" : "$INST_DIR/libEGL_jm.so.0"
+    }
+}
+EOF
+    chmod 0644 "$EGL_ICD_JSON"
+    log "已注册 glvnd EGL ICD: $EGL_ICD_JSON -> $INST_DIR/libEGL_jm.so.0"
+
     # 6) RUSTICL_ENABLE env (OpenCL 设备门控; GL/VA/VDPAU 零 env)
     mkdir -p /etc/environment.d
     printf 'RUSTICL_ENABLE=mwv207\nVDPAU_DRIVER=mwv207\n' > "$ENVIRONMENT_D"
@@ -518,6 +566,11 @@ umd_deploy_files() {
 
 # 起看门狗 + 重启 lightdm + 自检（部署之后单独调用）
 umd_activate() {
+    # --dry-run 保护: 这里会重启 lightdm(杀图形会话), 演练模式绝不能真跑。
+    if [ "$DRY_RUN" = 1 ]; then
+        log "[dry-run] 将启动看门狗, 重启 lightdm, 等 Xorg 起来后自检"
+        return 0
+    fi
     # 启动前先停掉可能残留的旧看门狗: 同名 unit 会让 systemd-run 直接失败,
     # 于是静默降级成"只靠本脚本内联自检"。
     systemctl stop mwv207-oss-watchdog 2>/dev/null || true
@@ -666,6 +719,24 @@ umd_verify() {
     # 厂商包升级(apt upgrade mwv207-dev)会把这个 ICD 装回来, 于是出现第二个
     # OpenCL 平台(该实现在 mwv207 KMD 下枚举 0 设备), 需要重新 install。
     [ -f "$OPENCL_DIR/jmgpu.icd" ] && echo "  [WARN] $OPENCL_DIR/jmgpu.icd 又出现 (mwv207-dev 被重装?), 需重新 install"
+
+    # glvnd EGL ICD: 系统的 libEGL.so.1 只是转发器, 走它的应用(火狐等)只有在
+    # 我们注册了 json 之后才可能拿到硬件; 缺了它就会退回 llvmpipe。
+    [ -e "$INST_DIR/libEGL_jm.so.0" ] \
+        && echo "  [OK] $INST_DIR/libEGL_jm.so.0" \
+        || { echo "  [FAIL] 缺 $INST_DIR/libEGL_jm.so.0"; rc=1; }
+    if [ -f "$EGL_ICD_JSON" ]; then
+        if grep -q "$INST_DIR/libEGL_jm.so.0" "$EGL_ICD_JSON"; then
+            echo "  [OK] glvnd EGL ICD 已注册 -> $INST_DIR/libEGL_jm.so.0"
+        else
+            echo "  [FAIL] $EGL_ICD_JSON 未指向我们的 ICD"; rc=1
+        fi
+    else
+        echo "  [FAIL] 缺 $EGL_ICD_JSON (走 glvnd 的应用会退回 llvmpipe)"; rc=1
+    fi
+    [ -f "$VENDOR_EGL_ICD_JSON" ] \
+        && echo "  [WARN] 厂商闭源 EGL ICD 又出现 ($VENDOR_EGL_ICD_JSON 需 jmgpu.ko), 需重新 install" \
+        || echo "  [OK] 厂商闭源 EGL ICD 已停用"
 
     echo "  -- 安装目录内容完整性:"
     if [ -f "$CACHE_DIR/manifest.sha256" ]; then

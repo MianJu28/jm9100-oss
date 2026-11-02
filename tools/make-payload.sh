@@ -29,14 +29,19 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
 BUILD="$ROOT/ref/oh-mesa/User_source_code/mesa-24.1.2/build-full"
+# glvnd 版构建树: 提供 EGL 的 ICD (libEGL_jm.so.0.0.0)。它必须与本载荷同源
+# (同一个 HEAD), 否则装上去会被 DRI 的版本戳检查拒绝:
+#   libEGL fatal: DRI driver not from this Mesa build ('…git-b2ab2c9da2' vs '…git-9466c83cfc')
+GLVND="$ROOT/ref/oh-mesa/User_source_code/mesa-24.1.2/build-glvnd"
 FROM=""
 OUT=""
 VER=""
 
-# 10 个实体文件 (MANIFEST 的校验对象) —— 必须与 switch-mwv207.sh 的
+# 11 个实体文件 (MANIFEST 的校验对象) —— 必须与 switch-mwv207.sh 的
 # REAL_FILES 完全一致, 否则安装侧会 cp 失败。
 REAL_FILES=(
     libEGL_mwv207.so.1.0.0
+    libEGL_jm.so.0.0.0
     libgbm_mwv207.so.1.0.0
     libglapi_mwv207.so.0.0.0
     libGL_mwv207.so.1.2.0
@@ -71,6 +76,8 @@ FROM_BUILD=(
 declare -A SONAME_LINKS=(
     [libEGL_mwv207.so.1]=libEGL_mwv207.so.1.0.0
     [libEGL_mwv207.so]=libEGL_mwv207.so.1.0.0
+    [libEGL_jm.so.0]=libEGL_jm.so.0.0.0
+    [libEGL_jm.so]=libEGL_jm.so.0.0.0
     [libgbm_mwv207.so.1]=libgbm_mwv207.so.1.0.0
     [libgbm_mwv207.so]=libgbm_mwv207.so.1.0.0
     [libglapi_mwv207.so.0]=libglapi_mwv207.so.0.0.0
@@ -92,9 +99,10 @@ declare -A SONAME_LINKS=(
 die() { echo "错误: $*" >&2; exit 1; }
 info() { echo "[make-payload] $*"; }
 
-while getopts ":b:f:o:v:h" opt; do
+while getopts ":b:g:f:o:v:h" opt; do
     case "$opt" in
         b) BUILD="$OPTARG" ;;
+        g) GLVND="$OPTARG" ;;
         f) FROM="$OPTARG" ;;
         o) OUT="$OPTARG" ;;
         v) VER="$OPTARG" ;;
@@ -104,6 +112,7 @@ while getopts ":b:f:o:v:h" opt; do
 done
 [ -n "$VER" ] || die "必须用 -v 显式给出版本号 (例如 -v 24.1.2-fullstack-r2)"
 [ -d "$BUILD" ] || die "构建目录不存在: $BUILD"
+[ -d "$GLVND" ] || die "glvnd 构建目录不存在: $GLVND (先 meson setup build-glvnd -Dglvnd=enabled 并 ninja)"
 
 # 默认上游载荷 = 仓库内最新的 payload-*
 if [ -z "$FROM" ]; then
@@ -141,6 +150,16 @@ for pair in "${FROM_BUILD[@]}"; do
     cp -L "$src" "$OUT/$dst"
     info "取自构建树: $dst  <- $rel"
 done
+
+# 1.5) glvnd EGL ICD —— 来自另一棵构建树(build-glvnd), 但必须同源。
+#      它是"让火狐等用系统 glvnd 的应用吃上硬件"的关键: 系统 libEGL.so.1 只是
+#      转发器, 真正提供驱动的是 egl_vendor.d/*.json 指向的 ICD。
+ICP_SRC="$GLVND/src/egl/libEGL_jm.so.0.0.0"
+[ -f "$ICP_SRC" ] || die "glvnd ICD 缺失: $ICP_SRC"
+cp -L "$ICP_SRC" "$OUT/libEGL_jm.so.0.0.0"
+info "取自 glvnd 构建树: libEGL_jm.so.0.0.0  <- src/egl/libEGL_jm.so.0.0.0"
+[ "$(objdump -p "$OUT/libEGL_jm.so.0.0.0" | awk '/SONAME/{print $NF}')" = "libEGL_jm.so.0" ] \
+    || die "ICD SONAME 不符 (期望 libEGL_jm.so.0)"
 
 # 2) 兜底：FROM_BUILD 没覆盖到的 REAL_FILES 才沿用上游载荷（正常情况下应为空）
 for f in "${REAL_FILES[@]}"; do
