@@ -1,0 +1,109 @@
+From 28bc73d623502e1486379da6f08fe0b1aca009d7 Mon Sep 17 00:00:00 2001
+From: MianJu <2462692286@qq.com>
+Date: Mon, 2 Nov 2026 10:18:30 +0800
+Subject: [PATCH] =?UTF-8?q?mwv207:=20=E4=BF=AE=E5=A4=8D=E9=9B=B6=E9=87=8D?=
+ =?UTF-8?q?=E5=AE=9A=E4=BD=8D=20submit=20=E5=AF=BC=E8=87=B4=E7=9A=84?=
+ =?UTF-8?q?=E5=86=85=E6=A0=B8=20BUG=20(entity=20=3D=3D=20NULL)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+drm_sched_job_arm() 第一句是 BUG_ON(!job->entity)，而 entity 只在
+drm_sched_job_init() 里赋值。社区移植把 drm_sched_job_init() 放在了
+mwv207_submit_init_job_reloc() 内部、且在 "nr_relocs == 0 就 return 0"
+**之后** —— 于是**零重定位的 submit** 会带着 entity == NULL 走到
+arm()，直接 brk #0：
+
+  pc : drm_sched_job_arm+0xb8/0xbc [gpu_sched]
+  lr : mwv207_submit_ioctl+0x274/0x418 [mwv207]
+  Code: 35ffffa2 d5033bbf aa0003e1 17ffffef (d4210000)
+  Comm: Xorg
+
+反汇编已证实该 brk 就是 entity 判空：drm_sched_job_arm+0x14 处
+'ldr x20,[x0,#88]; cbz x20, +0xb8' → +0xb8 即 brk。
+
+改法：把 drm_sched_job_init() 移到 mwv207_submit_init_job() 里
+select_engine() 之后，对**每个** job 无条件调用一次；reloc 函数里删掉。
+另在 mwv207_submit_commit() 加 WARN_ON(!entity) 兜底，把内核 BUG
+降级成一次 -EINVAL。失败清理由 mwv207_job_fini() 的
+'if (mjob->base.s_fence) drm_sched_job_cleanup()' 兜住。
+---
+ mwv207_submit.c | 41 +++++++++++++++++++++++++++++------------
+ 1 file changed, 29 insertions(+), 12 deletions(-)
+
+diff --git a/mwv207_submit.c b/mwv207_submit.c
+index f0d0ff5..35f5554 100644
+--- a/mwv207_submit.c
++++ b/mwv207_submit.c
+@@ -71,8 +71,6 @@ static inline int mwv207_submit_select_engine(struct drm_device *dev, struct mwv
+ 
+ static int mwv207_submit_init_job_reloc(struct mwv207_job *mjob, struct drm_mwv207_submit *args, struct drm_file *filp)
+ {
+-	int ret;
+-
+ 	if ((int)args->nr_relocs < 0)
+ 		return -EINVAL;
+ 	mjob->nr_relocs = (int)args->nr_relocs;
+@@ -81,16 +79,6 @@ static int mwv207_submit_init_job_reloc(struct mwv207_job *mjob, struct drm_mwv2
+ 	if (args->relocs == 0)
+ 		return -EINVAL;
+ 
+-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 17, 0))
+-	ret = drm_sched_job_init(&mjob->base, mjob->engine_entity, 1, mjob->ctx, filp->client_id);
+-#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 8, 0))
+-	ret = drm_sched_job_init(&mjob->base, mjob->engine_entity, 1, mjob->ctx);
+-#else
+-	ret = drm_sched_job_init(&mjob->base, mjob->engine_entity, mjob->ctx);
+-#endif
+-	if (ret)
+-		return ret;
+-
+ 	mjob->relocs = kvmalloc_array(mjob->nr_relocs,
+ 			sizeof(struct drm_mwv207_submit_reloc), GFP_KERNEL);
+ 
+@@ -303,6 +291,27 @@ static int mwv207_submit_init_job(struct drm_device *dev, struct mwv207_job *mjo
+ 	ret = mwv207_submit_select_engine(dev, mjob, args);
+ 	if (ret)
+ 		return ret;
++
++	/* 必须对**每个** job 调用一次 drm_sched_job_init()：
++	 * drm_sched_job_arm() 里第一句就是 BUG_ON(!job->entity)，而 entity 只在
++	 * drm_sched_job_init() 里赋值。原先这行在 mwv207_submit_init_job_reloc()
++	 * 内部、且在 "nr_relocs == 0 就 return 0" **之后**，于是零重定位的 submit
++	 * 会带着 entity == NULL 走到 arm → 内核 BUG (drm_sched_job_arm+0xb8 的
++	 * brk #0)，提交进程当场被杀 —— Xorg 就是这么死的（桌面卡在控制台）。
++	 * 放在 select_engine 之后，是因为 engine_entity 在那里才被设定。
++	 * 失败清理由 mwv207_job_fini() 的
++	 * "if (mjob->base.s_fence) drm_sched_job_cleanup()" 兜住。
++	 */
++#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 17, 0))
++	ret = drm_sched_job_init(&mjob->base, mjob->engine_entity, 1, mjob->ctx, filp->client_id);
++#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 8, 0))
++	ret = drm_sched_job_init(&mjob->base, mjob->engine_entity, 1, mjob->ctx);
++#else
++	ret = drm_sched_job_init(&mjob->base, mjob->engine_entity, mjob->ctx);
++#endif
++	if (ret)
++		return ret;
++
+ 	ret = mwv207_submit_init_job_cmd_dat(dev, mjob, args);
+ 	if (ret)
+ 		return ret;
+@@ -586,6 +595,14 @@ static int mwv207_submit_attach_dependency(struct mwv207_job *mjob, struct drm_m
+ static int mwv207_submit_commit(struct mwv207_job *mjob,
+ 		struct drm_mwv207_submit *args, struct dma_fence **fence)
+ {
++	/* 兜底：drm_sched_job_arm() 第一句是 BUG_ON(!entity)，直接 brk #0。
++	 * 内核 BUG 会把 ioctl 调用者带中断禁用来杀掉（Xorg 就是这么死的,
++	 * 桌面卡在控制台）。本该先 drm_sched_job_init()，这里再兜一道:
++	 * 万一还有漏掉的路径, 变成一次干净的 -EINVAL 而不是打死进程。
++	 */
++	if (WARN_ON(!mjob->base.entity))
++		return -EINVAL;
++
+ 	drm_sched_job_arm(&mjob->base);
+ 
+ 	if (args->flags & 0x00000002) {
+-- 
+2.51.0
+
