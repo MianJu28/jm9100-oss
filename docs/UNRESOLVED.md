@@ -1,11 +1,12 @@
 # 未修复缺陷与未实现功能 · 总清单
 
-> 汇总截至 **2026-10-31**，对应外层仓库 HEAD `af15fda`。
+> 汇总截至 **2026-11-02**，对应外层仓库工作树（含 `src/mwv207-umd/` 分层）。
 > 取代散落在 `api/06-KNOWN-ISSUES.md`、`api/11-FIX-FEASIBILITY.md` 里的分散记录：
 > 本文件是**唯一索引**，那两个文件保留历史细节与推导过程。
 >
 > **口径**：只列**当前仍未落地**的项。2026-10-30/31 已修复的（VRAM 单位、O2、O3、
-> 遮挡查询 C4、条件渲染 C5）不在此列，见文末《已修复索引》。
+> 遮挡查询 C4）、2026-11-02 已修复的（条件渲染 C5 真实现、KMD 零重定位提交空 entity N15）
+> 不在此列，见文末《已修复索引》。
 > 每条给出 `文件:行号`；标【实测】的表示上机验证过，未标者为静态审计结论。
 
 ---
@@ -118,7 +119,6 @@
 | **D1** | **VP9 解码** | **中-高**（最可行） | 切片解析器 + bool 解码器**已编入库但零调用者**；唯一缺口是 `mwv207_video_dec.c` 里 `mwv207_dec_vp9_set_regs()` **无 VP9 分支**（`grep vp9 mwv207_video_dec.c` 仅命中注释/头文件）。有 H264（10 个 `set_regs`）/HEVC（7 个）作模板，1840 行解码寄存器表已全量还原。硬件能力表 `mwv207_video_dec_vpu_features_list.h` 是**按芯片 id 分档**的：`id=0x00001F76` 档 `vp9_support=1` 且 `vp9_profile2_support=1`（`:29-36`），`id=0x00001F67` 档全 0（`:154-160`）→ **先确认本机芯片 id 落在哪一档**。需真实 VP9 码流验证 |
 | **D2** | **H264 4:2:2 / 4:4:4** | 二选一 | 见 1.3 的 I-3：要么取消声明，要么改 `chroma_format_idc` 硬置并做硬件验证 |
 | **D3** | **编码（H264/HEVC）** | 大（从零） | UMD 侧 `base.encode_bitstream` **从未安装**（全树 0 处）；KMD 有 `mwv207_pipe_enc.c`。硬件侧有 HEVC 编码证据（闭源串含 `jmenc/source/hevc/hevcencapi.c`） |
-| **C5′** | **条件渲染（真实现）** | 中 | 当前以 cap 回退方式"关掉"（C5 已修）。硬件**其实支持**：`MWV207REG_OCCLUSION_CONTROL.MODE` 有 `BOOLEAN_CONDITIONAL 0x2` / `BOOLEAN_CONDITIONAL_EARLY 0x5`。可照闭源 `jmo_3D_SetQuery` → `jmo_HARDWARE_SetQuery` 的写法实现 `render_condition` 钩子**再把 cap 打开** |
 | **D4** | 4 个未实现的扩展 opcode：`WAIT_GROUP_EVENT`(0x11) / `TD_OP`(0x12) / `TEX_INVALIDATE`(0x14) / `PRE_NORM`(0x15) | 小-中 | 厂商枚举齐全（`MWV207REG_SH_EXTENDED_OPCODE`），需逐个确定语义 |
 | **D5** | 开启三个窥孔 `OPT_DIV` / `OPT_FFMA` / `OPT_SET`（默认全关） | 小改动 + 大验证 | 潜在性能收益，需全量着色器回归 |
 | **D6** | 多视口 | 与 E8 同 | 取决于硬件是否支持（`GL_MAX_VIEWPORTS` 现报 0/1） |
@@ -156,13 +156,18 @@
 | **3** | **拍板** 1.3 的 C1/C2/C3/I-3 | 用户决策 | 不是技术难度，是诚实性取舍 |
 | **4** | **真机 `kmd install`**（解锁全部 KMD 条目） | 用户同意黑屏风险；备 SSH/TTY | 一次性风险，之后所有 KMD 修复可生效 |
 | **5** | VP9 解码（D1） | 真实 VP9 码流 | 中-大，但模板齐全、可行性最高 |
-| **6** | 条件渲染真实现（C5′）、编码（D3） | C5′ 需先部署 KMD 或至少能上机验证 | 大 |
+| **6** | 编码（D3） | 需真实编码管线（UMD 侧从零） | 大 |
 
-> 批次 1 之外都建议在**能上机验证**的前提下做。UMD 验证走
-> `git worktree add /tmp/wt-6cb 6cb20bd` + meson 全选项配置（版本号与系统 libGL 的
-> `24.1.2 (git-6cb20bd761)` 握手成功）；**不要**直连 `build-full` 或 payload，
-> 它们的版本戳是 `git-54993602f4`，会撞
-> `DRI driver not from this Mesa build`。
+> 批次 1 之外都建议在**能上机验证**的前提下做。
+>
+> **UMD 验证方法（2026-11-02 分层后已变简单）**：驱动源码已迁到独立目录
+> `src/mwv207-umd/`（`src/oh-mesa/.../drivers/mwv207` 与 `winsys/mwv207` 现在是
+> 指向它的符号链接），改代码 → `./tools/build-umd.sh build` → 用
+> `LIBGL_DRIVERS_PATH=<mesa>/build-full/src/gallium/targets/dri` +
+> `MESA_LOADER_DRIVER_OVERRIDE=mwv207` 直连跑探针即可。版本戳取自 mesa 参考树的
+> `git HEAD`（现为 `b2ab2c9da2`，与已安装 `libGL.so.1` 一致），所以**不再需要
+> worktree**；只有在 mesa 树里新提交过东西后，才会重新出现
+> `DRI driver not from this Mesa build` 握手问题。
 
 ---
 
@@ -170,6 +175,9 @@
 
 | 日期 | 项 | 提交 |
 |---|---|---|
+| 2026-11-02 | 条件渲染真实现（`render_condition` 钩子 + CPU 侧谓词判断，GL 4.0 恢复） | `patches/0015`（`src/mwv207-umd`） |
+| 2026-11-02 | KMD：零重定位提交未初始化 `drm_sched_job` 导致 `BUG_ON(!entity)` 内核崩溃（N15） | `28bc73d` / `patches/0014` |
+| 2026-11-02 | 分层：`src/mwv207-umd/` 独立存放适配代码，oh-mesa 只作参考 | 结构变更 |
 | 2026-10-31 | 遮挡查询失真（按簇计数求和）、条件渲染 SIGSEGV（cap 回退） | `b2ab2c9` |
 | 2026-10-30 | VRAM cap 单位（`1024<<20` → `1024`）、O2（bo_map 返回语义）、O3（每槽尾 100 字节未初始化上 GPU） | `5499360` |
 | 2026-10-30 | GLES 3.2 + 鲁棒缓冲访问 + 16 位格式上传字节精确 | `cd90d9f` |
@@ -177,7 +185,8 @@
 | 2026-10-31 | 文档：`docs/reverse/` 反编译五篇、`06-KNOWN-ISSUES` C4/C5 | `e63fcf3`、`fd31971` |
 
 补丁：`patches/0009`（GLES3.2+混合）、`0010`（16 位格式）、`0011`（VRAM+O2/O3）、
-`0012`（KMD 6.6 移植）、`0013`（遮挡查询+条件渲染）。
+`0012`（KMD 6.6 移植）、`0013`（遮挡查询+条件渲染）、`0014`（KMD 空 entity）、
+`0015`（条件渲染真实现）。
 
 ---
 

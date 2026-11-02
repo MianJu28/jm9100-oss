@@ -1,0 +1,184 @@
+--- a/src/gallium/drivers/mwv207/include/mwv207_context.h
++++ b/src/gallium/drivers/mwv207/include/mwv207_context.h
+@@ -158,6 +158,14 @@
+ 
+    struct mwv207_query_info *query_info;
+ 
++   /* 条件渲染（GL_NV_conditional_render），见 mwv207_check_render_cond()。
++    * FIX(jm9100-oss) */
++   struct pipe_query *render_cond_query;
++   enum pipe_render_cond_flag render_cond_mode;
++   bool render_cond_cond;
++   bool render_cond_cached;
++   bool render_cond_pass;
++
+    struct blitter_context *blitter;
+    struct primconvert_context *primconvert;
+    struct slab_child_pool transfer_pool;
+--- a/src/gallium/drivers/mwv207/include/mwv207_query.h
++++ b/src/gallium/drivers/mwv207/include/mwv207_query.h
+@@ -49,6 +49,11 @@
+ void
+ mwv207_context_query_init(struct pipe_context *ctx);
+ 
++/* 条件渲染：当前是否允许发出绘制。无谓词时恒 true。
++ * FIX(jm9100-oss) */
++bool
++mwv207_check_render_cond(struct pipe_context *pctx);
++
+ void
+ mwv207_context_query_destory(struct pipe_context *pctx);
+ 
+--- a/src/gallium/drivers/mwv207/mwv207_query.c
++++ b/src/gallium/drivers/mwv207/mwv207_query.c
+@@ -299,6 +299,60 @@
+    return true;
+ }
+ 
++/* 条件渲染（GL_NV_conditional_render）。
++ *
++ * 硬件侧其实有能力做：MWV207REG_OCCLUSION_CONTROL.MODE 里
++ * BOOLEAN_CONDITIONAL(0x2) / BOOLEAN_CONDITIONAL_EARLY(0x5) 就是"按谓词决定是否
++ * 绘制"，但那需要把谓词所在的 BO 地址喂进 0xE0C 那条命令、并让命令流按条件跳转，
++ * 改动面大且难以自证。
++ *
++ * 这里改成 CPU 侧判断（与 llvmpipe/softpipe 同构，语义完全合法）：
++ *   1. BeginConditionalRender 时把已结束的查询结果读回来（flush + wait）；
++ *   2. 之后每个绘制/清除点看这个缓存值，false 就直接不发命令。
++ * GL_QUERY_*_NO_WAIT 的语义是"实现**允许**不等待"，因此这里等待并不违规。
++ * 结果只读一次并缓存——查询已 end，值不会再变。
++ *
++ * FIX(jm9100-oss) */
++static void
++mwv207_render_condition(struct pipe_context *pctx,
++                        struct pipe_query *query,
++                        bool condition,
++                        enum pipe_render_cond_flag mode)
++{
++   struct mwv207_context *ctx = mwv207_context(pctx);
++
++   ctx->render_cond_query = query;
++   ctx->render_cond_cond = condition;
++   ctx->render_cond_mode = mode;
++   ctx->render_cond_cached = false;
++   ctx->render_cond_pass = true;
++}
++
++bool
++mwv207_check_render_cond(struct pipe_context *pctx)
++{
++   struct mwv207_context *ctx = mwv207_context(pctx);
++
++   if (!ctx->render_cond_query)
++      return true;
++
++   if (!ctx->render_cond_cached) {
++      union pipe_query_result result = {0};
++      bool wait = (ctx->render_cond_mode == PIPE_RENDER_COND_WAIT ||
++                   ctx->render_cond_mode == PIPE_RENDER_COND_BY_REGION_WAIT);
++      bool ok = pctx->get_query_result(pctx, ctx->render_cond_query, wait, &result);
++      /* 谓词型查询把结果放在 result.b，计数型放在 result.u64；
++       * 两者都从偏移 0 起，且这里已把整个 union 清零，故按 u64 读是安全的。 */
++      bool pass = ok && result.u64 != 0;
++
++      /* condition == true 表示"反相"：查询为假时才绘制。 */
++      ctx->render_cond_pass = ctx->render_cond_cond ? !pass : pass;
++      ctx->render_cond_cached = true;
++   }
++
++   return ctx->render_cond_pass;
++}
++
+ static void
+ mwv207_suspend_queries(struct pipe_context *pctx)
+ {
+@@ -348,6 +402,7 @@
+ 
+    pctx->get_query_result       = mwv207_get_query_result;
+    pctx->set_active_query_state = mwv207_set_active_query_state;
++   pctx->render_condition       = mwv207_render_condition;   /* FIX(jm9100-oss) */
+ }
+ 
+ void
+--- a/src/gallium/drivers/mwv207/mwv207_draw.c
++++ b/src/gallium/drivers/mwv207/mwv207_draw.c
+@@ -1268,6 +1268,11 @@
+    struct mwv207_context *ctx = mwv207_context(pctx);
+    struct mwv207_rasterizer_state *rast_state = ctx->rast_state;
+ 
++   /* 条件渲染（GL_NV_conditional_render）：谓词不成立就整条绘制都不发。
++    * FIX(jm9100-oss) */
++   if (!mwv207_check_render_cond(pctx))
++      return;
++
+    if (num_draws > 1) {
+       util_draw_multi(pctx, dinfo, drawid_offset, indirect, draws, num_draws);
+       return;
+--- a/src/gallium/drivers/mwv207/mwv207_blit.c
++++ b/src/gallium/drivers/mwv207/mwv207_blit.c
+@@ -32,6 +32,7 @@
+ 
+ #include "mwv207_context.h"
+ #include "mwv207_blit.h"
++#include "mwv207_query.h"   /* mwv207_check_render_cond() — FIX(jm9100-oss) */
+ 
+ static bool
+ mwv207_can_blit(const struct pipe_blit_info *info)
+@@ -988,6 +989,11 @@
+    struct mwv207_clear_info clear_info;
+    res->src_dirty = true;
+ 
++   /* 条件渲染下，st 通过该参数告诉驱动这次 clear 是否受谓词约束。
++    * FIX(jm9100-oss) */
++   if (render_condition_enabled && !mwv207_check_render_cond(pctx))
++      return;
++
+    if (util_format_get_blocksize(res->base.format) >= 8) {
+       util_clear_render_target(pctx, dst, color, dstx, dsty, width, height);
+ 
+@@ -1027,6 +1033,10 @@
+    struct mwv207_clear_info clear_info;
+    res->src_dirty = true;
+ 
++   /* 条件渲染（见 clear_render_target 同处注释）。FIX(jm9100-oss) */
++   if (render_condition_enabled && !mwv207_check_render_cond(pctx))
++      return;
++
+    clear_info.res = res;
+    clear_info.tex_info = surface->info;
+    clear_info.box.x = dstx;
+--- a/src/gallium/drivers/mwv207/mwv207_screen.c
++++ b/src/gallium/drivers/mwv207/mwv207_screen.c
+@@ -133,11 +133,16 @@
+    case PIPE_CAP_MAX_TEXEL_OFFSET:
+       return 7;
+    case PIPE_CAP_CONDITIONAL_RENDER:
+-      /* FIX(jm9100-oss): 驱动未实现 pipe_context::render_condition 钩子，
+-       * 声明该 cap 会让 cso_context.c:965 解引用 NULL 函数指针而 SIGSEGV。
+-       * 硬件本身支持（OCCLUSION_CONTROL.MODE = BOOLEAN_CONDITIONAL 0x2 / 
+-       * BOOLEAN_CONDITIONAL_EARLY 0x5），将来实现钩子后可重新打开。 */
+-      return 0;
++      /* FIX(jm9100-oss): 之前这里返回 0，是为了绕开“cap 声明了但
++       * pipe_context::render_condition 没人实现 → cso_context.c:965 解引用
++       * NULL 函数指针 SIGSEGV”。但桌面 GL 的 ver_3_0 门控里点名要
++       * NV_conditional_render（model version.c:260-289），关掉它会把 GL 从
++       * 4.0 直接砍到 2.1 —— 代价太大。
++       *
++       * 真正的修法是把钩子实现出来（mwv207_query.c 的 mwv207_render_condition
++       * + mwv207_check_render_cond：Begin 时把查询结果读回来缓存，之后逐绘制点
++       * 决定是否发命令；GL_QUERY_*_NO_WAIT 允许实现等待，故语义合法）。 */
++      return 1;
+    case PIPE_CAP_VERTEX_COLOR_UNCLAMPED:
+       return 1;
+    case PIPE_CAP_CONSTANT_BUFFER_OFFSET_ALIGNMENT:
+@@ -333,6 +338,10 @@
+       return 0;
+    case PIPE_CAP_ANISOTROPIC_FILTER:
+       return 1;
++   case PIPE_CAP_CONDITIONAL_RENDER_INVERTED:
++      /* FIX(jm9100-oss): 反相谓词由 mwv207_check_render_cond() 的
++       * render_cond_cond 分支直接支持，声明即可。 */
++      return 1;
+    default:
+       return u_pipe_screen_get_param_defaults(pscreen, param);
+    }

@@ -113,27 +113,48 @@ K8/K9/K12 引自原报告，本树未复核（KMD 的 `irq.c`/`sched.c`/`ttm.c` 
 - **实测**：`GL_SAMPLES_PASSED=4096`、`GL_ANY_SAMPLES_PASSED=1`，且计数随几何面积单调
   （1/4 屏 120 < 半屏 496 < 全屏 2016）→ 证明硬件真在计数，非巧合值。
 
-### C5 条件渲染 SIGSEGV（已修复 2026-10-31，cap 回退）
+### C5 条件渲染 SIGSEGV（已彻底修复 2026-11-02：实现钩子）
 
 - **现象**：`glBeginConditionalRender()` 段错误，gdb 显示
   `#0 0x0000000000000000 in ?? ()` / `#1 cso_set_render_condition (...)` at
   `../src/gallium/auxiliary/cso_cache/cso_context.c:965`，`pc 0x0`。
-- **根因**：`mwv207_screen.c:135-136` 声明 `PIPE_CAP_CONDITIONAL_RENDER = 1`，
+- **根因**：`mwv207_screen.c` 声明 `PIPE_CAP_CONDITIONAL_RENDER = 1`，
   但驱动**从未赋值** `pipe_context::render_condition`（全树 grep **0 处**）；
   调用链上 `src/mesa/main/condrender.c:44-88` 的 `BeginConditionalRender()` 无条件调用
   `cso_set_render_condition()`，后者直接 `pipe->render_condition(...)` → 解引用 NULL。
   `st->has_conditional_render`（`st_context.c:624`）**只**在 `src/mesa/main/blit.c:478`
   用作守卫，不保护 GL 入口。对照：llvmpipe / softpipe 都实现了该钩子
   （`lp_context.c:234`、`sp_context.c:233`）。
-- **修复**：`case PIPE_CAP_CONDITIONAL_RENDER:` 由 `return 1` 改 `return 0`
-  （`mwv207_screen.c`，commit `b2ab2c9`）。
-  - 代价：丢 `GL_NV_conditional_render` / `GL_ARB_conditional_render_inverted`
-    （本来也不可用，用了就崩）。
-  - 收益：不再崩溃；应用改得 `GL_INVALID_OPERATION`，不做错误的遮挡剔除。
-- **硬件其实支持**：`MWV207REG_OCCLUSION_CONTROL.MODE` 有
-  `BOOLEAN_CONDITIONAL 0x2` 与 `BOOLEAN_CONDITIONAL_EARLY 0x5`。
-  将来可照闭源 `jmo_3D_SetQuery` → `jmo_HARDWARE_SetQuery` 的写法实现
-  `render_condition` 钩子，再把 cap 打开。
+- **第一次修法（2026-10-31，cap 回退，已废弃）**：把 cap 改 `return 0` 止住崩溃，
+  但**连锁把桌面 GL 从 4.0 砍到 2.1** —— `src/mesa/main/version.c:260-289` 的
+  桌面 `ver_3_0` 门控里点名要 `NV_conditional_render`，而该扩展只由
+  `st_extensions.c:860` 的 `{ o(NV_conditional_render), PIPE_CAP_CONDITIONAL_RENDER }`
+  决定。实测 `Max core profile version: 0.0` / `OpenGL version string: 2.1` /
+  `GLSL 1.20`。**教训：cap 回退不是"免费"的，它会沿扩展依赖链回噬版本号。**
+- **最终修法（2026-11-02，patch `0015`）**：真正实现钩子，CPU 侧判断：
+  - `mwv207_query.c` 新增 `mwv207_render_condition()`（记录 query/cond/mode 并清缓存）
+    与 `mwv207_check_render_cond()`（首次调用时 `get_query_result()` 读回结果，
+    `pass = ok && result.u64 != 0`，按 `cond` 决定是否取反，之后缓存在上下文里）；
+    `mwv207_context_query_init()` 里注册 `pctx->render_condition = mwv207_render_condition;`。
+  - `mwv207_draw.c` 的 `mwv207_draw_vbo()` 开头 `if (!mwv207_check_render_cond(pctx)) return;`；
+    `mwv207_blit.c` 的 `mwv207_clear_render_target()` / `mwv207_clear_depth_stencil()`
+    在 `render_condition_enabled` 时同样提前返回。
+  - `mwv207_screen.c`：`PIPE_CAP_CONDITIONAL_RENDER` 恢复 `return 1`，
+    并新增 `case PIPE_CAP_CONDITIONAL_RENDER_INVERTED: return 1;`（反相谓词直接由
+    `render_cond_cond` 分支支持）。
+  - 为什么不用硬件的 `BOOLEAN_CONDITIONAL`：要把谓词 BO 地址喂进 `0xE0C` 并让命令流
+    条件跳转，改动面大且难自证；CPU 侧判断与 llvmpipe
+    （`lp_query.c:545 llvmpipe_check_render_cond`）/ softpipe 同构，语义合法
+    —— `GL_QUERY_*_NO_WAIT` 只表示实现**允许**不等待，实现选择等待是允许的。
+- **验证**（`tests/query/condrender-correct.c`，GLX 桌面 GL，遮挡物画红、
+  受约束绘制画绿，读中心像素绿通道判断是否真的画上去）：5/5 PASS ——
+  `WAIT 谓词成立→绘制` G=255、`WAIT 谓词不成立→丢弃` G=0、
+  `INVERTED 谓词不成立→绘制` G=255、`INVERTED 谓词成立→丢弃` G=0、
+  `NO_WAIT 谓词不成立→丢弃` G=0；且 `Max core profile version` 回到 **4.0**、
+  `GLES 3.2` 与 `Video memory: 1024MB` 均未受影响。
+- **硬件仍支持**：`MWV207REG_OCCLUSION_CONTROL.MODE` 有
+  `BOOLEAN_CONDITIONAL 0x2` 与 `BOOLEAN_CONDITIONAL_EARLY 0x5`，
+  将来若把谓词下推到命令流，CPU 侧这套逻辑可以整体删掉。
 
 ### C4/C5 的 A/B 对照（`tests/query/run-query-tests.sh`）
 

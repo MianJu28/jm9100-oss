@@ -1,9 +1,19 @@
-# 上游源码树 — gitee jemoic 克隆(含嵌套 .git, 无法作为普通文件纳入管理);
-# 全部缺陷修复以补丁形式保存在 patches/0001-0011, 可作用于上游克隆复现
-src/
+# 分层约定（2026-11-02 起）：
+#   src/mwv207-umd/  —— 我们维护的驱动源码（唯一可改的地方, 纳入本仓库管理）
+#   src/oh-mesa/     —— 上游 oh-mesa 树, 只作**参考**, 不在其中修改/提交;
+#                       其中的 drivers/mwv207 与 winsys/mwv207 是指向上面那棵树的符号链接
+#   src/kernel-6.6/  —— 内核态驱动, 自成 git 仓
+#   src/kernel/      —— 上游 5.10 内核树, 参考
+src/*
+!src/mwv207-umd/
 
-# 二进制载荷 — 构建产物(mesa build-full 输出), 可由 src + patches 复现;
-# 含 >50MB 大文件不适合 git 管理; 部署用 switch-mwv207-oss.sh 自 payload 构建
+# 内嵌独立 git 仓的目录, 不能作为普通文件纳入
+src/kernel/
+src/kernel-6.6/
+src/oh-mesa/
+
+# 二进制载荷 — 构建产物(src/mwv207-umd + 上游 mesa 构建得到);
+# 含 >50MB 大文件不适合 git 管理; 部署用 switch-mwv207.sh 从载荷安装
 payload-*/
 
 # 外部兼容环境 — deb 解包产物(deepin libva 2.22)
