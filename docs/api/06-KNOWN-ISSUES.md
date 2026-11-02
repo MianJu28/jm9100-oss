@@ -241,6 +241,9 @@ K8/K9/K12 引自原报告，本树未复核（KMD 的 `irq.c`/`sched.c`/`ttm.c` 
 
 > 影响面：仅影响**反汇编输出可读性**（调试/验证工具），不影响编译与渲染。
 > 但因为 F.1 的存在，反汇编表是 opcode 数值的唯一交叉验证来源，所以修它有意义。
+>
+> **2026-11-03 状态**：F.3.1 已修（`5dee412`：按汇编器语义 `type = (bit0 << 2) | bit1_2`），
+> F.3.2/F.3.3 已修（`841e300`）。本节保留修复前的判断依据作历史记录。
 
 ### F.4 其他 7 条待确认（详见 `04-NIR-COMPILER.md` §12）
 
@@ -250,6 +253,10 @@ K8/K9/K12 引自原报告，本树未复核（KMD 的 `irq.c`/`sched.c`/`ttm.c` 
 离线/运行时 NIR 选项不一致；`reg_get_base` 各 stage 固定偏移无依据、RA 溢出循环无
 迭代上限、变体命中只查 4 个 dirty 位、dual blend 采样槽硬编码 4、
 `get_ssbo_size` 常量描述符是否漏更新、key 位域宽度、liveness 的 `~0u` 处理。
+
+> **2026-11-03 状态**：`link_shader` 恒 `return false`、`shared_atomic` 失败即
+> `assert(0)`、RA 溢出循环无上限这三条已修（`5dee412`）；其余条目继续在
+> [UNRESOLVED.md §1.4 F.4](../UNRESOLVED.md) 跟踪。
 
 ---
 
