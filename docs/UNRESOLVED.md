@@ -73,8 +73,9 @@ dmesg 里 GPU 相关错误计数为 0。
   初始化为 `-1`、失败时不再 `fence_create(-1)`（`mwv207_video_cs.c:119-136`）；
   `drm_cs.c` 失败时保持 `-1`（`mwv207_drm_cs.c:460-470`）。**残留**：`mwv207_flush()`
   仍无条件 `fence_create(out_fence_fd)`，见 §1.1 O5。
-- 回归：`tests/run-all.sh`、glxgears / GLES 3.2 / 2048MB、玲珑三应用、Firefox
-  内容与渲染均通过（详见 `docs/HANDOVER.md` §3）。
+- 回归：随 r12 部署，验收结果见 `docs/HANDOVER.md` §1（GL 4.0 / GLES 3.2 /
+  `Video memory: 2048MB` / glxgears 100.3 FPS / 火狐内容与性能正常 / 玲珑正常）；
+  回归判据清单见同文档 §4.7。
 
 #### dual-source blend 编译期空视图解引用（火狐 GitHub 崩溃）
 
@@ -105,7 +106,7 @@ dmesg 里 GPU 相关错误计数为 0。
 | ~~E7~~ | `mwv207_query.c` | ~~不支持的 query 类型走 `unreachable()`~~ | **已修**（2026-11-02）：`SO_STATISTICS` / `PIPELINE_STATISTICS` / `PIPELINE_STATISTICS_SINGLE` / 未知类型统一 `return false`（按 Gallium 契约＝结果不可用），不再 `unreachable()`（release 下是 `__builtin_unreachable()`＝未定义行为） | 剩余：这些类型仍无真实硬件计数 |
 | **E8** | `mwv207_state.c:335-354` | 只保留单份视口/裁剪，`set_viewport_states` 忽略 `num_viewports` | 静态；GL `GL_MAX_VIEWPORTS` 报 0/1 → **很可能硬件本身就受限** | 先确认硬件是否支持多视口 |
 | **E3** | `mwv207_blit.c:568-584` | 压缩格式分支里算好的 `task_info` 被随后无条件赋值覆盖 | 静态 | 需先确定正确值 |
-| ~~E5~~ | `mwv207_state.c:326-331` | ~~`stencil_back_reference` 与正面索引交叉 → 背面取到正面值~~ | **已修**（2026-11-03，`5dee412`）：`mwv207_draw.c:1043-1050` 的 0x528 恒取 `stencil_back_reference[0]`（set 时已按背面语义预填）；双面模板探针与 llvmpipe 一致 | — |
+| ~~E5~~ | `mwv207_state.c:326-331` | ~~`stencil_back_reference` 与正面索引交叉 → 背面取到正面值~~ | **已修**（2026-11-03，`5dee412`）：`mwv207_draw.c:1043-1050` 的 0x528 恒取 `stencil_back_reference[0]`（set 时已按背面语义预填）；改动物理意义明确，未附专门双面模板探针记录 | — |
 | ~~O4~~ | `winsys/mwv207/drm/mwv207_drm_cs.c` | ~~`-EBUSY` 无上限 busy-loop；重试可能泄漏 fd~~ | **已修**（2026-11-02）：重试上限 2000 次（≈2s）；失败改 `fprintf` 并关闭 KMD 已 `fd_install` 的 out-fence（判据：`out_fence_fd && submit.fence_fd >= 0 && (in_fence_fd < 0 || submit.fence_fd != in_fence_fd)`，避免误关调用者的 in-fence） | — |
 
 ### 1.3 声明与实现不符（诚实性问题，需拍板）
