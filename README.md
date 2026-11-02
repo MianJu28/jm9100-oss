@@ -27,9 +27,9 @@ sudo ./switch-mwv207.sh kmd install         # KMD 切换为自建带修复版 (�
 | `switch-mwv207.sh` | 统一切换脚本 (根目录入口, 1188 行): `umd` 用户态层 + `kmd` 内核态层; 不带层名的 `status`/`check`/`verify` 同时跑两层。全局选项 `--root`/`--dry-run` 可写在任意位置 |
 | — (2026-10-31 合并) | 原 `switch-mwv207-oss.sh`(701 行, 用户态) 与 `switch-mwv207-kmd.sh`(483 行, 内核态) 已并入上一条, 不再单独维护 |
 | `reports/` | 阶段报告 14 份: 逐行分析 / 兼容性 / VA 硬解移植 / 全功能栈 / 切换脚本 / 性能调查 / 黑屏定案 / 运行态快照 / GLES 3.2 与鲁棒访问 / 16 位格式 / KMD 6.6 移植 |
-| `patches/` | 缺陷修复补丁集 0001-0012 (KMD 2 个 + UMD 4 个 + 硬解移植 1 个 + 10bit HEVC 黑屏修复 1 个 + GLES 3.2/鲁棒访问/16位格式 1 个 + 显存单位与 winsys O2/O3 1 个 + KMD 6.6 移植 1 个) |
+| `patches/` | 缺陷修复补丁集 0001-0018 (KMD 3 个 + UMD 6 个 + 硬解移植 1 个 + 10bit HEVC 黑屏修复 1 个 + GLES 3.2/鲁棒访问/16位格式 1 个 + 显存单位与 winsys O2/O3 1 个 + KMD 6.6 移植 1 个 + 遮挡查询/条件渲染崩溃 2 个 + 矩形纹理与超额持久映射 1 个 + VS 128 位取样/重编译记录 1 个 + 着色器重编译与 128 位拷贝 1 个) |
 | `payload-24/` | Mesa 24.1.2 全功能栈载荷源 (GL+VA+VDPAU+OpenCL, MANIFEST 校验) —— **不含** GLES 3.2 等后续修复 |
-| `payload-25/` | 由 `tools/make-payload.sh` 从 build-full 组装的 r2 载荷 (含 GLES 3.2 / 鲁棒访问 / 16位格式 / 显存修正), 待部署 |
+| `payload-25/` ~ `payload-33/` | 由 `tools/make-payload.sh` 逐版组装的载荷 (r2 ~ r9)。**当前安装的是 `payload-33` (r9)** |
 | `tools/` | `make-payload.sh`: 从构建树组装新载荷 (改 rpath/SONAME 自检/重算 MANIFEST/打印与上游 md5 差异); `enable-ssh-rescue.sh`: 装 openssh-server 建黑屏救援通道, 默认仅公钥, `--password-auth` 开口令登录 (可用 `PASSWORD_FROM` 限定网段) |
 | `docs/` | 驱动 API 与寄存器参考 (17 文件 / 约 1.77 万行): 架构 / winsys / 核心对象 / 绘制 / NIR / 视频 / 已知问题 / 可行性 / 寄存器四表 |
 | `tests/` | 硬件验证套件: run-all.sh / run-full-regression.sh + 源码与二进制 |
@@ -52,6 +52,7 @@ sudo ./switch-mwv207.sh kmd install         # KMD 切换为自建带修复版 (�
 9. `GLES32-ROBUSTNESS-BLEND-REPORT.md` — GLES 3.2 点亮: 鲁棒缓冲访问 + 高级混合 (8/15) 实测
 10. `ES3-FORMATS-LINEAR-REPORT.md` — ARB_ES3_compatibility 的 6 个格式: BLT 破坏数据 → 强制 LINEAR
 11. `KMD-6.6-PORT-REPORT.md` — KMD 6.6 移植: 社区基线 + K1/K3–K8/K10/softdep, K2 刻意不移植的依据
+12. `FF-RENDER-20261102.md` — 火狐 WebRender 图元全丢的根因 (VS 里 RGBA32F 取样只回 64 位) + 性能优化 (§13)
 
 ## Firefox 首帧黑屏 (已定案 + 缓解)
 
@@ -60,10 +61,15 @@ sudo ./switch-mwv207.sh kmd install         # KMD 切换为自建带修复版 (�
 `diff -w` = 0 行, 厂商零改动)。Firefox 冷启动首页/恢复页的首帧 present 恰在
 死区内 → 永黑; 外部 URL/动画页/mpv 因首呈现较晚而不受影响。
 
-当前处置: 驱动栈回退至 `5e6f2dd` (撤销 `libEGL.so` 无后缀名拦截) → Firefox
-走系统 llvmpipe **显示正常**; 其余能力 (GLX 直渲 / VA 硬解 / OpenCL) 不受影响。
 通用缓解: `daemon/map-monitor.c` — 监听窗口 Map, 延迟 50ms 发 1×1 `XClearArea`
 触发 Expose, 客户端自动补画死区内容 (探针实测恢复 254,0,0)。
+
+> **2026-11-02 更新**: 火狐现在**可以完整走我们的驱动做硬件渲染**了 (页面内容 +
+> 浏览器 UI 都来自我们的栈)。历史路径上的两个真实缺陷已修: ① 顶点着色器里对
+> RGBA32F 纹理的 `texelFetch` 只返回 64 位 (z/w 被丢成 `(0,1)`) —— 导致 WebRender
+> 取到的矩形退化、图元全丢, 见 `reports/FF-RENDER-20261102.md` §10–§12 与
+> `patches/0017`; ② 每帧重编译着色器与 128 位纹理的 WC 逐标量拷贝 —— 性能从
+> 36 FPS 提到 42–43 FPS (WebGL) / 97 FPS (CSS), 见同报告 §13 与 `patches/0018`。
 
 ## GPU 频率修复 (系统级, 已部署)
 
