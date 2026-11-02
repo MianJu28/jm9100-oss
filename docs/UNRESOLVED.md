@@ -116,7 +116,7 @@
 
 | # | 目标 | 可行性 | 状态 / 缺口 |
 |---|---|---|---|
-| **D1** | **VP9 解码** | **中-高**（最可行） | 切片解析器 + bool 解码器**已编入库但零调用者**；唯一缺口是 `mwv207_video_dec.c` 里 `mwv207_dec_vp9_set_regs()` **无 VP9 分支**（`grep vp9 mwv207_video_dec.c` 仅命中注释/头文件）。有 H264（10 个 `set_regs`）/HEVC（7 个）作模板，1840 行解码寄存器表已全量还原。硬件能力表 `mwv207_video_dec_vpu_features_list.h` 是**按芯片 id 分档**的：`id=0x00001F76` 档 `vp9_support=1` 且 `vp9_profile2_support=1`（`:29-36`），`id=0x00001F67` 档全 0（`:154-160`）→ **先确认本机芯片 id 落在哪一档**。需真实 VP9 码流验证 |
+| **D1** | **VP9 解码** | **中-高**（最可行） | 切片解析器 + bool 解码器**已编入库但零调用者**；唯一缺口是 `mwv207_video_dec.c` 里 `mwv207_dec_vp9_set_regs()` **无 VP9 分支**（`grep vp9 mwv207_video_dec.c` 仅命中注释/头文件）。有 H264（10 个 `set_regs`）/HEVC（7 个）作模板，1840 行解码寄存器表已全量还原。**本机芯片档位已确认**：`mwv207_dec_h264.c:2321` 与 `mwv207_dec_hevc.c:1231` 都硬编码调用 `mwv207_video_dec_get_hw_features_by_id(0x00001F76, ...)`，而 `mwv207_video_dec_vpu_features_list.h:29-36` 的 `0x00001F76` 档 `vp9_support=1`、`vp9_profile2_support=1` → **硬件确实支持 VP9（含 Profile 2）**。需真实 VP9 码流验证 |
 | **D2** | **H264 4:2:2 / 4:4:4** | 二选一 | 见 1.3 的 I-3：要么取消声明，要么改 `chroma_format_idc` 硬置并做硬件验证 |
 | **D3** | **编码（H264/HEVC）** | 大（从零） | UMD 侧 `base.encode_bitstream` **从未安装**（全树 0 处）；KMD 有 `mwv207_pipe_enc.c`。硬件侧有 HEVC 编码证据（闭源串含 `jmenc/source/hevc/hevcencapi.c`） |
 | **D4** | 4 个未实现的扩展 opcode：`WAIT_GROUP_EVENT`(0x11) / `TD_OP`(0x12) / `TEX_INVALIDATE`(0x14) / `PRE_NORM`(0x15) | 小-中 | 厂商枚举齐全（`MWV207REG_SH_EXTENDED_OPCODE`），需逐个确定语义 |
