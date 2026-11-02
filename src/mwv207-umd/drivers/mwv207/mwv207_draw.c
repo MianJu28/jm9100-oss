@@ -1097,7 +1097,14 @@ mwv207_update_shader(struct mwv207_context *ctx)
       }
    }
 
-   result = mwv207_set_current_shader(ctx, ctx->shader_states[PIPE_SHADER_FRAGMENT]);
+   /* FIX(jm9100-oss): 顶点着色器原来只在 create/bind shader_state 时选一次，之后
+    * 采样器视图变化（例如绑定了 RGBA32F 这类 128 位纹理、需要把 4x32 位纹素取样
+    * 拆成两次 64 位取样）不会让它重编译 → VS 里 texelFetch 只拿到 x/y。
+    * 这里让 VS 每次绘制前与 FS 一样重新核对 shader key。 */
+   if (ctx->shader_states[PIPE_SHADER_VERTEX])
+      result |= mwv207_set_current_shader(ctx, ctx->shader_states[PIPE_SHADER_VERTEX]);
+
+   result |= mwv207_set_current_shader(ctx, ctx->shader_states[PIPE_SHADER_FRAGMENT]);
 
    if (ctx->shader_states[PIPE_SHADER_GEOMETRY])
       result |= mwv207_set_current_shader(ctx, ctx->shader_states[PIPE_SHADER_GEOMETRY]);

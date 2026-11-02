@@ -222,6 +222,11 @@ mwv207_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_DEST_SURFACE_SRGB_CONTROL:
       return 1;
    case PIPE_CAP_MAX_VARYINGS:
+      /* 保持 8。曾尝试提到 16（GLES 3.0 规定的最低是 15 个向量），但实测 16 个
+       * vec4 varying 会撞上 mwv207_link_shader 自己的断言
+       * `next_shader->infile.num_reg < 0x10`（mwv207_compiler.c:619）—— 驱动内部
+       * 的 IO 记录只有 16 个槽，声明 16 属超额声明。火狐 WebRender 在 8 下已能
+       * 正常渲染，故维持原值。 */
       return 8;
    case PIPE_CAP_THROTTLE:
       return 1;

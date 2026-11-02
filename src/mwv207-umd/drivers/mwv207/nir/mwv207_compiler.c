@@ -423,6 +423,28 @@ mwv207_compile_shader(struct mwv207_context *ctx, struct mwv207_shader_state *st
    c->shader = shader;
    c->nir = nir_shader_clone(NULL, shader->info->nir);
 
+   /* FIX(jm9100-oss): 同一个 struct mwv207_shader 会被重编译多次 —— 采样器视图 /
+    * 帧缓冲变化命中新的 shader key 时，mwv207_set_current_shader() 会再调一次
+    * mwv207_compile_shader()。而 infile/outfile/link 这三份"本次编译产物"挂在
+    * shader 上（不在本次编译上下文 c 里），填充时用的是
+    *   sf->num_reg = MAX2(sf->num_reg, idx + 1)   /   sf->reg[sf->num_reg++]
+    * 只增不减，于是 num_reg 逐次越过 reg[0x10] 的边界，把紧随其后的 link 与
+    * code 指针一起覆盖。实测火狐崩溃现场（core dump）：
+    *   outfile.num_reg = 25（数组只有 16 项）、shader->code = 0x2300000003，
+    *   SIGSEGV 落在 mwv207_record_code() 的 FREE(shader->code)。
+    * 每次编译前把这三份记录清零。 */
+   memset(&shader->infile, 0, sizeof(shader->infile));
+   memset(&shader->outfile, 0, sizeof(shader->outfile));
+   memset(&shader->link, 0, sizeof(shader->link));
+
+   /* 同理，立即数表也属于"本次编译产物"，重编译时先释放上一次的再重填，
+    * 否则每重编译一次泄漏一份（mwv207_record_uniform 会重新 MALLOC）。 */
+   FREE(shader->uniforms.imm_data);
+   FREE(shader->uniforms.imm_contents);
+   shader->uniforms.imm_data = NULL;
+   shader->uniforms.imm_contents = NULL;
+   shader->uniforms.imm_count = 0;
+
    /* PIPE_CAP_ROBUST_BUFFER_ACCESS_BEHAVIOR is advertised (see
     * mwv207_screen.c), so the guarantee has to actually hold: clamp every
     * SSBO access offset to an in-bounds value before it reaches the hardware.

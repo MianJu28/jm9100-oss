@@ -1010,8 +1010,11 @@ mwv207_set_sampler_views(struct pipe_context *pctx,
    uint32_t tex_128_offset = 0;
    uint32_t max_sampler_views = start_slot + num_views;
 
-   ctx->info.tex_128bit = false;
-
+   /* FIX(jm9100-oss): 这里原来先把全局 ctx->info.tex_128bit 清成 false，再按本次
+    * 绑定的视图置位 —— 于是"最后绑定的那个 stage"说了算。实际顺序是顶点着色器
+    * 先绑、片元着色器后绑，VS 编译时看到的是 tex_128bit=0 → 永远不做 128 位取样
+    * 拆分，RGBA32F 的 texelFetch 在 VS 里只回 64 位（z/w 丢成 (0,1)）。
+    * 改为不在入口清零，循环结束后跨所有 stage 重算。 */
    for (uint32_t i = 0; i < num_views; ++i) {
       sampler_view = mwv207_sampler_view(views[i]);
 
@@ -1043,6 +1046,22 @@ mwv207_set_sampler_views(struct pipe_context *pctx,
    }
 
    ctx->num_sampler_views[stage] = max_sampler_views;
+
+   /* FIX(jm9100-oss): 跨 stage 重算 —— 只要任何一个 stage 还绑着 128 位视图，
+    * 各 stage 的着色器就必须保留 128 位取样拆分（tex_record 保证只有真正绑了
+    * 128 位视图的槽会被拆）。 */
+   {
+      bool any_128bit = false;
+      for (unsigned st = 0; st < PIPE_SHADER_TYPES && !any_128bit; st++)
+         for (unsigned i = 0; i < ctx->num_sampler_views[st]; i++)
+            if (ctx->sampler_views[st][i] &&
+                mwv207_sampler_view(ctx->sampler_views[st][i])->tex_desc.tex_128bit) {
+               any_128bit = true;
+               break;
+            }
+      ctx->info.tex_128bit = any_128bit;
+   }
+
    ctx->dirty |= MWV207_DIRTY_SAMPLER_VIEWS;
 }
 

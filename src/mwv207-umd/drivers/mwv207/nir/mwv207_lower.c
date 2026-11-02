@@ -963,12 +963,20 @@ mwv207_lower_vecn(nir_shader *nir, struct mwv207_compile *c)
    }
 }
 
-static void
-mwv207_exchange_texture_swizzle(struct mwv207_context *ctx, nir_tex_instr *tex,
+static bool
+mwv207_exchange_texture_swizzle(struct mwv207_context *ctx, unsigned stage,
+                              nir_tex_instr *tex,
                               nir_alu_instr *mov, nir_tex_instr *tex_ba, nir_builder b)
 {
+   /* FIX(jm9100-oss): 查采样器视图必须用"本着色器所属 stage"。
+    * 原来写死 PIPE_SHADER_FRAGMENT：顶点着色器做 128 位取样拆分时，
+    * ctx->sampler_views[FRAGMENT][i] 往往是 NULL → 段错误（实测 exit 139）。 */
    struct mwv207_sampler_view *sampler_view =
-      mwv207_sampler_view(ctx->sampler_views[PIPE_SHADER_FRAGMENT][tex->sampler_index]);
+      ctx->sampler_views[stage][tex->sampler_index] ?
+      mwv207_sampler_view(ctx->sampler_views[stage][tex->sampler_index]) : NULL;
+
+   if (!sampler_view)
+      return false;
 
    for (int i = 0; i < 4; i++) {
       unsigned swizzle;
@@ -1013,15 +1021,25 @@ mwv207_exchange_texture_swizzle(struct mwv207_context *ctx, nir_tex_instr *tex,
          break;
       default:
          assert(!"WRONG SWIZZLE");
-         return;
+         return false;
       }
    }
+
+   return true;
 }
 
 static void
 mwv207_lower_tex_128_impl(nir_function_impl *impl, struct mwv207_context *ctx)
 {
    nir_shader *nir = impl->function->shader;
+   /* FIX(jm9100-oss): 128 位纹素取样要按"本着色器所属 stage"查记录与视图。
+    * 原来一律用 PIPE_SHADER_FRAGMENT，顶点着色器因此永远走不到拆分，
+    * 硬件只回 64 位 → z/w 变成 (0,1)（WebRender 的 sGpuCache/sPrimitiveHeadersF
+    * 都是 RGBA32F，于是矩形被 rect_clamp 夹成退化矩形、页面图元全不可见）。 */
+   const unsigned stage = nir->info.stage;
+
+   if (stage >= PIPE_SHADER_TYPES)
+      return;
 
    nir_builder b = nir_builder_create(impl);
 
@@ -1035,7 +1053,7 @@ mwv207_lower_tex_128_impl(nir_function_impl *impl, struct mwv207_context *ctx)
          if (tex->op == nir_texop_tg4)
             continue;
 
-         if (ctx->info.tex_record[PIPE_SHADER_FRAGMENT][tex->sampler_index] == 0)
+         if (ctx->info.tex_record[stage][tex->sampler_index] == 0)
             continue;
 
          if (tex->def.num_components == 1)
@@ -1060,7 +1078,7 @@ mwv207_lower_tex_128_impl(nir_function_impl *impl, struct mwv207_context *ctx)
          tex_ba->is_shadow = tex->is_shadow;
          tex_ba->is_new_style_shadow = tex->is_new_style_shadow;
          tex_ba->texture_non_uniform = tex->texture_non_uniform;
-         tex_ba->sampler_index = ctx->info.tex_record[PIPE_SHADER_FRAGMENT][tex->sampler_index];
+         tex_ba->sampler_index = ctx->info.tex_record[stage][tex->sampler_index];
          tex_ba->texture_index = tex_ba->sampler_index;
          tex_ba->sampler_non_uniform = tex->sampler_non_uniform;
          tex_ba->tg4_offsets[0][0] = tex->tg4_offsets[0][0];
@@ -1077,7 +1095,11 @@ mwv207_lower_tex_128_impl(nir_function_impl *impl, struct mwv207_context *ctx)
          nir_builder_instr_insert(&b, &tex_ba->instr);
 
          nir_alu_instr *mov = nir_alu_instr_create(nir, nir_op_vec4);
-         mwv207_exchange_texture_swizzle(ctx, tex, mov, tex_ba, b);
+
+         /* 拿不到本 stage 的采样器视图就放弃拆分：此时硬件行为与拆分前一致，
+          * 但绝不能把未初始化的 mov 插进 IR（那样会直接段错误）。 */
+         if (!mwv207_exchange_texture_swizzle(ctx, stage, tex, mov, tex_ba, b))
+            continue;
 
          nir_def_init(&mov->instr, &mov->def, 4, 32);
 
@@ -1191,7 +1213,7 @@ mwv207_lower_fb_128_impl(nir_function_impl *impl, struct mwv207_context *ctx)
 static void
 mwv207_lower_128bit(nir_shader *nir, struct mwv207_context *ctx)
 {
-   if (nir->info.stage != MESA_SHADER_FRAGMENT)
+   if (nir->info.stage == MESA_SHADER_KERNEL)
       return;
 
    if (ctx->info.tex_128bit) {
@@ -1201,7 +1223,7 @@ mwv207_lower_128bit(nir_shader *nir, struct mwv207_context *ctx)
       }
    }
 
-   if (ctx->info.pixel_128bit) {
+   if (ctx->info.pixel_128bit && nir->info.stage == MESA_SHADER_FRAGMENT) {
       nir_foreach_function(function, nir) {
          if (function->impl)
             mwv207_lower_fb_128_impl(function->impl, ctx);
