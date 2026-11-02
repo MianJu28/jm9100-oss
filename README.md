@@ -29,7 +29,7 @@ sudo ./switch-mwv207.sh kmd install         # KMD 切换为自建带修复版 (�
 | `reports/` | 阶段报告 14 份: 逐行分析 / 兼容性 / VA 硬解移植 / 全功能栈 / 切换脚本 / 性能调查 / 黑屏定案 / 运行态快照 / GLES 3.2 与鲁棒访问 / 16 位格式 / KMD 6.6 移植 |
 | `patches/` | 缺陷修复补丁集 0001-0018 (KMD 3 个 + UMD 6 个 + 硬解移植 1 个 + 10bit HEVC 黑屏修复 1 个 + GLES 3.2/鲁棒访问/16位格式 1 个 + 显存单位与 winsys O2/O3 1 个 + KMD 6.6 移植 1 个 + 遮挡查询/条件渲染崩溃 2 个 + 矩形纹理与超额持久映射 1 个 + VS 128 位取样/重编译记录 1 个 + 着色器重编译与 128 位拷贝 1 个) |
 | `payload-24/` | Mesa 24.1.2 全功能栈载荷源 (GL+VA+VDPAU+OpenCL, MANIFEST 校验) —— **不含** GLES 3.2 等后续修复 |
-| `payload-25/` ~ `payload-33/` | 由 `tools/make-payload.sh` 逐版组装的载荷 (r2 ~ r9)。**当前安装的是 `payload-33` (r9)** |
+| `payload-25/` ~ `payload-34/` | 由 `tools/make-payload.sh` 逐版组装的载荷 (r2 ~ r10)。**当前安装的是 `payload-34` (r10)** |
 | `tools/` | `make-payload.sh`: 从构建树组装新载荷 (改 rpath/SONAME 自检/重算 MANIFEST/打印与上游 md5 差异); `enable-ssh-rescue.sh`: 装 openssh-server 建黑屏救援通道, 默认仅公钥, `--password-auth` 开口令登录 (可用 `PASSWORD_FROM` 限定网段) |
 | `docs/` | 驱动 API 与寄存器参考 (17 文件 / 约 1.77 万行): 架构 / winsys / 核心对象 / 绘制 / NIR / 视频 / 已知问题 / 可行性 / 寄存器四表 |
 | `tests/` | 硬件验证套件: run-all.sh / run-full-regression.sh + 源码与二进制 |
