@@ -32,8 +32,10 @@ SRC_DIRS = [
 # 厂商发布包内的 KMD 寄存器头（只读、外部数据，可能不存在）：存在时纳入校验，
 # 用于核对 REGISTERS-FIELDS.md / REGISTER-MAP.md 里的 `jmgpu_*.h:行号` 引用。
 VENDOR_DIRS = [
+    # /tmp 会被清理，故额外接受仓库内可重建的位置（tools/extract-vendor-headers.sh）
     '/tmp/dpkg/gg/usr/src/mwv207-1.6.1-v25.u1',
     '/tmp/v180/usr/src/mwv207-1.8.0.uos',
+    '/tmp/vendor-1.8.0/usr/src/mwv207-1.8.0.uos',
 ]
 for d in VENDOR_DIRS:
     if os.path.isdir(d):
