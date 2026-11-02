@@ -1,0 +1,636 @@
+diff --git a/src/gallium/drivers/mwv207/include/mwv207_cmd.h b/src/gallium/drivers/mwv207/include/mwv207_cmd.h
+index 99f78f3..43dd8d5 100644
+--- a/src/gallium/drivers/mwv207/include/mwv207_cmd.h
++++ b/src/gallium/drivers/mwv207/include/mwv207_cmd.h
+@@ -39,7 +39,7 @@ struct mwv207_context;
+ 
+ enum cache_mask {
+    CACHE_TEXTURE_L2       = 1 << 0,
+-   CACHE_TEXUTRE_L1       = 1 << 1,
++   CACHE_TEXTURE_L1       = 1 << 1,
+    CACHE_TEXTURE_DESC     = 1 << 2,
+    CACHE_VST_L2           = 1 << 3,
+    CACHE_VST_L1           = 1 << 4,
+@@ -53,7 +53,7 @@ enum cache_mask {
+    CACHE_L2               = 1 << 12,
+    CACHE_VERTEX_DATA      = 1 << 13,
+ 
+-   CACHE_TEXTURE_DATA     = CACHE_TEXTURE_L2 | CACHE_TEXUTRE_L1,
++   CACHE_TEXTURE_DATA     = CACHE_TEXTURE_L2 | CACHE_TEXTURE_L1,
+    CACHE_TEXTURE_ALL      = CACHE_TEXTURE_DATA | CACHE_TEXTURE_DESC,
+    CACHE_VST_DATA         = CACHE_VST_L2 | CACHE_VST_L1,
+    CACHE_VST_ALL          = CACHE_VST_DATA | CACHE_VST_DESC,
+diff --git a/src/gallium/drivers/mwv207/include/mwv207_context.h b/src/gallium/drivers/mwv207/include/mwv207_context.h
+index 814e37c..496a1cb 100644
+--- a/src/gallium/drivers/mwv207/include/mwv207_context.h
++++ b/src/gallium/drivers/mwv207/include/mwv207_context.h
+@@ -154,6 +154,14 @@ struct mwv207_context {
+    uint32_t dirty;
+    int      in_fence_fd;
+ 
++   /* FIX(jm9100-oss): E2 —— 绘制序号必须跟着 context 走。
++    * 原来 mwv207_config_draw() 里写的是函数内 static uint32_t draw_count，
++    * 被所有 context 共享：多 context（应用多线程 + 驱动内部 blit/query
++    * context）时序号会互相串，且每帧递增无上限。硬件侧 0xE27
++    * (MWV207REG_DRAW_ID) 是 32 位自由计数器，语义上就是"这次绘制是第几次"，
++    * 每个 context 各自计数即可。 */
++   uint32_t draw_count;
++
+    /* 影响着色器编译的状态"指纹"。mwv207_submit() 会把 ctx->dirty 重置成
+     * MWV207_DIRTY_ALL（新 cmdbuf 必须重发全部状态），因此 dirty 不能用来
+     * 判断"某个状态是否真的变了"——用它做判据会导致每次绘制都重编译着色器。
+diff --git a/src/gallium/drivers/mwv207/include/mwv207_query.h b/src/gallium/drivers/mwv207/include/mwv207_query.h
+index e7b57fc..5c26c58 100644
+--- a/src/gallium/drivers/mwv207/include/mwv207_query.h
++++ b/src/gallium/drivers/mwv207/include/mwv207_query.h
+@@ -55,6 +55,6 @@ bool
+ mwv207_check_render_cond(struct pipe_context *pctx);
+ 
+ void
+-mwv207_context_query_destory(struct pipe_context *pctx);
++mwv207_context_query_destroy(struct pipe_context *pctx);
+ 
+ #endif
+diff --git a/src/gallium/drivers/mwv207/include/mwv207_state.h b/src/gallium/drivers/mwv207/include/mwv207_state.h
+index e6bf1f7..55e9f9d 100644
+--- a/src/gallium/drivers/mwv207/include/mwv207_state.h
++++ b/src/gallium/drivers/mwv207/include/mwv207_state.h
+@@ -130,8 +130,11 @@ mwv207_context_vertex_init(struct pipe_context *pctx);
+ void
+ mwv207_context_blend_init(struct pipe_context *pctx);
+ 
+-void
+-mwv207_context_zsa_init(struct pipe_context *pctx);
++/* FIX(jm9100-oss): E9 —— 删掉 mwv207_context_zsa_init() 的声明。
++ * 全树没有任何定义、也没有任何调用者（zsa 相关状态是在
++ * mwv207_state.c 的 mwv207_context_state_init() 里直接赋回调的，
++ * 只有 vertex/blend 有独立的 _init）。留着声明会让人误以为存在
++ * 一个未接入的初始化步骤；若真有人照着调用会在链接期失败。 */
+ 
+ void
+ mwv207_set_framebuffer_state(struct pipe_context *pctx,
+diff --git a/src/gallium/drivers/mwv207/mwv207_cmd.c b/src/gallium/drivers/mwv207/mwv207_cmd.c
+index 55be057..0c13a8f 100644
+--- a/src/gallium/drivers/mwv207/mwv207_cmd.c
++++ b/src/gallium/drivers/mwv207/mwv207_cmd.c
+@@ -133,7 +133,7 @@ mwv207_flush_cache(uint32_t **pbuf, enum cache_mask mask)
+    if (mask & CACHE_VERTEX_DATA)
+       flush_state |= (ALIGN_BIT((uint32_t) (ENABLE), 0xE) & (0x4000));
+ 
+-   if (mask & CACHE_TEXUTRE_L1)
++   if (mask & CACHE_TEXTURE_L1)
+       flush_state |= ((ALIGN_BIT((uint32_t) (ENABLE), 0xC) & (0x1000))  |
+          (ALIGN_BIT((uint32_t) (ENABLE), 0xD) & (0x2000)));
+ 
+diff --git a/src/gallium/drivers/mwv207/mwv207_context.c b/src/gallium/drivers/mwv207/mwv207_context.c
+index c2f0b6c..25454d8 100644
+--- a/src/gallium/drivers/mwv207/mwv207_context.c
++++ b/src/gallium/drivers/mwv207/mwv207_context.c
+@@ -126,7 +126,7 @@ mwv207_context_destroy(struct pipe_context *pctx)
+    util_set_vertex_buffers_count(ctx->vertex_buffer,
+       &ctx->num_vertex_buffers, NULL, 0, false);
+ 
+-   mwv207_context_query_destory(pctx);
++   mwv207_context_query_destroy(pctx);
+ 
+    util_unreference_framebuffer_state(&ctx->fb_state);
+ 
+@@ -138,9 +138,9 @@ mwv207_context_destroy(struct pipe_context *pctx)
+ 
+    util_blitter_destroy(ctx->blitter);
+ 
+-   ctx->ws->cmdbuf_destory(ctx->ws, ctx->cmd);
++   ctx->ws->cmdbuf_destroy(ctx->ws, ctx->cmd);
+ 
+-   ctx->ws->cmdbuf_destory(ctx->ws, ctx->dma);
++   ctx->ws->cmdbuf_destroy(ctx->ws, ctx->dma);
+ 
+    if (ctx->in_fence_fd >= 0) {
+       close(ctx->in_fence_fd);
+diff --git a/src/gallium/drivers/mwv207/mwv207_draw.c b/src/gallium/drivers/mwv207/mwv207_draw.c
+index dbbb7d6..069055a 100644
+--- a/src/gallium/drivers/mwv207/mwv207_draw.c
++++ b/src/gallium/drivers/mwv207/mwv207_draw.c
+@@ -885,7 +885,9 @@ mwv207_config_draw(struct mwv207_context *ctx,
+                    const struct pipe_draw_start_count_bias *draws,
+                    unsigned num_draws)
+ {
+-   static uint32_t draw_count = 0;
++   /* FIX(jm9100-oss): E2 —— 见 include/mwv207_context.h 的 draw_count 注释。
++    * 原来的函数内 static 会让所有 context 共享同一个计数器。 */
++   uint32_t draw_count = ctx->draw_count;
+    uint32_t count = draws->count;
+    uint32_t offset = draws->start;
+    uint32_t draw_mode = 0x0;
+@@ -905,6 +907,7 @@ mwv207_config_draw(struct mwv207_context *ctx,
+       MWV207_EMIT(cmd_buf, 0xE03, (ALIGN_BIT((uint32_t) (ENABLE), 0x4) & (0x10)));
+ 
+    MWV207_EMIT(cmd_buf, 0xE27, draw_count++);
++   ctx->draw_count = draw_count;
+ 
+    MWV207_EMIT(cmd_buf, 0xE02, (ALIGN_BIT((uint32_t) (0x5), 0x0) & (0x1F)) |
+       (ALIGN_BIT((uint32_t) (0x7), 0x8) & (0x1F00)));
+@@ -1009,17 +1012,25 @@ mwv207_config_other(struct mwv207_context *ctx)
+             (ALIGN_BIT((uint32_t) (true), 0x1A) & (0x4000000)) |
+             (ALIGN_BIT((uint32_t) (true), 0x18) & (0x1000000)));
+       } else {
+-         struct mwv207_shader *fs = ctx->shader_states[PIPE_SHADER_FRAGMENT]->current;
+-         bool use_w = fs->useFragCoord;
+-
+-         if (ctx->shader_states[PIPE_SHADER_GEOMETRY])
++         /* FIX(jm9100-oss): E4 —— 没有深度附件时也要用到 FS 的 useFragCoord
++          * 位，但原来直接解引用 ctx->shader_states[PIPE_SHADER_FRAGMENT]。
++          * 该指针在 "只设了 framebuffer 还没 bind_fs" 的窗口内可以为空
++          * （例如 clear 之后紧跟的第一次绘制、或应用先 FBO 再 shader 的
++          * 顺序），此时是空指针解引用。同一函数上面几行的 ps_modify_z
++          * 已经用了 && 短路做同样的保护，这里照抄。 */
++         struct mwv207_shader_state *fs_state = ctx->shader_states[PIPE_SHADER_FRAGMENT];
++         struct mwv207_shader *fs = fs_state ? fs_state->current : NULL;
++         bool use_w = fs ? fs->useFragCoord : false;
++
++         if (ctx->shader_states[PIPE_SHADER_GEOMETRY] &&
++             ctx->shader_states[PIPE_SHADER_GEOMETRY]->current)
+             use_w |= ctx->shader_states[PIPE_SHADER_GEOMETRY]->current->gs_use_layer;
+ 
+          MWV207_EMIT(cmd_buf, 0x382, ra_control |
+             (ALIGN_BIT(0x1, 0x1E) & (0xC0000000)) |
+             (ALIGN_BIT((uint32_t) (DISABLE), 0x1C) & (0x30000000)) |
+             (ALIGN_BIT((uint32_t) (use_w), 0x1A) & (0x4000000)) |
+-            (ALIGN_BIT((uint32_t) (fs->useFragCoord), 0x18) & (0x1000000)));
++            (ALIGN_BIT((uint32_t) (fs ? fs->useFragCoord : false), 0x18) & (0x1000000)));
+       }
+    }
+ 
+diff --git a/src/gallium/drivers/mwv207/mwv207_query.c b/src/gallium/drivers/mwv207/mwv207_query.c
+index af57d7e..a302f88 100644
+--- a/src/gallium/drivers/mwv207/mwv207_query.c
++++ b/src/gallium/drivers/mwv207/mwv207_query.c
+@@ -287,9 +287,24 @@ mwv207_get_query_result(struct pipe_context *pctx,
+    case PIPE_QUERY_PRIMITIVES_GENERATED:
+       result->u64 = results[0];
+       break;
++   case PIPE_QUERY_SO_STATISTICS:
++   case PIPE_QUERY_PIPELINE_STATISTICS:
++   case PIPE_QUERY_PIPELINE_STATISTICS_SINGLE:
+    default:
+-      printf("unhangled query type: %s\n", util_str_query_type(query->type, true));
+-      unreachable("unexpected query type");
++      /* FIX(jm9100-oss): E7 —— 这几类查询的 begin_query 只 break、不发射任何
++       * 寄存器（硬件侧没有对应的计数器），所以这里根本拿不到数据。
++       * 原实现落到 default 的 unreachable()，release 构建下 unreachable
++       * 是 __builtin_unreachable()，等于把"不支持"变成未定义行为 ——
++       * 一旦应用真的用 GL_ARB_pipeline_statistics_query，就是随机崩溃。
++       * 正确做法是按 Gallium 契约返回 false（表示"结果不可用"），
++       * 上层 st/mesa 会把它报成 GL_QUERY_RESULT_AVAILABLE = 0，
++       * 应用拿到的是合法的"暂无结果"，不会崩。
++       * result 已在 switch 之前 util_query_clear_result() 清零，这里只需
++       * 归还 BO 映射并复位槽位计数。 */
++      memset(results, 0, 64 * query->query_id);
++      ctx->ws->bo_unmap(ctx->ws, query->bo);
++      query->query_id = 0;
++      return false;
+    }
+ 
+    memset(results, 0, 64 * query->query_id);
+@@ -406,7 +421,7 @@ mwv207_context_query_init(struct pipe_context *pctx)
+ }
+ 
+ void
+-mwv207_context_query_destory(struct pipe_context *pctx)
++mwv207_context_query_destroy(struct pipe_context *pctx)
+ {
+    struct mwv207_context *ctx = mwv207_context(pctx);
+ 
+diff --git a/src/gallium/drivers/mwv207/mwv207_shader.c b/src/gallium/drivers/mwv207/mwv207_shader.c
+index 034e936..361a760 100644
+--- a/src/gallium/drivers/mwv207/mwv207_shader.c
++++ b/src/gallium/drivers/mwv207/mwv207_shader.c
+@@ -897,6 +897,8 @@ mwv207_create_shader(struct mwv207_shader_state *state, struct mwv207_shader_key
+    shader->vs_pointsize_out_reg = -1;
+ 
+    memset(&shader->ps_color_out_reg, 0, sizeof(shader->ps_color_out_reg));
++   /* FIX(jm9100-oss): F.3.3 —— 每次编译前清零颜色输出个数。 */
++   shader->ps_color_out_num = 0;
+    memset(&shader->ubo_mask, 0, sizeof(shader->ubo_mask));
+    shader->ps_depth_out_reg = -1;
+ 
+diff --git a/src/gallium/drivers/mwv207/mwv207_vertex.c b/src/gallium/drivers/mwv207/mwv207_vertex.c
+index 4055e83..3fb1f87 100644
+--- a/src/gallium/drivers/mwv207/mwv207_vertex.c
++++ b/src/gallium/drivers/mwv207/mwv207_vertex.c
+@@ -428,7 +428,7 @@ mwv207_config_uniform(struct mwv207_context *ctx, enum pipe_shader_type stage)
+       case MWV207_IMMEDIATE_ATOMIC_BO:
+          unifrom[i % 4] = get_atomic_offset(ctx, stage, val, (cmd_buf + (i % 4) + 1), 0);
+          break;
+-      case MWV207_IMMEDIATE_GLOBAL_MEMEORY_OFFSET:
++      case MWV207_IMMEDIATE_GLOBAL_MEMORY_OFFSET:
+          unifrom[i % 4] = get_global_offset(ctx, val, (cmd_buf + (i % 4) + 1), 0);
+          break;
+ 
+@@ -545,7 +545,7 @@ mwv207_emit_kernel_params(struct mwv207_context *ctx, const struct pipe_grid_inf
+       case MWV207_IMMEDIATE_WORK_GROUP_SIZE:
+          unifrom[i % 4] = info->block[val];
+          break;
+-      case MWV207_IMMEDIATE_GLOBAL_MEMEORY_OFFSET:
++      case MWV207_IMMEDIATE_GLOBAL_MEMORY_OFFSET:
+          if (const_count != 0)
+             val = bit_scann(val, shader->ubo_mask);
+          unifrom[i % 4] = get_global_offset(ctx, val, (cmd_buf + (i % 4) + 1), 0);
+diff --git a/src/gallium/drivers/mwv207/nir/mwv207_common.h b/src/gallium/drivers/mwv207/nir/mwv207_common.h
+index 4e4d294..1f5be4c 100644
+--- a/src/gallium/drivers/mwv207/nir/mwv207_common.h
++++ b/src/gallium/drivers/mwv207/nir/mwv207_common.h
+@@ -152,7 +152,7 @@ enum mwv207_immediate_contents {
+    MWV207_IMMEDIATE_SSBO_SIZE,
+    MWV207_IMMEDIATE_ATOMIC_BO,
+    MWV207_IMMEDIATE_LOCAL_MEMORY_OFFSET,
+-   MWV207_IMMEDIATE_GLOBAL_MEMEORY_OFFSET,
++   MWV207_IMMEDIATE_GLOBAL_MEMORY_OFFSET,
+ };
+ 
+ struct mwv207_inst_dst {
+diff --git a/src/gallium/drivers/mwv207/nir/mwv207_compiler.h b/src/gallium/drivers/mwv207/nir/mwv207_compiler.h
+index e39965e..c99df8e 100644
+--- a/src/gallium/drivers/mwv207/nir/mwv207_compiler.h
++++ b/src/gallium/drivers/mwv207/nir/mwv207_compiler.h
+@@ -131,6 +131,9 @@ struct mwv207_shader {
+    int inner_outer_count;
+ 
+    int ps_color_out_reg[8];
++   /* FIX(jm9100-oss): F.3.3 —— 已设置的颜色输出个数（1..8）。
++    * 原来 dump 时靠 "reg != 0" 判终止，而 r0 是合法寄存器。 */
++   int ps_color_out_num;
+    int ps_depth_out_reg;
+    bool useFragCoord;
+    bool usePointCoord;
+diff --git a/src/gallium/drivers/mwv207/nir/mwv207_disasm.c b/src/gallium/drivers/mwv207/nir/mwv207_disasm.c
+index e7da16f..d102cc1 100644
+--- a/src/gallium/drivers/mwv207/nir/mwv207_disasm.c
++++ b/src/gallium/drivers/mwv207/nir/mwv207_disasm.c
+@@ -1246,7 +1246,10 @@ mwv207_disasm(uint32_t *dwords, int sizedwords)
+ {
+    uint32_t i;
+ 
+-   assert((sizedwords % 2) == 0);
++   /* FIX(jm9100-oss): F.3.2 —— 断言写的是 %2，但下面循环步长是 4，
++    * 非 4 对齐的 sizedwords（例如截断的 shader、或只 dump 前若干条时）
++    * 会在最后一次迭代越界读 3 个 dword。改成 %4 与循环一致。 */
++   assert((sizedwords % 4) == 0);
+ 
+    for (i = 0; i < sizedwords; i += 4)
+       convert_and_print_inst(&dwords[i], i / 4);
+@@ -1306,7 +1309,10 @@ mwv207_dump_shader_nir(const struct mwv207_shader *shader)
+       printf("  vs_pointsize_out_reg=%i\n", shader->vs_pointsize_out_reg);
+       printf("  vs_load_balancing=0x%08x\n", shader->vs_load_balancing);
+    } else {
+-      for (int idx = 0; idx < 8 && shader->ps_color_out_reg[idx] != 0; idx++)
++      /* FIX(jm9100-oss): F.3.3 —— 原来用 "!= 0" 当终止条件，但 0 是合法
++       * 寄存器号（r0）。只要 RT0 的颜色输出落在 r0，后面的 RT1..RT7 就都不会
++       * 打印。改用编译期记录的个数。 */
++      for (int idx = 0; idx < shader->ps_color_out_num; idx++)
+          printf("  ps_color_out_reg=%i\n", shader->ps_color_out_reg[idx]);
+ 
+       printf("  ps_depth_out_reg=%i\n", shader->ps_depth_out_reg);
+diff --git a/src/gallium/drivers/mwv207/nir/mwv207_emit.c b/src/gallium/drivers/mwv207/nir/mwv207_emit.c
+index 4deaec3..3f2ca2f 100644
+--- a/src/gallium/drivers/mwv207/nir/mwv207_emit.c
++++ b/src/gallium/drivers/mwv207/nir/mwv207_emit.c
+@@ -1304,8 +1304,10 @@ mwv207_emit_output(struct mwv207_compile *c,
+       switch (var->data.location) {
+       case FRAG_RESULT_COLOR:
+       case FRAG_RESULT_DATA0:
+-         if (var->data.index == 0)
++         if (var->data.index == 0) {
+             c->shader->ps_color_out_reg[0] = src.reg;
++            c->shader->ps_color_out_num = MAX2(c->shader->ps_color_out_num, 1);
++         }
+          break;
+ 
+       case FRAG_RESULT_DATA1:
+@@ -1316,6 +1318,9 @@ mwv207_emit_output(struct mwv207_compile *c,
+       case FRAG_RESULT_DATA6:
+       case FRAG_RESULT_DATA7:
+          c->shader->ps_color_out_reg[var->data.location - FRAG_RESULT_DATA0] = src.reg;
++         c->shader->ps_color_out_num =
++            MAX2(c->shader->ps_color_out_num,
++                 (int) (var->data.location - FRAG_RESULT_DATA0) + 1);
+          break;
+ 
+       case FRAG_RESULT_DEPTH:
+@@ -1664,7 +1669,7 @@ emit_intrinsic(struct mwv207_compile *c, nir_intrinsic_instr *intr)
+          .opcode = 0x32,
+          .type = get_alu_inst_type(nir_type_uint, intr->def.bit_size),
+          .dst = mwv207_dest(c, &intr->def, &dst_swiz),
+-         .src[0] = mwv207_const(c, &CONST_VAL(MWV207_IMMEDIATE_GLOBAL_MEMEORY_OFFSET, index), 1),
++         .src[0] = mwv207_const(c, &CONST_VAL(MWV207_IMMEDIATE_GLOBAL_MEMORY_OFFSET, index), 1),
+          .src[1] = mwv207_src(c, &intr->src[1]),
+       };
+ 
+@@ -1682,7 +1687,7 @@ emit_intrinsic(struct mwv207_compile *c, nir_intrinsic_instr *intr)
+          .dst = {
+             .write_mask = (1 << num_components) - 1,
+          },
+-         .src[0] = mwv207_const(c, &CONST_VAL(MWV207_IMMEDIATE_GLOBAL_MEMEORY_OFFSET, index), 1),
++         .src[0] = mwv207_const(c, &CONST_VAL(MWV207_IMMEDIATE_GLOBAL_MEMORY_OFFSET, index), 1),
+          .src[1] = mwv207_src(c, &intr->src[2]),
+          .src[2] = mwv207_src(c, &intr->src[0]),
+       };
+diff --git a/src/gallium/drivers/mwv207/video-codec/common/mwv207_video_cs.c b/src/gallium/drivers/mwv207/video-codec/common/mwv207_video_cs.c
+index dc0b9ea..6c24977 100644
+--- a/src/gallium/drivers/mwv207/video-codec/common/mwv207_video_cs.c
++++ b/src/gallium/drivers/mwv207/video-codec/common/mwv207_video_cs.c
+@@ -45,7 +45,7 @@ void
+ mwv207_video_cs_release(struct mwv207_video_cs *cs)
+ {
+    if (cs->cmd) {
+-      cs->ws->cmdbuf_destory(cs->ws, cs->cmd);
++      cs->ws->cmdbuf_destroy(cs->ws, cs->cmd);
+    }
+ }
+ 
+@@ -116,7 +116,10 @@ mwv207_video_cs_submit(struct mwv207_video_cs *cs,
+    cs->cmd->offset = (cs->cmdbuf_cur - cs->cmdbuf_start) * sizeof(uint32_t);
+ 
+    if (unlikely(cs->ws->debug & MWV207_DEBUG_VIDEO)) {
+-      int out_fence_fd;
++      /* FIX(jm9100-oss): 必须初始化为 -1。submit 失败时 cmdbuf_commit()
++       * 不再写 *out_fence_fd（见 mwv207_drm_cs.c 的 O4 修复），
++       * 未初始化的话下面 fence_create() 会拿一个栈上垃圾 fd 去 sync_wait()。 */
++      int out_fence_fd = -1;
+ 
+       cs->codec_time->codec_wait_hw_start_time = os_time_get();
+ 
+diff --git a/src/gallium/winsys/mwv207/drm/mwv207_drm_bo.c b/src/gallium/winsys/mwv207/drm/mwv207_drm_bo.c
+index 8666216..3300923 100644
+--- a/src/gallium/winsys/mwv207/drm/mwv207_drm_bo.c
++++ b/src/gallium/winsys/mwv207/drm/mwv207_drm_bo.c
+@@ -52,7 +52,7 @@ mwv207_clean_up_buffer_managers(struct mwv207_winsys *ws)
+ }
+ 
+ static void
+-mwv207_drm_bo_destory(struct mwv207_winsys *ws,
++mwv207_drm_bo_destroy(struct mwv207_winsys *ws,
+                       struct mwv207_bo *bo)
+ {
+    struct drm_gem_close args;
+@@ -81,7 +81,7 @@ mwv207_bo_destroy(void *winsys, struct pb_buffer_lean *buf)
+ {
+    struct mwv207_bo *bo = mwv207_bo(buf);
+ 
+-   mwv207_drm_bo_destory(bo->ws, bo);
++   mwv207_drm_bo_destroy(bo->ws, bo);
+ }
+ 
+ static void
+@@ -280,8 +280,15 @@ mwv207_drm_bo_map(struct mwv207_winsys *ws, struct mwv207_bo *bo)
+    args.in.handle = bo->handle;
+ 
+    err = drmCommandWriteRead(ws->fd, 0x2, &args, sizeof(args));
+-   if (err < 0)
+-      printf("%s ret : %d\n", __FUNCTION__, err);
++   /* FIX(jm9100-oss): W7 —— GEM_MMAP 失败必须返回 NULL。
++    * 原来只 printf 然后继续用 args.out.offset；该 ioctl 失败时这个字段
++    * 没有被内核写过（这里 memset 过所以是 0），等于拿 offset 0 去 mmap，
++    * 映射到的不是本 BO —— 后续读写会破坏相邻显存，而且完全没有报错。 */
++   if (err < 0) {
++      fprintf(stderr, "%s: DRM_IOCTL_MWV207_GEM_MMAP failed: %d (%s)\n",
++              __func__, err, strerror(-err));
++      return NULL;
++   }
+ 
+    ptr = os_mmap(0, bo->base.base.size, PROT_READ | PROT_WRITE, MAP_SHARED, ws->fd, args.out.offset);
+ 
+@@ -387,6 +394,13 @@ mwv207_drm_bo_from_handle(struct mwv207_winsys *ws,
+    }
+ 
+    bo = CALLOC_STRUCT(mwv207_bo);
++   /* FIX(jm9100-oss): W6 —— CALLOC 之后必须判空再解引用。
++    * 原代码直接 pb_cache_init_entry(&bo->u.real.cache_entry, ...)，
++    * 分配失败时立刻写空指针；而本函数（外部 handle 导入路径）的其它
++    * 出错分支都是 goto unlock 返回 bo（此时 bo 为 NULL），调用方已有
++    * NULL 处理，所以这里同样走 unlock 即可。 */
++   if (!bo)
++      goto unlock;
+    pb_cache_init_entry(&ws->bo_cache, &bo->u.real.cache_entry, &bo->base.base, 0);
+    bo->base.base.placement = size;
+    bo->base.base.usage = 0;
+@@ -528,7 +542,7 @@ mwv207_bo_slab_alloc(void *priv, unsigned heap,
+    return &slab->base;
+ 
+ fail_buffer:
+-   mwv207_drm_bo_destory(ws, slab->buffer);
++   mwv207_drm_bo_destroy(ws, slab->buffer);
+ fail:
+    FREE(slab);
+    return NULL;
+@@ -541,7 +555,7 @@ mwv207_bo_slab_free(void *priv, struct pb_slab *pslab)
+    struct mwv207_slab *slab = mwv207_slab(pslab);
+ 
+    FREE(slab->entries);
+-   mwv207_drm_bo_destory(ws, slab->buffer);;
++   mwv207_drm_bo_destroy(ws, slab->buffer);;
+    FREE(slab);
+ }
+ 
+diff --git a/src/gallium/winsys/mwv207/drm/mwv207_drm_cs.c b/src/gallium/winsys/mwv207/drm/mwv207_drm_cs.c
+index f2c1ad3..f7c633e 100644
+--- a/src/gallium/winsys/mwv207/drm/mwv207_drm_cs.c
++++ b/src/gallium/winsys/mwv207/drm/mwv207_drm_cs.c
+@@ -124,10 +124,21 @@ mwv207_drm_cmdbuf_create(struct mwv207_winsys *ws)
+ {
+    struct mwv207_cmd *cmd = CALLOC_STRUCT(mwv207_cmd);
+ 
++   /* FIX(jm9100-oss): W12 —— 四处分配都要判空，并把原来的
++    * assert(cmd->buf) 换成显式错误返回。release 构建会定义 NDEBUG，
++    * assert 被整个编译掉，届时分配失败会一路带到 GPU 提交阶段才炸，
++    * 现场完全看不出是内存不足。调用方（mwv207_create_cmd）已 assert
++    * 返回值非空，故这里返回 NULL 即可。 */
++   if (!cmd)
++      return NULL;
++
+    cmd->ws = ws;
+ 
+    cmd->buf = (uint8_t *)MALLOC(0x8000);
+-   assert(cmd->buf);
++   if (!cmd->buf) {
++      FREE(cmd);
++      return NULL;
++   }
+ 
+    cmd->size = 0x8000;
+    cmd->offset = 0;
+@@ -142,6 +153,15 @@ mwv207_drm_cmdbuf_create(struct mwv207_winsys *ws)
+    cmd->mwv207_bos = CALLOC(cmd->nr_max_bos, sizeof(struct mwv207_bo *));
+    cmd->bos = CALLOC(cmd->nr_max_bos, sizeof(struct drm_mwv207_bo_acc));
+ 
++   if (!cmd->relocs || !cmd->mwv207_bos || !cmd->bos) {
++      FREE(cmd->relocs);
++      FREE(cmd->mwv207_bos);
++      FREE(cmd->bos);
++      FREE(cmd->buf);
++      FREE(cmd);
++      return NULL;
++   }
++
+    cmd->mwv207_dats.size = 0;
+    cmd->mwv207_dats.nr_relocs = 0;
+    cmd->nr_dats = 0;
+@@ -150,7 +170,7 @@ mwv207_drm_cmdbuf_create(struct mwv207_winsys *ws)
+ }
+ 
+ static void
+-mwv207_drm_cmdbuf_destory(struct mwv207_winsys *ws, struct mwv207_cmd *cmd)
++mwv207_drm_cmdbuf_destroy(struct mwv207_winsys *ws, struct mwv207_cmd *cmd)
+ {
+    for (int i = 0; i <cmd->nr_bos; i++)
+       cmd->ws->bo_reference(cmd->ws, &cmd->mwv207_bos[i], NULL);
+@@ -218,7 +238,7 @@ mwv207_drm_cmdbuf_add_bo(struct mwv207_cmd *cmd, struct mwv207_bo *bo, uint32_t
+ static int
+ mwv207_drm_cmdbuf_add_dat(struct mwv207_cmd *cmd, struct cmd_dat *src_dat)
+ {
+-   struct cmd_dat_arrary *dest_dat = &cmd->mwv207_dats;
++   struct cmd_dat_array *dest_dat = &cmd->mwv207_dats;
+ 
+    if (cmd->nr_dats == 0) {
+       dest_dat->size = 0;
+@@ -350,7 +370,7 @@ mwv207_drm_cmdbuf_print(struct mwv207_winsys *ws, struct mwv207_cmd *cmd)
+    printf("================================================\n");
+ }
+ 
+-static void mwv207_print_dat(struct cmd_dat_arrary *dat)
++static void mwv207_print_dat(struct cmd_dat_array *dat)
+ {
+    for (int i = 0; i < dat->nr_relocs; ++i)
+       printf("reloc[%d] ids %d offset %d\n", i, dat->relocs[i].idx, dat->relocs[i].cmd_offset);
+@@ -425,16 +445,30 @@ mwv207_drm_cmdbuf_commit(struct mwv207_winsys *ws,
+ 
+    err = drmCommandWriteRead(ws->fd, 0x5, &submit, sizeof(submit));
+ 
+-   while (err == -EBUSY) {
++   /* FIX(jm9100-oss): O4 —— 原来的 -EBUSY 重试是没有上限的 busy-loop，
++    * 内核一旦因为队列满而长期返回 -EBUSY（例如上一个 job 卡住），这里就
++    * 永远转下去，用户态表现为 firefox/游戏直接冻住且无法 Ctrl-C。
++    * 另外每次重试都会让 KMD 重新走一遍 submit 路径；如果内核已经
++    * fd_install 过 fence_fd 才失败，重试会把它覆盖掉 → fd 泄漏。
++    * 改成有上限（约 2 秒）并直接放弃，同时把错误上报给调用方。 */
++   for (int retry = 0; err == -EBUSY && retry < 2000; retry++) {
+       usleep(1000);
+       err = drmCommandWriteRead(ws->fd, 0x5, &submit, sizeof(submit));
+-
+-      printf("retry submit\n");
+    }
+ 
+    if (err) {
+-      printf("%s ret : %d\n", __FUNCTION__, err);
++      fprintf(stderr, "%s: submit failed: %d (%s)\n",
++              __func__, err, strerror(-err));
+       mwv207_drm_context_print(cmd);
++      /* 失败时 KMD 可能已经 fd_install 过 out-fence（KMD 的
++       * mwv207_submit_commit() 是"先 fd_install 再 push job"，push 失败
++       * 时 fd 已经装好却没人接管）→ 这里主动关掉避免泄漏。
++       * 注意只能关"KMD 新装的那个"：如果本次带了 in-fence，
++       * submit.fence_fd 上原本就是调用者的输入 fd，关它会直接破坏
++       * 调用者的 fence。判据是"请求了 out-fence 且值不等于输入 fd"。 */
++      if (out_fence_fd && submit.fence_fd >= 0 &&
++          (in_fence_fd < 0 || submit.fence_fd != (unsigned) in_fence_fd))
++         close(submit.fence_fd);
+    }
+ 
+    if (!err && out_fence_fd)
+@@ -461,7 +495,7 @@ void mwv207_cs_init_function(struct mwv207_winsys *ws)
+    ws->fence_accumulate = mwv207_drm_fence_accumulate;
+ 
+    ws->cmdbuf_create     = mwv207_drm_cmdbuf_create;
+-   ws->cmdbuf_destory    = mwv207_drm_cmdbuf_destory;
++   ws->cmdbuf_destroy    = mwv207_drm_cmdbuf_destroy;
+    ws->cmdbuf_add_bo     = mwv207_drm_cmdbuf_add_bo;
+    ws->cmdbuf_add_dat    = mwv207_drm_cmdbuf_add_dat;
+    ws->cmdbuf_add_relloc = mwv207_drm_cmdbuf_add_relloc;
+diff --git a/src/gallium/winsys/mwv207/drm/mwv207_drm_cs.h b/src/gallium/winsys/mwv207/drm/mwv207_drm_cs.h
+index 5f74549..0fe2136 100644
+--- a/src/gallium/winsys/mwv207/drm/mwv207_drm_cs.h
++++ b/src/gallium/winsys/mwv207/drm/mwv207_drm_cs.h
+@@ -32,6 +32,6 @@
+ 
+ void mwv207_cs_init_function(struct mwv207_winsys *ws);
+ 
+-void mwv207_cs_destory(struct mwv207_winsys *ws);
++void mwv207_cs_destroy(struct mwv207_winsys *ws);
+ 
+ #endif
+diff --git a/src/gallium/winsys/mwv207/drm/mwv207_drm_winsys.c b/src/gallium/winsys/mwv207/drm/mwv207_drm_winsys.c
+index 347a7e3..fc5317f 100644
+--- a/src/gallium/winsys/mwv207/drm/mwv207_drm_winsys.c
++++ b/src/gallium/winsys/mwv207/drm/mwv207_drm_winsys.c
+@@ -137,6 +137,40 @@ mwv207_ws_init(struct mwv207_winsys *ws)
+    args.op = 0x0;
+    err = drmCommandWriteRead(ws->fd, 0x4, &args, sizeof(args));
+ 
++   /* FIX(jm9100-oss): 恢复 GBM/Wayland 平台。
++    * 我们这 6 个私有 ioctl（0x0..0x5 号 drmCommand）在 KMD 里声明成
++    * DRM_AUTH | DRM_RENDER_ALLOW（src/kernel-6.6/mwv207_drv.c），
++    * drm_ioctl_permit() 只放行"已认证的 card 客户端或 render 客户端"。
++    * X11/EGL 桌面走 DRI3 拿到的是 renderD128，天然放行；
++    * 而 GBM 平台（egl_dri2 的 platform_gbm）交给 winsys 的 fstat 是
++    * /dev/dri/card0，未经认证 → 这里恒返回 -EACCES，于是
++    * "mwv207: failed to create kernel context, fd=5 err=-13" 之后
++    * gbm 后端整体不可用。实测：renderD128 上 ioctl ret=0，card0 上 ret=-1 errno=13。
++    * 修法：碰到 -EACCES 就换成同一张卡对应的 render 节点重试（只换我们自己
++    * dup 出来的 ws->fd，不动调用者的 fd）。X11 路径 fd 本来就是 render
++    * 节点，不会进这个分支，行为不变。 */
++   if (err == -EACCES) {
++      char *rname = drmGetRenderDeviceNameFromFd(ws->fd);
++      if (rname) {
++         int rfd = open(rname, O_RDWR | O_CLOEXEC);
++         if (rfd >= 0) {
++            int nfd = fcntl(rfd, F_DUPFD_CLOEXEC, 3);
++            close(rfd);
++            if (nfd >= 0) {
++               close(ws->fd);
++               ws->fd = nfd;
++               memset(&args, 0, sizeof(args));
++               args.op = 0x0;
++               err = drmCommandWriteRead(ws->fd, 0x4, &args, sizeof(args));
++               if (err == 0)
++                  fprintf(stderr, "mwv207: 私有 ioctl 被拒(EACCES)，"
++                                  "已改用 render 节点 %s\n", rname);
++            }
++         }
++         free(rname);
++      }
++   }
++
+    if (err < 0) {
+       fprintf(stderr, "mwv207: failed to create kernel context, fd=%d err=%d\n",
+               ws->fd, err);
+diff --git a/src/gallium/winsys/mwv207/drm/mwv207_drm_winsys.h b/src/gallium/winsys/mwv207/drm/mwv207_drm_winsys.h
+index 4fda636..33884d3 100644
+--- a/src/gallium/winsys/mwv207/drm/mwv207_drm_winsys.h
++++ b/src/gallium/winsys/mwv207/drm/mwv207_drm_winsys.h
+@@ -150,7 +150,7 @@ struct cmd_dat {
+    int nr_relocs;
+ };
+ 
+-struct cmd_dat_arrary {
++struct cmd_dat_array {
+    uint8_t *data;
+    uint32_t size;
+    int max_size;
+@@ -177,7 +177,7 @@ struct mwv207_cmd {
+    int nr_bos;
+    int nr_max_bos;
+ 
+-   struct cmd_dat_arrary mwv207_dats;
++   struct cmd_dat_array mwv207_dats;
+    struct drm_mwv207_submit_cmd_dat dats;
+    int    nr_dats;
+ 
+@@ -250,7 +250,7 @@ struct mwv207_winsys {
+ 
+    struct mwv207_cmd *(*cmdbuf_create)(struct mwv207_winsys *ws);
+ 
+-   void (*cmdbuf_destory)(struct mwv207_winsys *ws, struct mwv207_cmd *cmd);
++   void (*cmdbuf_destroy)(struct mwv207_winsys *ws, struct mwv207_cmd *cmd);
+ 
+    int (*cmdbuf_add_bo)(struct mwv207_cmd *cmd, struct mwv207_bo *bo, uint32_t flags);
+ 
