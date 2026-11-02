@@ -949,6 +949,23 @@ wait_x_ok() {
 
 # ---- install ----
 
+# 本机 /boot 的 initramfs 里带着 mwv207.ko（还有 99-mwv207.rules 等），冷启动可能
+# 直接用 initramfs 里的那份 —— 不刷新 initramfs，暂存就等于白做。DKMS 装模块时
+# 同样会刷（厂商安装就把 jmgpu.ko 塞了进去，还留了个 .bak-before-jmgpu）。
+refresh_initramfs() {
+    if ! command -v update-initramfs >/dev/null 2>&1; then
+        warn "  没有 update-initramfs, 跳过 (initramfs 里可能仍是旧模块)"
+        return 0
+    fi
+    local img; img="$(rp "/boot/initrd.img-$KVER")"
+    if [ -f "$img" ] && [ ! -f "$img.orig-mwv207" ]; then
+        run cp -a "$img" "$img.orig-mwv207"
+        log "  已备份原 initramfs -> $img.orig-mwv207"
+    fi
+    log "  刷新 initramfs (内核 $KVER)"
+    run update-initramfs -u -k "$KVER"
+}
+
 # 只构建 + 放置模块 + depmod，**不动 lightdm、不换模块**。
 # 拆出来的原因同 umd_deploy_files：同时切换两层时 lightdm 只能停一次。
 kmd_place_module() {
@@ -962,6 +979,8 @@ kmd_place_module() {
     # 装到 updates（depmod 顺序里优先）
     run install -D -m 0644 "$src" "$dk"
     run depmod -a "$KVER"
+    # initramfs 里也有 mwv207.ko，必须一起刷新
+    refresh_initramfs
 
     local installed; installed=$(ko_srcver "$dk")
     log "  已放置: $dk (srcversion $installed)"
@@ -1109,6 +1128,7 @@ kmd_stage() {
     need_root "kmd stage"
     if [ "$DRY_RUN" = 1 ]; then
         log "[dry-run] 将执行: 构建 src/kernel-6.6 → 安装到 $(ko_dkms) → depmod -a $KVER"
+        log "[dry-run] → 备份并刷新 initramfs: update-initramfs -u -k $KVER (/boot/initrd.img 里也有 mwv207.ko)"
         log "[dry-run] 不卸载当前模块、不碰 lightdm; 重启后由 /updates 优先级生效。"
         return 0
     fi
@@ -1132,6 +1152,8 @@ kmd_do_rollback() {
     stop_display
     [ -f "$dk" ] && run rm -f "$dk"
     run depmod -a "$KVER"
+    # initramfs 里的副本也要拿掉, 否则下次冷启动还会用自建的
+    refresh_initramfs
     run modprobe -r mwv207
     run modprobe mwv207
     sleep 1
