@@ -20,6 +20,9 @@ ROOT = os.path.normpath(os.path.join(HERE, '..'))
 REPO = os.path.normpath(os.path.join(ROOT, '..'))
 
 SRC_DIRS = [
+    # 2026-11-02 起 UMD 适配代码已迁出 oh-mesa，独立存放在这里（os.walk 默认不跟
+    # 目录符号链接，所以必须显式登记，否则 basename 会 fallback 到别的树、误报行号越界）
+    os.path.join(REPO, 'src', 'mwv207-umd'),
     os.path.join(REPO, 'src', 'oh-mesa', 'User_source_code', 'mesa-24.1.2', 'src', 'gallium'),
     os.path.join(REPO, 'src', 'kernel'),
     # 社区 6.6 移植（我们的 K 修复已搬进这棵树）：文档里的 KMD 行号多以它为准
