@@ -16,9 +16,17 @@ Driver mapping: the UMD's 16-bit command register ID equals Address >> 2.
 import os, re, json, glob, sys
 from collections import defaultdict
 
-VENDOR_DIR = "/tmp/dpkg/gg/usr/src/mwv207-1.6.1-v25.u1"
-DRIVER_REGS = "/home/admin/jm9100-oss/docs/registers/command-registers.json"
-OUT_JSON = "/home/admin/jm9100-oss/docs/registers/register-db.json"
+# 路径按脚本位置推导，不再硬编码仓库绝对路径；厂商头解包目录可用环境变量覆盖。
+HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.normpath(os.path.join(HERE, '..'))            # docs/
+VENDOR_DIR = os.environ.get("MWV207_VENDOR_SRC",
+                            "/tmp/dpkg/gg/usr/src/mwv207-1.6.1-v25.u1")
+DRIVER_REGS = os.path.join(ROOT, 'registers', 'command-registers.json')
+OUT_JSON = os.path.join(ROOT, 'registers', 'register-db.json')
+if not os.path.isdir(VENDOR_DIR):
+    sys.exit("厂商头目录不存在：%s\n先把 ref/vendor-1.8.0/mwv207-dev_1.8.0.uos_arm64.deb "
+             "解到该路径（如 dpkg -x ... /tmp/dpkg/gg），或用 MWV207_VENDOR_SRC=<dir> "
+             "指定；本次未生成 register-db.json。" % VENDOR_DIR)
 
 define_re = re.compile(r"^\s*#define\s+(MWV207REG_[A-Za-z0-9_]+)\s+(.*?)\s*$")
 reg_props = {"Address", "MSB", "LSB", "BLK", "Count", "FieldMask", "ReadMask",

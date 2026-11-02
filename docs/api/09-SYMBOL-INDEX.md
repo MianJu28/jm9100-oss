@@ -2,7 +2,7 @@
 
 本文件由 `docs/tools/generate_symbol_index.py` 自动生成，便于按符号名检索。
 
-- 函数定义：**666** 个
+- 函数定义：**668** 个
 - 结构体/联合体/枚举定义：**194** 个
 - 函数宏：**182** 个
 
@@ -22,7 +22,7 @@
 
 | 行 | 返回类型 | 函数 | 签名 |
 |---:|---|---|---|
-| 171 | `static inline struct mwv207_context *` | **mwv207_context** | `mwv207_context(struct pipe_context *context)` |
+| 199 | `static inline struct mwv207_context *` | **mwv207_context** | `mwv207_context(struct pipe_context *context)` |
 
 ### `drivers/mwv207/include/mwv207_resource.h`  (1 个)
 
@@ -70,30 +70,30 @@
 
 | 行 | 返回类型 | 函数 | 签名 |
 |---:|---|---|---|
-| 37 | `static bool` | **mwv207_can_blit** | `mwv207_can_blit(const struct pipe_blit_info *info)` |
-| 90 | `static void` | **mwv207_set_image_task** | `mwv207_set_image_task(struct mwv207_context *ctx, uint32_t **commandBuffer, struct mwv207_task_info info)` |
-| 157 | `static void` | **mwv207_set_buffer_task** | `mwv207_set_buffer_task(struct mwv207_context *ctx, uint32_t **commandBuffer, struct mwv207_region_info info)` |
-| 196 | `enum pipe_error` | **mwv207_fill_buffer** | `mwv207_fill_buffer(struct mwv207_context *ctx, struct mwv207_bo *mem, uint32_t offset, uint32_t size, uint32_t data)` |
-| 307 | `enum pipe_error` | **mwv207_copy_buffer** | `mwv207_copy_buffer(struct mwv207_context *ctx, struct mwv207_region_info info)` |
-| 330 | `enum pipe_error` | **mwv207_update_buffer** | `mwv207_update_buffer(struct mwv207_context *ctx, struct mwv207_region_info info)` |
-| 353 | `static enum pipe_error` | **mwv207_clear_image** | `mwv207_clear_image(struct mwv207_context *ctx, struct mwv207_clear_info info)` |
-| 447 | `static enum pipe_error` | **mwv207_copy_layer** | `mwv207_copy_layer(struct mwv207_context *ctx, struct mwv207_region_info info)` |
-| 606 | `static enum pipe_error` | **mwv207_mipmap** | `mwv207_mipmap(struct mwv207_context *ctx, struct mwv207_region_info info)` |
-| 698 | `enum pipe_error` | **mwv207_copy_image** | `mwv207_copy_image(struct mwv207_context *ctx, struct mwv207_region_info info)` |
-| 710 | `static enum pipe_error` | **mwv207_blit_self_image** | `mwv207_blit_self_image(struct mwv207_context *ctx, struct mwv207_resource *res)` |
-| 751 | `static uint32_t` | **mwv207_get_filler_bpp** | `mwv207_get_filler_bpp(enum pipe_format format)` |
-| 771 | `static void` | **mwv207_till_fill** | `mwv207_till_fill(struct mwv207_context *ctx, struct mwv207_resource *src)` |
-| 839 | `void` | **mwv207_disable_tile** | `mwv207_disable_tile(struct mwv207_context *ctx, struct mwv207_resource *res)` |
-| 854 | `static void` | **mwv207_fix_box** | `mwv207_fix_box(struct pipe_box *box)` |
-| 863 | `static bool` | **mwv207_blit_image** | `mwv207_blit_image(struct mwv207_context *ctx, const struct pipe_blit_info *info)` |
-| 914 | `static bool` | **mwv207_try_blit128_or_blit96_copy_region** | `mwv207_try_blit128_or_blit96_copy_region(struct pipe_context *ctx, const struct pipe_blit_info *blit)` |
-| 932 | `static void` | **mwv207_blit** | `mwv207_blit(struct pipe_context *pctx, const struct pipe_blit_info *info)` |
-| 978 | `static void` | **mwv207_clear_render_target** | `mwv207_clear_render_target(struct pipe_context *pctx, struct pipe_surface *dst, const union pipe_color_union *color, unsigned dstx, unsigned dsty, unsigned width, unsigned height, bool render_condition_enabled)` |
-| 1015 | `static void` | **mwv207_clear_depth_stencil** | `mwv207_clear_depth_stencil(struct pipe_context *pctx, struct pipe_surface *dst, unsigned clear_flags, double depth, unsigned stencil, unsigned dstx, unsigned dsty, unsigned width, unsigned height, bool render_condition_enabled)` |
-| 1047 | `static void` | **mwv207_clear** | `mwv207_clear(struct pipe_context *pctx, unsigned buffers, const struct pipe_scissor_state *scissor_state, const union pipe_color_union *pcolor, double depth, unsigned stencil)` |
-| 1096 | `static bool` | **mwv207_gen_mipmap** | `mwv207_gen_mipmap(struct pipe_context *pctx, struct pipe_resource *resource, enum pipe_format format, uint base_level, uint last_level, uint first_layer, uint last_layer)` |
-| 1143 | `void` | **mwv207_blit_resource_box** | `mwv207_blit_resource_box(struct pipe_context *pctx, struct pipe_resource *dst, struct pipe_resource *src, int level, const struct pipe_box *box)` |
-| 1164 | `static void` | **mwv207_resource_copy_region** | `mwv207_resource_copy_region(struct pipe_context *pctx, struct pipe_resource *pdst, unsigned dst_level, unsigned dstx, unsigned dsty, unsigned dstz, struct pipe_resource *psrc, unsigned src_level, const struct pipe_box *src_box)` |
+| 38 | `static bool` | **mwv207_can_blit** | `mwv207_can_blit(const struct pipe_blit_info *info)` |
+| 91 | `static void` | **mwv207_set_image_task** | `mwv207_set_image_task(struct mwv207_context *ctx, uint32_t **commandBuffer, struct mwv207_task_info info)` |
+| 158 | `static void` | **mwv207_set_buffer_task** | `mwv207_set_buffer_task(struct mwv207_context *ctx, uint32_t **commandBuffer, struct mwv207_region_info info)` |
+| 197 | `enum pipe_error` | **mwv207_fill_buffer** | `mwv207_fill_buffer(struct mwv207_context *ctx, struct mwv207_bo *mem, uint32_t offset, uint32_t size, uint32_t data)` |
+| 308 | `enum pipe_error` | **mwv207_copy_buffer** | `mwv207_copy_buffer(struct mwv207_context *ctx, struct mwv207_region_info info)` |
+| 331 | `enum pipe_error` | **mwv207_update_buffer** | `mwv207_update_buffer(struct mwv207_context *ctx, struct mwv207_region_info info)` |
+| 354 | `static enum pipe_error` | **mwv207_clear_image** | `mwv207_clear_image(struct mwv207_context *ctx, struct mwv207_clear_info info)` |
+| 448 | `static enum pipe_error` | **mwv207_copy_layer** | `mwv207_copy_layer(struct mwv207_context *ctx, struct mwv207_region_info info)` |
+| 607 | `static enum pipe_error` | **mwv207_mipmap** | `mwv207_mipmap(struct mwv207_context *ctx, struct mwv207_region_info info)` |
+| 699 | `enum pipe_error` | **mwv207_copy_image** | `mwv207_copy_image(struct mwv207_context *ctx, struct mwv207_region_info info)` |
+| 711 | `static enum pipe_error` | **mwv207_blit_self_image** | `mwv207_blit_self_image(struct mwv207_context *ctx, struct mwv207_resource *res)` |
+| 752 | `static uint32_t` | **mwv207_get_filler_bpp** | `mwv207_get_filler_bpp(enum pipe_format format)` |
+| 772 | `static void` | **mwv207_till_fill** | `mwv207_till_fill(struct mwv207_context *ctx, struct mwv207_resource *src)` |
+| 840 | `void` | **mwv207_disable_tile** | `mwv207_disable_tile(struct mwv207_context *ctx, struct mwv207_resource *res)` |
+| 855 | `static void` | **mwv207_fix_box** | `mwv207_fix_box(struct pipe_box *box)` |
+| 864 | `static bool` | **mwv207_blit_image** | `mwv207_blit_image(struct mwv207_context *ctx, const struct pipe_blit_info *info)` |
+| 915 | `static bool` | **mwv207_try_blit128_or_blit96_copy_region** | `mwv207_try_blit128_or_blit96_copy_region(struct pipe_context *ctx, const struct pipe_blit_info *blit)` |
+| 933 | `static void` | **mwv207_blit** | `mwv207_blit(struct pipe_context *pctx, const struct pipe_blit_info *info)` |
+| 979 | `static void` | **mwv207_clear_render_target** | `mwv207_clear_render_target(struct pipe_context *pctx, struct pipe_surface *dst, const union pipe_color_union *color, unsigned dstx, unsigned dsty, unsigned width, unsigned height, bool render_condition_enabled)` |
+| 1021 | `static void` | **mwv207_clear_depth_stencil** | `mwv207_clear_depth_stencil(struct pipe_context *pctx, struct pipe_surface *dst, unsigned clear_flags, double depth, unsigned stencil, unsigned dstx, unsigned dsty, unsigned width, unsigned height, bool render_condition_enabled)` |
+| 1057 | `static void` | **mwv207_clear** | `mwv207_clear(struct pipe_context *pctx, unsigned buffers, const struct pipe_scissor_state *scissor_state, const union pipe_color_union *pcolor, double depth, unsigned stencil)` |
+| 1106 | `static bool` | **mwv207_gen_mipmap** | `mwv207_gen_mipmap(struct pipe_context *pctx, struct pipe_resource *resource, enum pipe_format format, uint base_level, uint last_level, uint first_layer, uint last_layer)` |
+| 1153 | `void` | **mwv207_blit_resource_box** | `mwv207_blit_resource_box(struct pipe_context *pctx, struct pipe_resource *dst, struct pipe_resource *src, int level, const struct pipe_box *box)` |
+| 1174 | `static void` | **mwv207_resource_copy_region** | `mwv207_resource_copy_region(struct pipe_context *pctx, struct pipe_resource *pdst, unsigned dst_level, unsigned dstx, unsigned dsty, unsigned dstz, struct pipe_resource *psrc, unsigned src_level, const struct pipe_box *src_box)` |
 
 ### `drivers/mwv207/mwv207_cmd.c`  (14 个)
 
@@ -155,11 +155,11 @@
 | 734 | `static void` | **mwv207_config_blendColor** | `mwv207_config_blendColor(struct mwv207_context *ctx)` |
 | 785 | `static void` | **mwv207_config_stream_out** | `mwv207_config_stream_out(struct mwv207_context *ctx, bool suspend)` |
 | 881 | `static void` | **mwv207_config_draw** | `mwv207_config_draw(struct mwv207_context *ctx, const struct pipe_draw_info *dinfo, unsigned drawid_offset, const struct pipe_draw_indirect_info *dindirect, const struct pipe_draw_start_count_bias *draws, unsigned num_draws)` |
-| 941 | `static void` | **mwv207_config_other** | `mwv207_config_other(struct mwv207_context *ctx)` |
-| 1043 | `static bool` | **mwv207_update_shader** | `mwv207_update_shader(struct mwv207_context *ctx)` |
-| 1115 | `static void` | **mwv207_config_dual_blend** | `mwv207_config_dual_blend(struct pipe_context *pctx, const struct pipe_draw_info *dinfo)` |
-| 1174 | `static void` | **mwv207_config_render_piepline** | `mwv207_config_render_piepline(struct mwv207_context *ctx, const struct pipe_draw_info *dinfo, unsigned drawid_offset, const struct pipe_draw_indirect_info *dindirect, const struct pipe_draw_start_count_bias *draws, unsigned num_draws)` |
-| 1261 | `void` | **mwv207_draw_vbo** | `mwv207_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *dinfo, unsigned drawid_offset, const struct pipe_draw_indirect_info *indirect, const struct pipe_draw_start_count_bias *draws, unsigned num_draws)` |
+| 944 | `static void` | **mwv207_config_other** | `mwv207_config_other(struct mwv207_context *ctx)` |
+| 1063 | `static bool` | **mwv207_update_shader** | `mwv207_update_shader(struct mwv207_context *ctx)` |
+| 1179 | `static void` | **mwv207_config_dual_blend** | `mwv207_config_dual_blend(struct pipe_context *pctx, const struct pipe_draw_info *dinfo)` |
+| 1257 | `static void` | **mwv207_config_render_piepline** | `mwv207_config_render_piepline(struct mwv207_context *ctx, const struct pipe_draw_info *dinfo, unsigned drawid_offset, const struct pipe_draw_indirect_info *dindirect, const struct pipe_draw_start_count_bias *draws, unsigned num_draws)` |
+| 1344 | `void` | **mwv207_draw_vbo** | `mwv207_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *dinfo, unsigned drawid_offset, const struct pipe_draw_indirect_info *indirect, const struct pipe_draw_start_count_bias *draws, unsigned num_draws)` |
 
 ### `drivers/mwv207/mwv207_format.c`  (13 个)
 
@@ -179,7 +179,7 @@
 | 921 | `bool` | **mwv207_get_sample_info** | `mwv207_get_sample_info(int num_samples, uint8_t *xscale_out, uint8_t *yscale_out, uint8_t *nr_samples_out)` |
 | 956 | `uint32_t` | **mwv207_get_blit_msaa_mode** | `mwv207_get_blit_msaa_mode(uint8_t x_scale, uint8_t y_scale)` |
 
-### `drivers/mwv207/mwv207_query.c`  (10 个)
+### `drivers/mwv207/mwv207_query.c`  (12 个)
 
 | 行 | 返回类型 | 函数 | 签名 |
 |---:|---|---|---|
@@ -188,11 +188,13 @@
 | 72 | `static bool` | **mwv207_begin_query** | `mwv207_begin_query(struct pipe_context *pctx, struct pipe_query *q)` |
 | 177 | `static bool` | **mwv207_end_query** | `mwv207_end_query(struct pipe_context *pctx, struct pipe_query *q)` |
 | 236 | `static bool` | **mwv207_get_query_result** | `mwv207_get_query_result(struct pipe_context *pctx, struct pipe_query *q, bool wait, union pipe_query_result *result)` |
-| 292 | `static void` | **mwv207_suspend_queries** | `mwv207_suspend_queries(struct pipe_context *pctx)` |
-| 301 | `static void` | **mwv207_resume_queries** | `mwv207_resume_queries(struct pipe_context *pctx)` |
-| 310 | `static void` | **mwv207_set_active_query_state** | `mwv207_set_active_query_state(struct pipe_context *pctx, bool enable)` |
-| 325 | `void` | **mwv207_context_query_init** | `mwv207_context_query_init(struct pipe_context *pctx)` |
-| 343 | `void` | **mwv207_context_query_destory** | `mwv207_context_query_destory(struct pipe_context *pctx)` |
+| 332 | `static void` | **mwv207_render_condition** | `mwv207_render_condition(struct pipe_context *pctx, struct pipe_query *query, bool condition, enum pipe_render_cond_flag mode)` |
+| 347 | `bool` | **mwv207_check_render_cond** | `mwv207_check_render_cond(struct pipe_context *pctx)` |
+| 372 | `static void` | **mwv207_suspend_queries** | `mwv207_suspend_queries(struct pipe_context *pctx)` |
+| 381 | `static void` | **mwv207_resume_queries** | `mwv207_resume_queries(struct pipe_context *pctx)` |
+| 390 | `static void` | **mwv207_set_active_query_state** | `mwv207_set_active_query_state(struct pipe_context *pctx, bool enable)` |
+| 405 | `void` | **mwv207_context_query_init** | `mwv207_context_query_init(struct pipe_context *pctx)` |
+| 424 | `void` | **mwv207_context_query_destroy** | `mwv207_context_query_destroy(struct pipe_context *pctx)` |
 
 ### `drivers/mwv207/mwv207_resource.c`  (18 个)
 
@@ -221,28 +223,28 @@
 
 | 行 | 返回类型 | 函数 | 签名 |
 |---:|---|---|---|
-| 95 | `static uint32_t` | **mwv207_log2** | `mwv207_log2(uint32_t val)` |
-| 130 | `static int32_t` | **mwv207_float_to_fixed** | `mwv207_float_to_fixed(float x, int8_t trunc_bits, int8_t frac_bits)` |
-| 162 | `static void` | **mwv207_print_samper** | `mwv207_print_samper(struct mwv207_sampler_view *sampler_view, uint32_t start_slot)` |
-| 193 | `static bool` | **mwv207_is_128bit_sampler** | `mwv207_is_128bit_sampler(struct mwv207_resource *res, struct mwv207_sampler_view *sampler_view)` |
-| 205 | `enum pipe_format` | **mwv207_transfer_128bit** | `mwv207_transfer_128bit(enum pipe_format input)` |
-| 218 | `void` | **mwv207_split_128bit** | `mwv207_split_128bit(struct pipe_context *pctx, struct pipe_resource *pres, enum pipe_format format)` |
-| 285 | `void` | **mwv207_merge_128bit** | `mwv207_merge_128bit(struct pipe_context *pctx, struct pipe_resource *pres)` |
-| 350 | `static uint32_t` | **mwv207_transfer_border** | `mwv207_transfer_border(uint32_t swizzle, uint32_t current)` |
-| 367 | `static union pipe_color_union` | **mwv207_clamp_color** | `mwv207_clamp_color(uint32_t format, struct mwv207_sampler *sampler)` |
-| 420 | `static void` | **mwv207_reconfig_texture** | `mwv207_reconfig_texture(struct mwv207_sampler_view *sampler_view, struct mwv207_sampler *sampler, bool use_ba)` |
-| 473 | `static uint32_t` | **mwv207_get_stage_offset** | `mwv207_get_stage_offset(enum pipe_shader_type stage)` |
-| 494 | `void` | **mwv207_config_sampler** | `mwv207_config_sampler(struct mwv207_context *ctx, enum pipe_shader_type stage)` |
-| 647 | `static uint32_t` | **mwv207_get_texture_swizzle** | `mwv207_get_texture_swizzle(uint32_t swizzle, uint32_t current_set, const uint32_t *texture_swizzles)` |
-| 673 | `static enum pipe_error` | **mwv207_get_texture_info** | `mwv207_get_texture_info(struct mwv207_context *ctx, struct mwv207_sampler_view *sampler_view)` |
-| 857 | `static void *` | **mwv207_create_sampler_state** | `mwv207_create_sampler_state(struct pipe_context *pctx, const struct pipe_sampler_state *state)` |
-| 914 | `static void` | **mwv207_bind_sampler_states** | `mwv207_bind_sampler_states(struct pipe_context *pctx, enum pipe_shader_type stage, unsigned start_slot, unsigned num_samplers, void **samplers)` |
-| 938 | `static void` | **mwv207_delete_sampler_state** | `mwv207_delete_sampler_state(struct pipe_context *pctx, void *sampler_state)` |
-| 945 | `static struct pipe_sampler_view *` | **mwv207_create_sampler_view** | `mwv207_create_sampler_view(struct pipe_context *pctx, struct pipe_resource *pres, const struct pipe_sampler_view *state)` |
-| 991 | `static void` | **mwv207_sampler_view_destroy** | `mwv207_sampler_view_destroy(struct pipe_context *pctx, struct pipe_sampler_view *pview)` |
-| 1002 | `static void` | **mwv207_set_sampler_views** | `mwv207_set_sampler_views(struct pipe_context *pctx, enum pipe_shader_type stage, unsigned start_slot, unsigned num_views, unsigned unbind_num, bool take_ownership, struct pipe_sampler_view **views)` |
-| 1050 | `void *` | **mwv207_get_sampler_state** | `mwv207_get_sampler_state(struct mwv207_context *ctx)` |
-| 1062 | `void` | **mwv207_context_sampler_init** | `mwv207_context_sampler_init(struct pipe_context *pctx)` |
+| 97 | `static uint32_t` | **mwv207_log2** | `mwv207_log2(uint32_t val)` |
+| 132 | `static int32_t` | **mwv207_float_to_fixed** | `mwv207_float_to_fixed(float x, int8_t trunc_bits, int8_t frac_bits)` |
+| 164 | `static void` | **mwv207_print_samper** | `mwv207_print_samper(struct mwv207_sampler_view *sampler_view, uint32_t start_slot)` |
+| 195 | `static bool` | **mwv207_is_128bit_sampler** | `mwv207_is_128bit_sampler(struct mwv207_resource *res, struct mwv207_sampler_view *sampler_view)` |
+| 207 | `enum pipe_format` | **mwv207_transfer_128bit** | `mwv207_transfer_128bit(enum pipe_format input)` |
+| 220 | `void` | **mwv207_split_128bit** | `mwv207_split_128bit(struct pipe_context *pctx, struct pipe_resource *pres, enum pipe_format format)` |
+| 327 | `void` | **mwv207_merge_128bit** | `mwv207_merge_128bit(struct pipe_context *pctx, struct pipe_resource *pres)` |
+| 419 | `static uint32_t` | **mwv207_transfer_border** | `mwv207_transfer_border(uint32_t swizzle, uint32_t current)` |
+| 436 | `static union pipe_color_union` | **mwv207_clamp_color** | `mwv207_clamp_color(uint32_t format, struct mwv207_sampler *sampler)` |
+| 489 | `static void` | **mwv207_reconfig_texture** | `mwv207_reconfig_texture(struct mwv207_sampler_view *sampler_view, struct mwv207_sampler *sampler, bool use_ba)` |
+| 542 | `static uint32_t` | **mwv207_get_stage_offset** | `mwv207_get_stage_offset(enum pipe_shader_type stage)` |
+| 563 | `void` | **mwv207_config_sampler** | `mwv207_config_sampler(struct mwv207_context *ctx, enum pipe_shader_type stage)` |
+| 716 | `static uint32_t` | **mwv207_get_texture_swizzle** | `mwv207_get_texture_swizzle(uint32_t swizzle, uint32_t current_set, const uint32_t *texture_swizzles)` |
+| 742 | `static enum pipe_error` | **mwv207_get_texture_info** | `mwv207_get_texture_info(struct mwv207_context *ctx, struct mwv207_sampler_view *sampler_view)` |
+| 926 | `static void *` | **mwv207_create_sampler_state** | `mwv207_create_sampler_state(struct pipe_context *pctx, const struct pipe_sampler_state *state)` |
+| 983 | `static void` | **mwv207_bind_sampler_states** | `mwv207_bind_sampler_states(struct pipe_context *pctx, enum pipe_shader_type stage, unsigned start_slot, unsigned num_samplers, void **samplers)` |
+| 1008 | `static void` | **mwv207_delete_sampler_state** | `mwv207_delete_sampler_state(struct pipe_context *pctx, void *sampler_state)` |
+| 1015 | `static struct pipe_sampler_view *` | **mwv207_create_sampler_view** | `mwv207_create_sampler_view(struct pipe_context *pctx, struct pipe_resource *pres, const struct pipe_sampler_view *state)` |
+| 1061 | `static void` | **mwv207_sampler_view_destroy** | `mwv207_sampler_view_destroy(struct pipe_context *pctx, struct pipe_sampler_view *pview)` |
+| 1072 | `static void` | **mwv207_set_sampler_views** | `mwv207_set_sampler_views(struct pipe_context *pctx, enum pipe_shader_type stage, unsigned start_slot, unsigned num_views, unsigned unbind_num, bool take_ownership, struct pipe_sampler_view **views)` |
+| 1140 | `void *` | **mwv207_get_sampler_state** | `mwv207_get_sampler_state(struct mwv207_context *ctx)` |
+| 1152 | `void` | **mwv207_context_sampler_init** | `mwv207_context_sampler_init(struct pipe_context *pctx)` |
 
 ### `drivers/mwv207/mwv207_screen.c`  (13 个)
 
@@ -252,15 +254,15 @@
 | 48 | `static const char *` | **mwv207_get_device_vendor** | `mwv207_get_device_vendor(struct pipe_screen *pscreen)` |
 | 54 | `static const char *` | **mwv207_get_name** | `mwv207_get_name(struct pipe_screen *pscreen)` |
 | 60 | `static int` | **mwv207_get_param** | `mwv207_get_param(struct pipe_screen *pscreen, enum pipe_cap param)` |
-| 334 | `static float` | **mwv207_get_paramf** | `mwv207_get_paramf(struct pipe_screen *pscreen, enum pipe_capf param)` |
-| 366 | `static int` | **mwv207_get_shader_param** | `mwv207_get_shader_param(struct pipe_screen *pscreen, enum pipe_shader_type shader, enum pipe_shader_cap param)` |
-| 473 | `static int` | **mwv207_get_compute_param** | `mwv207_get_compute_param(struct pipe_screen *pscreen, enum pipe_shader_ir ir_type, enum pipe_compute_cap param, void *ret)` |
-| 522 | `static bool` | **mwv207_sample_count_flags** | `mwv207_sample_count_flags(uint32_t sample_count)` |
-| 539 | `static bool` | **mwv207_is_format_supported** | `mwv207_is_format_supported(struct pipe_screen *pscreen, enum pipe_format format, enum pipe_texture_target target, unsigned sample_count, unsigned storage_sample_count, unsigned bind)` |
-| 595 | `static uint64_t` | **mwv207_get_timestamp** | `mwv207_get_timestamp(struct pipe_screen *screen)` |
-| 610 | `static bool` | **mwv207_fence_finish** | `mwv207_fence_finish(struct pipe_screen *screen, struct pipe_context *ctx, struct pipe_fence_handle *fence, uint64_t timeout)` |
-| 629 | `static void` | **mwv207_destroy_screen** | `mwv207_destroy_screen(struct pipe_screen *pscreen)` |
-| 642 | `struct pipe_screen *` | **mwv207_create_screen** | `mwv207_create_screen(struct mwv207_winsys *winsys)` |
+| 376 | `static float` | **mwv207_get_paramf** | `mwv207_get_paramf(struct pipe_screen *pscreen, enum pipe_capf param)` |
+| 408 | `static int` | **mwv207_get_shader_param** | `mwv207_get_shader_param(struct pipe_screen *pscreen, enum pipe_shader_type shader, enum pipe_shader_cap param)` |
+| 515 | `static int` | **mwv207_get_compute_param** | `mwv207_get_compute_param(struct pipe_screen *pscreen, enum pipe_shader_ir ir_type, enum pipe_compute_cap param, void *ret)` |
+| 564 | `static bool` | **mwv207_sample_count_flags** | `mwv207_sample_count_flags(uint32_t sample_count)` |
+| 581 | `static bool` | **mwv207_is_format_supported** | `mwv207_is_format_supported(struct pipe_screen *pscreen, enum pipe_format format, enum pipe_texture_target target, unsigned sample_count, unsigned storage_sample_count, unsigned bind)` |
+| 637 | `static uint64_t` | **mwv207_get_timestamp** | `mwv207_get_timestamp(struct pipe_screen *screen)` |
+| 652 | `static bool` | **mwv207_fence_finish** | `mwv207_fence_finish(struct pipe_screen *screen, struct pipe_context *ctx, struct pipe_fence_handle *fence, uint64_t timeout)` |
+| 671 | `static void` | **mwv207_destroy_screen** | `mwv207_destroy_screen(struct pipe_screen *pscreen)` |
+| 684 | `struct pipe_screen *` | **mwv207_create_screen** | `mwv207_create_screen(struct mwv207_winsys *winsys)` |
 
 ### `drivers/mwv207/mwv207_shader.c`  (25 个)
 
@@ -277,20 +279,20 @@
 | 856 | `const void *` | **mwv207_get_compiler_options** | `mwv207_get_compiler_options(struct pipe_screen *screen, enum pipe_shader_ir ir, enum pipe_shader_type shader)` |
 | 869 | `static struct nir_shader *` | **mwv207_tgsi_to_nir** | `mwv207_tgsi_to_nir(struct pipe_screen *pscreen, const struct tgsi_token *tokens)` |
 | 883 | `static struct mwv207_shader *` | **mwv207_create_shader** | `mwv207_create_shader(struct mwv207_shader_state *state, struct mwv207_shader_key key)` |
-| 920 | `void static` | **mwv207_destroy_shader** | `mwv207_destroy_shader(struct mwv207_shader *shader)` |
-| 934 | `bool` | **mwv207_set_current_shader** | `mwv207_set_current_shader(struct mwv207_context *ctx, struct mwv207_shader_state *state)` |
-| 1019 | `static void *` | **mwv207_create_shader_state** | `mwv207_create_shader_state(struct pipe_context *pctx, const struct pipe_shader_state *pshader)` |
-| 1041 | `static void` | **mwv207_bind_vs_state** | `mwv207_bind_vs_state(struct pipe_context *pctx, void *state)` |
-| 1051 | `static void` | **mwv207_bind_fs_state** | `mwv207_bind_fs_state(struct pipe_context *pctx, void *state)` |
-| 1061 | `static void` | **mwv207_bind_gs_state** | `mwv207_bind_gs_state(struct pipe_context *pctx, void *state)` |
-| 1071 | `static void` | **mwv207_bind_tcs_state** | `mwv207_bind_tcs_state(struct pipe_context *pctx, void *state)` |
-| 1081 | `static void` | **mwv207_bind_tes_state** | `mwv207_bind_tes_state(struct pipe_context *pctx, void *state)` |
-| 1091 | `static void` | **mwv207_delete_shader_state** | `mwv207_delete_shader_state(struct pipe_context *pctx, void *pshader)` |
-| 1113 | `static void *` | **mwv207_create_cs_state** | `mwv207_create_cs_state(struct pipe_context *pctx, const struct pipe_compute_state *pshader)` |
-| 1141 | `static void` | **mwv207_get_compute_state_info** | `mwv207_get_compute_state_info(struct pipe_context *ctx, void *state, struct pipe_compute_state_object_info *info)` |
-| 1152 | `static uint32_t` | **mwv207_get_compute_state_subgroup_size** | `mwv207_get_compute_state_subgroup_size(struct pipe_context *ctx, void *state, const uint32_t block[3])` |
-| 1160 | `static void` | **mwv207_bind_cs_state** | `mwv207_bind_cs_state(struct pipe_context *pctx, void *state)` |
-| 1170 | `void` | **mwv207_context_shader_init** | `mwv207_context_shader_init(struct pipe_context *pctx)` |
+| 922 | `void static` | **mwv207_destroy_shader** | `mwv207_destroy_shader(struct mwv207_shader *shader)` |
+| 936 | `bool` | **mwv207_set_current_shader** | `mwv207_set_current_shader(struct mwv207_context *ctx, struct mwv207_shader_state *state)` |
+| 1032 | `static void *` | **mwv207_create_shader_state** | `mwv207_create_shader_state(struct pipe_context *pctx, const struct pipe_shader_state *pshader)` |
+| 1054 | `static void` | **mwv207_bind_vs_state** | `mwv207_bind_vs_state(struct pipe_context *pctx, void *state)` |
+| 1064 | `static void` | **mwv207_bind_fs_state** | `mwv207_bind_fs_state(struct pipe_context *pctx, void *state)` |
+| 1074 | `static void` | **mwv207_bind_gs_state** | `mwv207_bind_gs_state(struct pipe_context *pctx, void *state)` |
+| 1084 | `static void` | **mwv207_bind_tcs_state** | `mwv207_bind_tcs_state(struct pipe_context *pctx, void *state)` |
+| 1094 | `static void` | **mwv207_bind_tes_state** | `mwv207_bind_tes_state(struct pipe_context *pctx, void *state)` |
+| 1104 | `static void` | **mwv207_delete_shader_state** | `mwv207_delete_shader_state(struct pipe_context *pctx, void *pshader)` |
+| 1126 | `static void *` | **mwv207_create_cs_state** | `mwv207_create_cs_state(struct pipe_context *pctx, const struct pipe_compute_state *pshader)` |
+| 1154 | `static void` | **mwv207_get_compute_state_info** | `mwv207_get_compute_state_info(struct pipe_context *ctx, void *state, struct pipe_compute_state_object_info *info)` |
+| 1165 | `static uint32_t` | **mwv207_get_compute_state_subgroup_size** | `mwv207_get_compute_state_subgroup_size(struct pipe_context *ctx, void *state, const uint32_t block[3])` |
+| 1173 | `static void` | **mwv207_bind_cs_state** | `mwv207_bind_cs_state(struct pipe_context *pctx, void *state)` |
+| 1183 | `void` | **mwv207_context_shader_init** | `mwv207_context_shader_init(struct pipe_context *pctx)` |
 
 ### `drivers/mwv207/mwv207_state.c`  (20 个)
 
@@ -380,19 +382,19 @@
 
 | 行 | 返回类型 | 函数 | 签名 |
 |---:|---|---|---|
-| 35 | `static uint32_t` | **mwv207_get_interpolation** | `mwv207_get_interpolation(uint32_t interpolation)` |
-| 48 | `static void` | **mwv207_record_input** | `mwv207_record_input(struct mwv207_compile *c)` |
-| 139 | `static void` | **mwv207_reset_output_index** | `mwv207_reset_output_index(struct mwv207_compile *c)` |
-| 235 | `static void` | **copy_uniform_state_to_shader** | `copy_uniform_state_to_shader(struct mwv207_shader *shader, uint64_t *consts, uint32_t count)` |
-| 254 | `static void` | **mwv207_record_uniform** | `mwv207_record_uniform(struct mwv207_compile *c)` |
-| 351 | `static void` | **mwv207_record_code** | `mwv207_record_code(struct mwv207_context *ctx, struct mwv207_compile *c, struct mwv207_shader_state *state, bool offline)` |
-| 411 | `bool` | **mwv207_compile_shader** | `mwv207_compile_shader(struct mwv207_context *ctx, struct mwv207_shader_state *state, bool offline)` |
-| 481 | `static const struct mwv207_shader_inout *` | **mwv207_stream_out_lookup** | `mwv207_stream_out_lookup(const struct mwv207_shader *shader, int output_index)` |
-| 494 | `static int` | **mwv207_link_lookup** | `mwv207_link_lookup(const struct mwv207_shader_link_info *info, const struct mwv207_shader_inout *output)` |
-| 505 | `static void` | **mwv207_fix_stream_out** | `mwv207_fix_stream_out(struct mwv207_shader_link_info *info, const struct mwv207_shader *shader)` |
-| 545 | `static struct mwv207_shader_inout *` | **mwv207_output_lookup** | `mwv207_output_lookup(struct mwv207_shader *shader, struct mwv207_shader_inout *input)` |
-| 564 | `static struct mwv207_shader *` | **mwv207_get_next_shader** | `mwv207_get_next_shader(struct mwv207_context *ctx, enum pipe_shader_type stage)` |
-| 589 | `bool` | **mwv207_link_shader** | `mwv207_link_shader(struct mwv207_context *ctx, struct mwv207_shader *shader, struct mwv207_shader_link_info *info)` |
+| 37 | `static uint32_t` | **mwv207_get_interpolation** | `mwv207_get_interpolation(uint32_t interpolation)` |
+| 50 | `static void` | **mwv207_record_input** | `mwv207_record_input(struct mwv207_compile *c)` |
+| 141 | `static void` | **mwv207_reset_output_index** | `mwv207_reset_output_index(struct mwv207_compile *c)` |
+| 237 | `static void` | **copy_uniform_state_to_shader** | `copy_uniform_state_to_shader(struct mwv207_shader *shader, uint64_t *consts, uint32_t count)` |
+| 256 | `static void` | **mwv207_record_uniform** | `mwv207_record_uniform(struct mwv207_compile *c)` |
+| 353 | `static void` | **mwv207_record_code** | `mwv207_record_code(struct mwv207_context *ctx, struct mwv207_compile *c, struct mwv207_shader_state *state, bool offline)` |
+| 413 | `bool` | **mwv207_compile_shader** | `mwv207_compile_shader(struct mwv207_context *ctx, struct mwv207_shader_state *state, bool offline)` |
+| 514 | `static const struct mwv207_shader_inout *` | **mwv207_stream_out_lookup** | `mwv207_stream_out_lookup(const struct mwv207_shader *shader, int output_index)` |
+| 527 | `static int` | **mwv207_link_lookup** | `mwv207_link_lookup(const struct mwv207_shader_link_info *info, const struct mwv207_shader_inout *output)` |
+| 538 | `static void` | **mwv207_fix_stream_out** | `mwv207_fix_stream_out(struct mwv207_shader_link_info *info, const struct mwv207_shader *shader)` |
+| 578 | `static struct mwv207_shader_inout *` | **mwv207_output_lookup** | `mwv207_output_lookup(struct mwv207_shader *shader, struct mwv207_shader_inout *input)` |
+| 597 | `static struct mwv207_shader *` | **mwv207_get_next_shader** | `mwv207_get_next_shader(struct mwv207_context *ctx, enum pipe_shader_type stage)` |
+| 622 | `bool` | **mwv207_link_shader** | `mwv207_link_shader(struct mwv207_context *ctx, struct mwv207_shader *shader, struct mwv207_shader_link_info *info)` |
 
 ### `drivers/mwv207/nir/mwv207_compiler.h`  (1 个)
 
@@ -419,19 +421,19 @@
 | 596 | `static void` | **decode_check_each_src** | `decode_check_each_src(uint32_t index, struct mwv207_inst *operands, struct instr *inst, uint32_t expected_src_idx_mask)` |
 | 629 | `static void` | **decode_srcs** | `decode_srcs(struct mwv207_inst *operands, struct instr *inst, uint32_t expected_src_idx_mask)` |
 | 638 | `static uint32_t` | **decode_inst_type** | `decode_inst_type(enum kinds_of_inst kind_of_inst, struct instr *inst)` |
-| 653 | `static void` | **decode_inst_ctrl_alu_inst** | `decode_inst_ctrl_alu_inst(struct mwv207_inst *operands, struct instr *inst)` |
-| 682 | `static void` | **decode_inst_ctrl_load_store_inst** | `decode_inst_ctrl_load_store_inst(struct mwv207_inst *operands, struct instr *inst, bool is_for_img, bool is_img_atom)` |
-| 723 | `static void` | **decode_inst_ctrl** | `decode_inst_ctrl(struct mwv207_inst *operands, struct instr *inst)` |
-| 814 | `static uint32_t` | **map_sample_hw_opcode_to_aux_opcode** | `map_sample_hw_opcode_to_aux_opcode(uint32_t base_opcode, uint32_t src_idx_1_and_2_mask)` |
-| 849 | `static uint32_t` | **map_ld_st_hw_opcode_to_aux_opcode** | `map_ld_st_hw_opcode_to_aux_opcode(uint32_t base_opcode, bool is_dst_enabled)` |
-| 868 | `static void` | **decode_direct_branch_target_src** | `decode_direct_branch_target_src(struct mwv207_inst_src *src, struct instr *inst, enum kinds_of_inst kind_of_inst)` |
-| 895 | `static void` | **convert_inst** | `convert_inst(struct mwv207_inst *operands, struct instr *inst)` |
-| 980 | `static void` | **convert_branch** | `convert_branch(struct mwv207_inst *operands, struct instr *inst)` |
-| 996 | `static void` | **convert_call** | `convert_call(struct mwv207_inst *operands, struct instr *inst)` |
-| 1005 | `static void` | **convert_clamp0_max** | `convert_clamp0_max(struct mwv207_inst *operands, struct instr *inst)` |
-| 1193 | `static void` | **convert_and_print_inst** | `convert_and_print_inst(uint32_t *dwords, int n)` |
-| 1245 | `void` | **mwv207_disasm** | `mwv207_disasm(uint32_t *dwords, int sizedwords)` |
-| 1257 | `void` | **mwv207_dump_shader_nir** | `mwv207_dump_shader_nir(const struct mwv207_shader *shader)` |
+| 658 | `static void` | **decode_inst_ctrl_alu_inst** | `decode_inst_ctrl_alu_inst(struct mwv207_inst *operands, struct instr *inst)` |
+| 687 | `static void` | **decode_inst_ctrl_load_store_inst** | `decode_inst_ctrl_load_store_inst(struct mwv207_inst *operands, struct instr *inst, bool is_for_img, bool is_img_atom)` |
+| 728 | `static void` | **decode_inst_ctrl** | `decode_inst_ctrl(struct mwv207_inst *operands, struct instr *inst)` |
+| 819 | `static uint32_t` | **map_sample_hw_opcode_to_aux_opcode** | `map_sample_hw_opcode_to_aux_opcode(uint32_t base_opcode, uint32_t src_idx_1_and_2_mask)` |
+| 854 | `static uint32_t` | **map_ld_st_hw_opcode_to_aux_opcode** | `map_ld_st_hw_opcode_to_aux_opcode(uint32_t base_opcode, bool is_dst_enabled)` |
+| 873 | `static void` | **decode_direct_branch_target_src** | `decode_direct_branch_target_src(struct mwv207_inst_src *src, struct instr *inst, enum kinds_of_inst kind_of_inst)` |
+| 900 | `static void` | **convert_inst** | `convert_inst(struct mwv207_inst *operands, struct instr *inst)` |
+| 985 | `static void` | **convert_branch** | `convert_branch(struct mwv207_inst *operands, struct instr *inst)` |
+| 1001 | `static void` | **convert_call** | `convert_call(struct mwv207_inst *operands, struct instr *inst)` |
+| 1010 | `static void` | **convert_clamp0_max** | `convert_clamp0_max(struct mwv207_inst *operands, struct instr *inst)` |
+| 1198 | `static void` | **convert_and_print_inst** | `convert_and_print_inst(uint32_t *dwords, int n)` |
+| 1250 | `void` | **mwv207_disasm** | `mwv207_disasm(uint32_t *dwords, int sizedwords)` |
+| 1265 | `void` | **mwv207_dump_shader_nir** | `mwv207_dump_shader_nir(const struct mwv207_shader *shader)` |
 
 ### `drivers/mwv207/nir/mwv207_emit.c`  (48 个)
 
@@ -471,20 +473,20 @@
 | 1188 | `static void` | **mwv207_emit_load_image** | `mwv207_emit_load_image(struct mwv207_compile *c, nir_intrinsic_instr *intr)` |
 | 1233 | `static void` | **mwv207_emit_store_image** | `mwv207_emit_store_image(struct mwv207_compile *c, nir_intrinsic_instr *intr)` |
 | 1284 | `static void` | **mwv207_emit_output** | `mwv207_emit_output(struct mwv207_compile *c, nir_intrinsic_instr *intr, struct mwv207_inst_src src)` |
-| 1388 | `static void` | **mwv207_emit_block_start** | `mwv207_emit_block_start(struct mwv207_compile *c, uint32_t block)` |
-| 1395 | `static void` | **emit_alu** | `emit_alu(struct mwv207_compile *c, nir_alu_instr *alu)` |
-| 1443 | `static void` | **emit_tex** | `emit_tex(struct mwv207_compile *c, nir_tex_instr *tex)` |
-| 1501 | `static void` | **emit_intrinsic** | `emit_intrinsic(struct mwv207_compile *c, nir_intrinsic_instr *intr)` |
-| 1814 | `static void` | **emit_instr** | `emit_instr(struct mwv207_compile *c, nir_instr *instr)` |
-| 1845 | `static void` | **emit_block** | `emit_block(struct mwv207_compile *c, nir_block *block)` |
-| 1862 | `static bool` | **has_only_one_jump_instr** | `has_only_one_jump_instr(nir_block *block, nir_jump_instr **jump)` |
-| 1881 | `static bool` | **is_block_empty** | `is_block_empty(nir_block *block)` |
-| 1888 | `static bool` | **is_then_bail_else_empty_if** | `is_then_bail_else_empty_if(nir_if *nif)` |
-| 1917 | `static void` | **emit_if** | `emit_if(struct mwv207_compile *c, nir_if *nif)` |
-| 1936 | `static void` | **emit_cf_list** | `emit_cf_list(struct mwv207_compile *c, struct exec_list *list)` |
-| 1961 | `static void` | **mwv207_fix_start** | `mwv207_fix_start(struct mwv207_compile *c)` |
-| 1993 | `static void` | **mwv207_fix_end** | `mwv207_fix_end(struct mwv207_compile *c)` |
-| 2014 | `void` | **mwv207_emit_shader** | `mwv207_emit_shader(struct mwv207_context *ctx, struct mwv207_compile *c)` |
+| 1393 | `static void` | **mwv207_emit_block_start** | `mwv207_emit_block_start(struct mwv207_compile *c, uint32_t block)` |
+| 1400 | `static void` | **emit_alu** | `emit_alu(struct mwv207_compile *c, nir_alu_instr *alu)` |
+| 1448 | `static void` | **emit_tex** | `emit_tex(struct mwv207_compile *c, nir_tex_instr *tex)` |
+| 1506 | `static void` | **emit_intrinsic** | `emit_intrinsic(struct mwv207_compile *c, nir_intrinsic_instr *intr)` |
+| 1819 | `static void` | **emit_instr** | `emit_instr(struct mwv207_compile *c, nir_instr *instr)` |
+| 1850 | `static void` | **emit_block** | `emit_block(struct mwv207_compile *c, nir_block *block)` |
+| 1867 | `static bool` | **has_only_one_jump_instr** | `has_only_one_jump_instr(nir_block *block, nir_jump_instr **jump)` |
+| 1886 | `static bool` | **is_block_empty** | `is_block_empty(nir_block *block)` |
+| 1893 | `static bool` | **is_then_bail_else_empty_if** | `is_then_bail_else_empty_if(nir_if *nif)` |
+| 1922 | `static void` | **emit_if** | `emit_if(struct mwv207_compile *c, nir_if *nif)` |
+| 1941 | `static void` | **emit_cf_list** | `emit_cf_list(struct mwv207_compile *c, struct exec_list *list)` |
+| 1966 | `static void` | **mwv207_fix_start** | `mwv207_fix_start(struct mwv207_compile *c)` |
+| 1998 | `static void` | **mwv207_fix_end** | `mwv207_fix_end(struct mwv207_compile *c)` |
+| 2019 | `void` | **mwv207_emit_shader** | `mwv207_emit_shader(struct mwv207_context *ctx, struct mwv207_compile *c)` |
 
 ### `drivers/mwv207/nir/mwv207_emit.h`  (5 个)
 
@@ -522,34 +524,34 @@
 | 285 | `static bool` | **can_remove_dead_varying** | `can_remove_dead_varying(nir_variable *var, void *data)` |
 | 292 | `static void` | **mwv207_lower_sprite_coord_late** | `mwv207_lower_sprite_coord_late(nir_shader *nir, struct mwv207_compile *c)` |
 | 348 | `static void` | **mwv207_lower_io** | `mwv207_lower_io(nir_shader *nir, struct mwv207_shader *shader)` |
-| 476 | `static bool` | **mwv207_alu_to_scalar_filter_cb** | `mwv207_alu_to_scalar_filter_cb(const nir_instr *instr, const void *data)` |
-| 551 | `static void` | **mwv207_lower_alu_impl** | `mwv207_lower_alu_impl(nir_function_impl *impl, struct mwv207_compile *c)` |
-| 606 | `static void` | **mwv207_lower_alu** | `mwv207_lower_alu(nir_shader *nir, struct mwv207_compile *c)` |
-| 615 | `static void` | **mwv207_lower_global_impl** | `mwv207_lower_global_impl(nir_function_impl *impl)` |
-| 723 | `static bool` | **mwv207_lower_global** | `mwv207_lower_global(nir_shader *nir)` |
-| 732 | `static void` | **split_double_store_global** | `split_double_store_global(nir_function_impl *impl)` |
-| 776 | `static bool` | **mwv207_lower_double_store_global** | `mwv207_lower_double_store_global(nir_shader *nir)` |
-| 785 | `static bool` | **vec_dest_has_swizzle** | `vec_dest_has_swizzle(nir_alu_instr *vec, nir_def *ssa)` |
-| 818 | `static uint32_t` | **insert_vec_mov** | `insert_vec_mov(nir_alu_instr *vec, uint32_t start_idx, nir_shader *nir)` |
-| 862 | `static void` | **mwv207_lower_vecn_impl** | `mwv207_lower_vecn_impl(nir_function_impl *impl, struct mwv207_compile *c)` |
-| 950 | `static void` | **mwv207_lower_vecn** | `mwv207_lower_vecn(nir_shader *nir, struct mwv207_compile *c)` |
-| 959 | `static void` | **mwv207_exchange_texture_swizzle** | `mwv207_exchange_texture_swizzle(struct mwv207_context *ctx, nir_tex_instr *tex, nir_alu_instr *mov, nir_tex_instr *tex_ba, nir_builder b)` |
-| 1014 | `static void` | **mwv207_lower_tex_128_impl** | `mwv207_lower_tex_128_impl(nir_function_impl *impl, struct mwv207_context *ctx)` |
-| 1084 | `static void` | **mwv207_lower_fb_128_impl** | `mwv207_lower_fb_128_impl(nir_function_impl *impl, struct mwv207_context *ctx)` |
-| 1184 | `static void` | **mwv207_lower_128bit** | `mwv207_lower_128bit(nir_shader *nir, struct mwv207_context *ctx)` |
-| 1205 | `static void` | **mwv207_lower_rgba_swap_impl** | `mwv207_lower_rgba_swap_impl(nir_function_impl *impl, struct mwv207_context *ctx)` |
-| 1263 | `static void` | **mwv207_lower_rgba_swap** | `mwv207_lower_rgba_swap(nir_shader *shader, struct mwv207_context *ctx)` |
-| 1277 | `static void` | **mwv207_lower_txs** | `mwv207_lower_txs(nir_shader *nir, struct mwv207_context *ctx, struct mwv207_shader *shader)` |
-| 1315 | `static void` | **mwv207_lower_texelFetch** | `mwv207_lower_texelFetch(nir_shader *nir, struct mwv207_context *ctx, struct mwv207_shader *shader)` |
-| 1339 | `static void` | **mwv207_lower_roundEven** | `mwv207_lower_roundEven(nir_shader *nir, struct mwv207_context *ctx)` |
-| 1377 | `static void` | **mwv207_nir_remove_shadow_tex** | `mwv207_nir_remove_shadow_tex(nir_tex_instr *tex, nir_def * (*set)(nir_builder *b, nir_def *src0, nir_def *src1), nir_builder *b, bool swap)` |
-| 1407 | `static void` | **mwv207_lower_shadow_tex_impl** | `mwv207_lower_shadow_tex_impl(nir_function_impl *impl, struct mwv207_context *ctx, struct mwv207_shader *shader)` |
-| 1477 | `static void` | **mwv207_lower_shadow_tex** | `mwv207_lower_shadow_tex(nir_shader *nir, struct mwv207_context *ctx, struct mwv207_shader *shader)` |
-| 1489 | `static int` | **mwv207_glsl_type_size** | `mwv207_glsl_type_size(const struct glsl_type *type, bool bindless)` |
-| 1495 | `static void` | **mwv207_optimize_loop** | `mwv207_optimize_loop(nir_shader *nir)` |
-| 1535 | `` | **mem_access_size_align_cb** | `mem_access_size_align_cb(nir_intrinsic_op intrin, uint8_t bytes, uint8_t bit_size, uint32_t align, uint32_t align_offset, bool offset_is_const, const void *cb_data)` |
-| 1552 | `static uint8_t` | **lower_vec816_alu** | `lower_vec816_alu(const nir_instr *instr, const void *cb_data)` |
-| 1558 | `void` | **mwv207_lower** | `mwv207_lower(struct mwv207_context *ctx, struct mwv207_compile *c)` |
+| 484 | `static bool` | **mwv207_alu_to_scalar_filter_cb** | `mwv207_alu_to_scalar_filter_cb(const nir_instr *instr, const void *data)` |
+| 559 | `static void` | **mwv207_lower_alu_impl** | `mwv207_lower_alu_impl(nir_function_impl *impl, struct mwv207_compile *c)` |
+| 614 | `static void` | **mwv207_lower_alu** | `mwv207_lower_alu(nir_shader *nir, struct mwv207_compile *c)` |
+| 623 | `static void` | **mwv207_lower_global_impl** | `mwv207_lower_global_impl(nir_function_impl *impl)` |
+| 731 | `static bool` | **mwv207_lower_global** | `mwv207_lower_global(nir_shader *nir)` |
+| 740 | `static void` | **split_double_store_global** | `split_double_store_global(nir_function_impl *impl)` |
+| 784 | `static bool` | **mwv207_lower_double_store_global** | `mwv207_lower_double_store_global(nir_shader *nir)` |
+| 793 | `static bool` | **vec_dest_has_swizzle** | `vec_dest_has_swizzle(nir_alu_instr *vec, nir_def *ssa)` |
+| 826 | `static uint32_t` | **insert_vec_mov** | `insert_vec_mov(nir_alu_instr *vec, uint32_t start_idx, nir_shader *nir)` |
+| 870 | `static void` | **mwv207_lower_vecn_impl** | `mwv207_lower_vecn_impl(nir_function_impl *impl, struct mwv207_compile *c)` |
+| 958 | `static void` | **mwv207_lower_vecn** | `mwv207_lower_vecn(nir_shader *nir, struct mwv207_compile *c)` |
+| 967 | `static bool` | **mwv207_exchange_texture_swizzle** | `mwv207_exchange_texture_swizzle(struct mwv207_context *ctx, unsigned stage, nir_tex_instr *tex, nir_alu_instr *mov, nir_tex_instr *tex_ba, nir_builder b)` |
+| 1032 | `static void` | **mwv207_lower_tex_128_impl** | `mwv207_lower_tex_128_impl(nir_function_impl *impl, struct mwv207_context *ctx)` |
+| 1114 | `static void` | **mwv207_lower_fb_128_impl** | `mwv207_lower_fb_128_impl(nir_function_impl *impl, struct mwv207_context *ctx)` |
+| 1214 | `static void` | **mwv207_lower_128bit** | `mwv207_lower_128bit(nir_shader *nir, struct mwv207_context *ctx)` |
+| 1235 | `static void` | **mwv207_lower_rgba_swap_impl** | `mwv207_lower_rgba_swap_impl(nir_function_impl *impl, struct mwv207_context *ctx)` |
+| 1293 | `static void` | **mwv207_lower_rgba_swap** | `mwv207_lower_rgba_swap(nir_shader *shader, struct mwv207_context *ctx)` |
+| 1307 | `static void` | **mwv207_lower_txs** | `mwv207_lower_txs(nir_shader *nir, struct mwv207_context *ctx, struct mwv207_shader *shader)` |
+| 1345 | `static void` | **mwv207_lower_texelFetch** | `mwv207_lower_texelFetch(nir_shader *nir, struct mwv207_context *ctx, struct mwv207_shader *shader)` |
+| 1369 | `static void` | **mwv207_lower_roundEven** | `mwv207_lower_roundEven(nir_shader *nir, struct mwv207_context *ctx)` |
+| 1407 | `static void` | **mwv207_nir_remove_shadow_tex** | `mwv207_nir_remove_shadow_tex(nir_tex_instr *tex, nir_def * (*set)(nir_builder *b, nir_def *src0, nir_def *src1), nir_builder *b, bool swap)` |
+| 1437 | `static void` | **mwv207_lower_shadow_tex_impl** | `mwv207_lower_shadow_tex_impl(nir_function_impl *impl, struct mwv207_context *ctx, struct mwv207_shader *shader)` |
+| 1507 | `static void` | **mwv207_lower_shadow_tex** | `mwv207_lower_shadow_tex(nir_shader *nir, struct mwv207_context *ctx, struct mwv207_shader *shader)` |
+| 1519 | `static int` | **mwv207_glsl_type_size** | `mwv207_glsl_type_size(const struct glsl_type *type, bool bindless)` |
+| 1525 | `static void` | **mwv207_optimize_loop** | `mwv207_optimize_loop(nir_shader *nir)` |
+| 1565 | `` | **mem_access_size_align_cb** | `mem_access_size_align_cb(nir_intrinsic_op intrin, uint8_t bytes, uint8_t bit_size, uint32_t align, uint32_t align_offset, bool offset_is_const, const void *cb_data)` |
+| 1582 | `static uint8_t` | **lower_vec816_alu** | `lower_vec816_alu(const nir_instr *instr, const void *cb_data)` |
+| 1588 | `void` | **mwv207_lower** | `mwv207_lower(struct mwv207_context *ctx, struct mwv207_compile *c)` |
 
 ### `drivers/mwv207/nir/mwv207_lower_64bit.c`  (28 个)
 
@@ -590,20 +592,20 @@
 |---:|---|---|---|
 | 30 | `` | **get_factor_def** | `get_factor_def(struct mwv207_context *ctx, nir_builder *b, unsigned int factor, nir_def *blend_src, nir_def *blend_src1, nir_def *blend_dst)` |
 | 110 | `` | **get_rt_texture_coord** | `get_rt_texture_coord(struct mwv207_context *ctx, nir_builder *b)` |
-| 132 | `` | **create_rt_texture** | `create_rt_texture(struct mwv207_context *ctx, nir_shader *nir, nir_def *tex_coord)` |
-| 154 | `` | **handle_blend_func** | `handle_blend_func(unsigned int func, nir_builder *b, nir_def *src, nir_def *dst)` |
-| 181 | `static void` | **mwv207_lower_dual_blend_impl** | `mwv207_lower_dual_blend_impl(nir_function_impl *impl, struct mwv207_context *ctx, struct mwv207_shader *shader)` |
-| 261 | `void` | **mwv207_lower_dual_blend** | `mwv207_lower_dual_blend(nir_shader *nir, struct mwv207_context *ctx, struct mwv207_shader *shader)` |
+| 151 | `` | **create_rt_texture** | `create_rt_texture(struct mwv207_context *ctx, nir_shader *nir, nir_def *tex_coord)` |
+| 173 | `` | **handle_blend_func** | `handle_blend_func(unsigned int func, nir_builder *b, nir_def *src, nir_def *dst)` |
+| 200 | `static void` | **mwv207_lower_dual_blend_impl** | `mwv207_lower_dual_blend_impl(nir_function_impl *impl, struct mwv207_context *ctx, struct mwv207_shader *shader)` |
+| 280 | `void` | **mwv207_lower_dual_blend** | `mwv207_lower_dual_blend(nir_shader *nir, struct mwv207_context *ctx, struct mwv207_shader *shader)` |
 
 ### `drivers/mwv207/nir/mwv207_lower_shared_atomic.c`  (5 个)
 
 | 行 | 返回类型 | 函数 | 签名 |
 |---:|---|---|---|
-| 30 | `` | **set_base_offset_impl** | `set_base_offset_impl(nir_instr *instr, nir_builder *b, nir_shader *nir)` |
-| 93 | `` | **set_base_offset** | `set_base_offset(nir_shader *nir)` |
-| 116 | `static bool` | **lower_instr** | `lower_instr(nir_shader *nir, nir_intrinsic_instr *instr, nir_builder *b, nir_def **base_offset_ptr)` |
-| 147 | `static bool` | **check_has_shared_atomic** | `check_has_shared_atomic(nir_shader *nir)` |
-| 170 | `void` | **mwv207_lower_shared_atomic** | `mwv207_lower_shared_atomic(nir_shader *nir, struct mwv207_compile *c, struct mwv207_context *ctx)` |
+| 31 | `` | **set_base_offset_impl** | `set_base_offset_impl(nir_instr *instr, nir_builder *b, nir_shader *nir)` |
+| 94 | `` | **set_base_offset** | `set_base_offset(nir_shader *nir)` |
+| 121 | `static bool` | **lower_instr** | `lower_instr(nir_shader *nir, nir_intrinsic_instr *instr, nir_builder *b, nir_def **base_offset_ptr)` |
+| 152 | `static bool` | **check_has_shared_atomic** | `check_has_shared_atomic(nir_shader *nir)` |
+| 175 | `void` | **mwv207_lower_shared_atomic** | `mwv207_lower_shared_atomic(nir_shader *nir, struct mwv207_compile *c, struct mwv207_context *ctx)` |
 
 ### `drivers/mwv207/nir/mwv207_lower_tg4.c`  (2 个)
 
@@ -644,18 +646,18 @@
 
 | 行 | 返回类型 | 函数 | 签名 |
 |---:|---|---|---|
-| 172 | `static int` | **reg_get_type** | `reg_get_type(int virt_reg)` |
-| 178 | `static int` | **reg_get_base** | `reg_get_base(struct mwv207_compile *c, int virt_reg)` |
-| 208 | `static int` | **reg_get_class** | `reg_get_class(int virt_reg)` |
-| 253 | `struct mwv207_inst_src` | **mwv207_const** | `mwv207_const(struct mwv207_compile *c, nir_const_value *value, uint32_t num_components)` |
-| 302 | `static struct mwv207_inst_src` | **mwv207_reg_src** | `mwv207_reg_src(struct mwv207_compile *c, nir_src *src)` |
-| 309 | `struct mwv207_inst_src` | **mwv207_src** | `mwv207_src(struct mwv207_compile *c, nir_src *src)` |
-| 459 | `struct mwv207_inst_dst` | **mwv207_dest** | `mwv207_dest(struct mwv207_compile *c, nir_def *dest, uint32_t *p_swiz)` |
-| 481 | `struct mwv207_inst_src` | **mwv207_src_from_dest** | `mwv207_src_from_dest(struct mwv207_compile *c, nir_def *dest)` |
-| 498 | `static void` | **mwv207_spill_reg** | `mwv207_spill_reg(struct mwv207_compile *c, struct ra_graph *g, uint32_t num_nodes, struct live_def *defs, nir_function_impl *impl, uint32_t debug)` |
-| 574 | `static bool` | **mwv207_ra** | `mwv207_ra(struct mwv207_compile *c, nir_shader *nir, struct ra_regs *regs, uint32_t debug)` |
-| 799 | `void` | **mwv207_init_reg_state** | `mwv207_init_reg_state(struct mwv207_context *ctx, struct mwv207_compile *c, nir_shader *nir)` |
-| 840 | `void` | **mwv207_free_reg_state** | `mwv207_free_reg_state(struct mwv207_compile *c)` |
+| 173 | `static int` | **reg_get_type** | `reg_get_type(int virt_reg)` |
+| 179 | `static int` | **reg_get_base** | `reg_get_base(struct mwv207_compile *c, int virt_reg)` |
+| 209 | `static int` | **reg_get_class** | `reg_get_class(int virt_reg)` |
+| 254 | `struct mwv207_inst_src` | **mwv207_const** | `mwv207_const(struct mwv207_compile *c, nir_const_value *value, uint32_t num_components)` |
+| 303 | `static struct mwv207_inst_src` | **mwv207_reg_src** | `mwv207_reg_src(struct mwv207_compile *c, nir_src *src)` |
+| 310 | `struct mwv207_inst_src` | **mwv207_src** | `mwv207_src(struct mwv207_compile *c, nir_src *src)` |
+| 460 | `struct mwv207_inst_dst` | **mwv207_dest** | `mwv207_dest(struct mwv207_compile *c, nir_def *dest, uint32_t *p_swiz)` |
+| 482 | `struct mwv207_inst_src` | **mwv207_src_from_dest** | `mwv207_src_from_dest(struct mwv207_compile *c, nir_def *dest)` |
+| 499 | `static void` | **mwv207_spill_reg** | `mwv207_spill_reg(struct mwv207_compile *c, struct ra_graph *g, uint32_t num_nodes, struct live_def *defs, nir_function_impl *impl, uint32_t debug)` |
+| 575 | `static bool` | **mwv207_ra** | `mwv207_ra(struct mwv207_compile *c, nir_shader *nir, struct ra_regs *regs, uint32_t debug)` |
+| 800 | `void` | **mwv207_init_reg_state** | `mwv207_init_reg_state(struct mwv207_context *ctx, struct mwv207_compile *c, nir_shader *nir)` |
+| 851 | `void` | **mwv207_free_reg_state** | `mwv207_free_reg_state(struct mwv207_compile *c)` |
 
 ### `drivers/mwv207/video-codec/common/mwv207_codec_time.c`  (3 个)
 
@@ -952,7 +954,7 @@
 | 行 | 返回类型 | 函数 | 签名 |
 |---:|---|---|---|
 | 47 | `static void` | **mwv207_clean_up_buffer_managers** | `mwv207_clean_up_buffer_managers(struct mwv207_winsys *ws)` |
-| 55 | `static void` | **mwv207_drm_bo_destory** | `mwv207_drm_bo_destory(struct mwv207_winsys *ws, struct mwv207_bo *bo)` |
+| 55 | `static void` | **mwv207_drm_bo_destroy** | `mwv207_drm_bo_destroy(struct mwv207_winsys *ws, struct mwv207_bo *bo)` |
 | 80 | `static void` | **mwv207_bo_destroy** | `mwv207_bo_destroy(void *winsys, struct pb_buffer_lean *buf)` |
 | 88 | `static void` | **mwv207_bo_slab_destroy** | `mwv207_bo_slab_destroy(void *winsys, struct pb_buffer *buf)` |
 | 101 | `static void` | **mwv207_bo_destroy_or_cache** | `mwv207_bo_destroy_or_cache(void *winsys, struct pb_buffer *buf)` |
@@ -961,14 +963,14 @@
 | 238 | `static int` | **mwv207_drm_bo_wait** | `mwv207_drm_bo_wait(struct mwv207_winsys *ws, struct mwv207_bo *bo, uint64_t timeout)` |
 | 261 | `static void` | **mwv207_drm_bo_reference** | `mwv207_drm_bo_reference(struct mwv207_winsys *ws, struct mwv207_bo **dst, struct mwv207_bo *src)` |
 | 270 | `static void *` | **mwv207_drm_bo_map** | `mwv207_drm_bo_map(struct mwv207_winsys *ws, struct mwv207_bo *bo)` |
-| 297 | `static void` | **mwv207_drm_bo_unmap** | `mwv207_drm_bo_unmap(struct mwv207_winsys *ws, struct mwv207_bo *bo)` |
-| 303 | `static uint32_t` | **mwv207_drm_bo_get_handle** | `mwv207_drm_bo_get_handle(struct mwv207_winsys *ws, struct mwv207_bo *bo, struct winsys_handle *whandle)` |
-| 338 | `static struct mwv207_bo *` | **mwv207_drm_bo_from_handle** | `mwv207_drm_bo_from_handle(struct mwv207_winsys *ws, struct winsys_handle *whandle, uint32_t size)` |
-| 412 | `static void` | **mwv207_drm_bo_dump** | `mwv207_drm_bo_dump(struct mwv207_winsys *ws, struct mwv207_bo *bo, uint32_t size)` |
-| 437 | `static bool` | **mwv207_bo_can_reclaim** | `mwv207_bo_can_reclaim(void *winsys, struct pb_buffer_lean *buf)` |
-| 449 | `static bool` | **mwv207_bo_can_reclaim_slab** | `mwv207_bo_can_reclaim_slab(void *priv, struct pb_slab_entry *entry)` |
-| 463 | `static struct pb_slab *` | **mwv207_bo_slab_alloc** | `mwv207_bo_slab_alloc(void *priv, unsigned heap, unsigned entry_size, unsigned group_index)` |
-| 531 | `static void` | **mwv207_bo_slab_free** | `mwv207_bo_slab_free(void *priv, struct pb_slab *pslab)` |
+| 311 | `static void` | **mwv207_drm_bo_unmap** | `mwv207_drm_bo_unmap(struct mwv207_winsys *ws, struct mwv207_bo *bo)` |
+| 317 | `static uint32_t` | **mwv207_drm_bo_get_handle** | `mwv207_drm_bo_get_handle(struct mwv207_winsys *ws, struct mwv207_bo *bo, struct winsys_handle *whandle)` |
+| 352 | `static struct mwv207_bo *` | **mwv207_drm_bo_from_handle** | `mwv207_drm_bo_from_handle(struct mwv207_winsys *ws, struct winsys_handle *whandle, uint32_t size)` |
+| 433 | `static void` | **mwv207_drm_bo_dump** | `mwv207_drm_bo_dump(struct mwv207_winsys *ws, struct mwv207_bo *bo, uint32_t size)` |
+| 458 | `static bool` | **mwv207_bo_can_reclaim** | `mwv207_bo_can_reclaim(void *winsys, struct pb_buffer_lean *buf)` |
+| 470 | `static bool` | **mwv207_bo_can_reclaim_slab** | `mwv207_bo_can_reclaim_slab(void *priv, struct pb_slab_entry *entry)` |
+| 484 | `static struct pb_slab *` | **mwv207_bo_slab_alloc** | `mwv207_bo_slab_alloc(void *priv, unsigned heap, unsigned entry_size, unsigned group_index)` |
+| 552 | `static void` | **mwv207_bo_slab_free** | `mwv207_bo_slab_free(void *priv, struct pb_slab *pslab)` |
 
 ### `winsys/mwv207/drm/mwv207_drm_cs.c`  (13 个)
 
@@ -981,12 +983,12 @@
 | 107 | `static int` | **mwv207_drm_fence_get_fd** | `mwv207_drm_fence_get_fd(struct mwv207_winsys *ws, struct pipe_fence_handle *fence)` |
 | 114 | `static void` | **mwv207_drm_fence_accumulate** | `mwv207_drm_fence_accumulate(struct mwv207_winsys *ws, int *target_fd, struct pipe_fence_handle *fence)` |
 | 123 | `static struct mwv207_cmd *` | **mwv207_drm_cmdbuf_create** | `mwv207_drm_cmdbuf_create(struct mwv207_winsys *ws)` |
-| 153 | `static void` | **mwv207_drm_cmdbuf_destory** | `mwv207_drm_cmdbuf_destory(struct mwv207_winsys *ws, struct mwv207_cmd *cmd)` |
-| 179 | `static int` | **mwv207_drm_cmdbuf_add_bo** | `mwv207_drm_cmdbuf_add_bo(struct mwv207_cmd *cmd, struct mwv207_bo *bo, uint32_t flags)` |
-| 219 | `static int` | **mwv207_drm_cmdbuf_add_dat** | `mwv207_drm_cmdbuf_add_dat(struct mwv207_cmd *cmd, struct cmd_dat *src_dat)` |
-| 274 | `static int` | **mwv207_drm_cmdbuf_add_relloc** | `mwv207_drm_cmdbuf_add_relloc(struct mwv207_cmd *cmd, uint32_t idx, uint32_t cmd_offset, uint32_t bo_offset, uint32_t type, uint32_t pad)` |
-| 303 | `static void` | **mwv207_drm_cmdbuf_print** | `mwv207_drm_cmdbuf_print(struct mwv207_winsys *ws, struct mwv207_cmd *cmd)` |
-| 372 | `static void` | **mwv207_drm_cmdbuf_commit** | `mwv207_drm_cmdbuf_commit(struct mwv207_winsys *ws, struct mwv207_cmd *cmd, int in_fence_fd, int *out_fence_fd)` |
+| 173 | `static void` | **mwv207_drm_cmdbuf_destroy** | `mwv207_drm_cmdbuf_destroy(struct mwv207_winsys *ws, struct mwv207_cmd *cmd)` |
+| 199 | `static int` | **mwv207_drm_cmdbuf_add_bo** | `mwv207_drm_cmdbuf_add_bo(struct mwv207_cmd *cmd, struct mwv207_bo *bo, uint32_t flags)` |
+| 239 | `static int` | **mwv207_drm_cmdbuf_add_dat** | `mwv207_drm_cmdbuf_add_dat(struct mwv207_cmd *cmd, struct cmd_dat *src_dat)` |
+| 304 | `static int` | **mwv207_drm_cmdbuf_add_relloc** | `mwv207_drm_cmdbuf_add_relloc(struct mwv207_cmd *cmd, uint32_t idx, uint32_t cmd_offset, uint32_t bo_offset, uint32_t type, uint32_t pad)` |
+| 333 | `static void` | **mwv207_drm_cmdbuf_print** | `mwv207_drm_cmdbuf_print(struct mwv207_winsys *ws, struct mwv207_cmd *cmd)` |
+| 402 | `static void` | **mwv207_drm_cmdbuf_commit** | `mwv207_drm_cmdbuf_commit(struct mwv207_winsys *ws, struct mwv207_cmd *cmd, int in_fence_fd, int *out_fence_fd)` |
 
 ### `winsys/mwv207/drm/mwv207_drm_winsys.c`  (6 个)
 
@@ -996,8 +998,8 @@
 | 108 | `static uint32_t` | **hash_uint32_t** | `hash_uint32_t(const void *key)` |
 | 114 | `static bool` | **handle_equals** | `handle_equals(const void *key1, const void *key2)` |
 | 120 | `static bool` | **mwv207_ws_init** | `mwv207_ws_init(struct mwv207_winsys *ws)` |
-| 151 | `static bool` | **mwv207_drm_destroy** | `mwv207_drm_destroy(struct mwv207_winsys *ws)` |
-| 209 | `struct pipe_screen *` | **mwv207_drm_create_screen** | `mwv207_drm_create_screen(int fd)` |
+| 185 | `static bool` | **mwv207_drm_destroy** | `mwv207_drm_destroy(struct mwv207_winsys *ws)` |
+| 243 | `struct pipe_screen *` | **mwv207_drm_create_screen** | `mwv207_drm_create_screen(int fd)` |
 
 ### `winsys/mwv207/drm/mwv207_drm_winsys.h`  (3 个)
 
@@ -1067,7 +1069,7 @@
 | `drivers/mwv207/nir/mwv207_compiler.h` | 87 | `struct mwv207_varying` |
 | `drivers/mwv207/nir/mwv207_compiler.h` | 93 | `struct mwv207_shader_link_info` |
 | `drivers/mwv207/nir/mwv207_compiler.h` | 102 | `struct mwv207_shader` |
-| `drivers/mwv207/nir/mwv207_compiler.h` | 154 | `struct mwv207_compile` |
+| `drivers/mwv207/nir/mwv207_compiler.h` | 164 | `struct mwv207_compile` |
 | `drivers/mwv207/nir/mwv207_disasm.h` | 33 | `enum dst_addr_reg_type` |
 | `drivers/mwv207/nir/mwv207_disasm.h` | 39 | `enum kinds_of_inst` |
 | `drivers/mwv207/nir/mwv207_disasm.h` | 72 | `struct instr` |
@@ -1202,7 +1204,7 @@
 | `winsys/mwv207/drm/mwv207_drm_winsys.h` | 111 | `struct mwv207_bo` |
 | `winsys/mwv207/drm/mwv207_drm_winsys.h` | 138 | `struct mwv207_slab` |
 | `winsys/mwv207/drm/mwv207_drm_winsys.h` | 144 | `struct cmd_dat` |
-| `winsys/mwv207/drm/mwv207_drm_winsys.h` | 153 | `struct cmd_dat_arrary` |
+| `winsys/mwv207/drm/mwv207_drm_winsys.h` | 153 | `struct cmd_dat_array` |
 | `winsys/mwv207/drm/mwv207_drm_winsys.h` | 163 | `struct mwv207_cmd` |
 | `winsys/mwv207/drm/mwv207_drm_winsys.h` | 188 | `struct mwv207_winsys` |
 
@@ -1240,38 +1242,38 @@
 | `drivers/mwv207/nir/mwv207_common.h` | 69 | `COND` | `#define COND(bool, val) ((bool) ? (val) : 0)` |
 | `drivers/mwv207/nir/mwv207_common.h` | 71 | `VS_BALANCE` | `#define VS_BALANCE(A) (((20480 / (0x400 - 2 * A * 0x10)) + 9) / 10)` |
 | `drivers/mwv207/nir/mwv207_common.h` | 73 | `compile_error` | `#define compile_error(ctx, args...) ({ \` |
-| `drivers/mwv207/nir/mwv207_compiler.h` | 174 | `OPT` | `#define OPT(nir, pass, ...) ({                             \` |
-| `drivers/mwv207/nir/mwv207_disasm.c` | 1022 | `OPC_NO_OPND` | `#define OPC_NO_OPND(opc, flags) [INST_OPCODE_##opc] = {#opc, convert_inst, NO_OPND_INST, (flags), 0}` |
-| `drivers/mwv207/nir/mwv207_disasm.c` | 1023 | `OPC_3_SRCS_CC_ALU` | `#define OPC_3_SRCS_CC_ALU(opc, flags) [INST_OPCODE_##opc] = {#opc, convert_inst, TRI_SRCS_CC_ALU_INST, (flags)` |
-| `drivers/mwv207/nir/mwv207_disasm.c` | 1024 | `OPC_3_SRCS_ALU` | `#define OPC_3_SRCS_ALU(opc, flags) [INST_OPCODE_##opc] = {#opc, convert_inst, TRI_SRCS_ALU_INST, (flags), (0x1` |
-| `drivers/mwv207/nir/mwv207_disasm.c` | 1025 | `OPC_2_SRCS_SRC0_SRC1_ALU` | `#define OPC_2_SRCS_SRC0_SRC1_ALU(opc, flags) [INST_OPCODE_##opc] = {#opc, convert_inst, BIN_SRCS_SRC0_SRC1_ALU` |
-| `drivers/mwv207/nir/mwv207_disasm.c` | 1026 | `OPC_2_SRCS_SRC0_SRC1_CC_ALU` | `#define OPC_2_SRCS_SRC0_SRC1_CC_ALU(opc, flags) [INST_OPCODE_##opc] = {#opc, convert_inst, BIN_SRCS_SRC0_SRC1_` |
-| `drivers/mwv207/nir/mwv207_disasm.c` | 1027 | `OPC_2_SRCS_SRC0_SRC2_ALU` | `#define OPC_2_SRCS_SRC0_SRC2_ALU(opc, flags) [INST_OPCODE_##opc] = {#opc, convert_inst, BIN_SRCS_SRC0_SRC2_ALU` |
-| `drivers/mwv207/nir/mwv207_disasm.c` | 1028 | `OPC_2_SRCS_SRC1_SRC2_ALU` | `#define OPC_2_SRCS_SRC1_SRC2_ALU(opc, flags) [INST_OPCODE_##opc] = {#opc, convert_inst, BIN_SRCS_SRC1_SRC2_ALU` |
-| `drivers/mwv207/nir/mwv207_disasm.c` | 1029 | `OPC_1_SRC_SRC0_ALU` | `#define OPC_1_SRC_SRC0_ALU(opc, flags) [INST_OPCODE_##opc] = {#opc, convert_inst, UNA_SRC_SRC0_ALU_INST, (flag` |
-| `drivers/mwv207/nir/mwv207_disasm.c` | 1030 | `OPC_1_SRC_SRC1_ALU` | `#define OPC_1_SRC_SRC1_ALU(opc, flags) [INST_OPCODE_##opc] = {#opc, convert_inst, UNA_SRC_SRC1_ALU_INST, (flag` |
-| `drivers/mwv207/nir/mwv207_disasm.c` | 1031 | `OPC_1_SRC_SRC2_ALU` | `#define OPC_1_SRC_SRC2_ALU(opc, flags) [INST_OPCODE_##opc] = {#opc, convert_inst, UNA_SRC_SRC2_ALU_INST, (flag` |
-| `drivers/mwv207/nir/mwv207_disasm.c` | 1032 | `OPC_PACK` | `#define OPC_PACK(opc, flags) [INST_OPCODE_##opc] = {#opc, convert_inst, PACK_INST, (flags), (0x1 \| 0x2 \| 0x4)}` |
-| `drivers/mwv207/nir/mwv207_disasm.c` | 1033 | `OPC_SAMPLE` | `#define OPC_SAMPLE(opc, flags) [INST_OPCODE_##opc] = {#opc, convert_inst, SAMPLE_INST, (flags), (0x1 \| 0x2 \| 0` |
-| `drivers/mwv207/nir/mwv207_disasm.c` | 1034 | `OPC_LOAD` | `#define OPC_LOAD(opc, flags) [INST_OPCODE_##opc] = {#opc, convert_inst, LOAD_INST, (flags), (0x1 \| 0x2)}` |
-| `drivers/mwv207/nir/mwv207_disasm.c` | 1035 | `OPC_IMG_LOAD` | `#define OPC_IMG_LOAD(opc, flags) [INST_OPCODE_##opc] = {#opc, convert_inst, IMG_LOAD_INST, (1U<<2) \| (flags), ` |
-| `drivers/mwv207/nir/mwv207_disasm.c` | 1036 | `OPC_STORE` | `#define OPC_STORE(opc, flags) [INST_OPCODE_##opc] = {#opc, convert_inst, STORE_INST, (flags), (0x1 \| 0x2 \| 0x4` |
-| `drivers/mwv207/nir/mwv207_disasm.c` | 1037 | `OPC_IMG_STORE` | `#define OPC_IMG_STORE(opc, flags) [INST_OPCODE_##opc] = {#opc, convert_inst, IMG_STORE_INST, (1U<<2) \| (flags)` |
-| `drivers/mwv207/nir/mwv207_disasm.c` | 1038 | `OPC_IMG_ATOM` | `#define OPC_IMG_ATOM(opc, flags) [INST_OPCODE_##opc] = {#opc, convert_inst, IMG_ATOM_INST, (1U<<2) \| (flags), ` |
-| `drivers/mwv207/nir/mwv207_disasm.c` | 1039 | `OPC_STORE_ATTR` | `#define OPC_STORE_ATTR(opc, flags) [INST_OPCODE_##opc] = {#opc, convert_inst, STORE_ATTR_INST, (flags), (0x1 \|` |
-| `drivers/mwv207/nir/mwv207_disasm.c` | 1040 | `OPC_SELECT_MAP` | `#define OPC_SELECT_MAP(opc, flags) [INST_OPCODE_##opc] = {#opc, convert_inst, SELECT_MAP_INST, (flags), (0x1 \|` |
-| `drivers/mwv207/nir/mwv207_disasm.c` | 1041 | `OPC_BRANCH` | `#define OPC_BRANCH(opc, flags) [INST_OPCODE_##opc] = {#opc, convert_branch, DIRECT_BRANCH0_INST, (flags), (0x1` |
-| `drivers/mwv207/nir/mwv207_disasm.c` | 1042 | `OPC_CALL` | `#define OPC_CALL(opc, flags) [INST_OPCODE_##opc] = {#opc, convert_call, DIRECT_CALL_INST, (flags), (0x4)}` |
-| `drivers/mwv207/nir/mwv207_disasm.c` | 1043 | `OPC_LOOP` | `#define OPC_LOOP(opc, flags) [INST_OPCODE_##opc] = {#opc, convert_inst, LOOP_INST, (flags), (0x2)}` |
-| `drivers/mwv207/nir/mwv207_disasm.c` | 1044 | `OPC_CONV` | `#define OPC_CONV(opc, flags) [INST_OPCODE_##opc] = {#opc, convert_inst, CONV_INST, (flags), (0x2 \| 0x4)}` |
-| `drivers/mwv207/nir/mwv207_disasm.c` | 1045 | `OPC_SCATTER` | `#define OPC_SCATTER(opc, flags) [INST_OPCODE_##opc] = {#opc, convert_inst, SCATTER_INST, (flags), (0x2 \| 0x4)}` |
-| `drivers/mwv207/nir/mwv207_disasm.c` | 1046 | `OPC_CMPLX` | `#define OPC_CMPLX(opc, flags) [INST_OPCODE_##opc] = {#opc, convert_inst, CMPLX_INST, (flags), (0x1 \| 0x2 \| 0x4` |
-| `drivers/mwv207/nir/mwv207_disasm.c` | 1047 | `OPC_CLAMP0_MAX` | `#define OPC_CLAMP0_MAX(opc, flags) [INST_OPCODE_##opc] = {#opc, convert_clamp0_max, BIN_SRCS_SRC0_SRC1_ALU_CC_` |
-| `drivers/mwv207/nir/mwv207_disasm.c` | 1048 | `OPC_EXT_EMIT` | `#define OPC_EXT_EMIT(opc, flags) [0x7f + INST_EXT_OPCODE_##opc] = {#opc, convert_inst, EMIT_INST, (flags), (0x` |
-| `drivers/mwv207/nir/mwv207_disasm.c` | 1049 | `OPC_EXT_2_SRCS_SRC0_SRC1_ALU` | `#define OPC_EXT_2_SRCS_SRC0_SRC1_ALU(opc, flags) [0x7f + INST_EXT_OPCODE_##opc] = {#opc, convert_inst, BIN_SRC` |
-| `drivers/mwv207/nir/mwv207_disasm.c` | 1050 | `OPC_EXT_1_SRC_SRC0_ALU` | `#define OPC_EXT_1_SRC_SRC0_ALU(opc, flags) [0x7f + INST_EXT_OPCODE_##opc] = {#opc, convert_inst, UNA_SRC_SRC0_` |
-| `drivers/mwv207/nir/mwv207_disasm.c` | 1051 | `OPC_SAMPLE_EXT` | `#define OPC_SAMPLE_EXT(opc, flags) [0x7f + INST_EXT_OPCODE_##opc] = {#opc, convert_inst, SAMPLE_EXT_INST, (fla` |
-| `drivers/mwv207/nir/mwv207_disasm.c` | 1052 | `OPC_EXT_LOAD` | `#define OPC_EXT_LOAD(opc, flags) [0x7f + INST_EXT_OPCODE_##opc] = {#opc, convert_inst, LOAD_INST, (flags), (0x` |
+| `drivers/mwv207/nir/mwv207_compiler.h` | 184 | `OPT` | `#define OPT(nir, pass, ...) ({                             \` |
+| `drivers/mwv207/nir/mwv207_disasm.c` | 1027 | `OPC_NO_OPND` | `#define OPC_NO_OPND(opc, flags) [INST_OPCODE_##opc] = {#opc, convert_inst, NO_OPND_INST, (flags), 0}` |
+| `drivers/mwv207/nir/mwv207_disasm.c` | 1028 | `OPC_3_SRCS_CC_ALU` | `#define OPC_3_SRCS_CC_ALU(opc, flags) [INST_OPCODE_##opc] = {#opc, convert_inst, TRI_SRCS_CC_ALU_INST, (flags)` |
+| `drivers/mwv207/nir/mwv207_disasm.c` | 1029 | `OPC_3_SRCS_ALU` | `#define OPC_3_SRCS_ALU(opc, flags) [INST_OPCODE_##opc] = {#opc, convert_inst, TRI_SRCS_ALU_INST, (flags), (0x1` |
+| `drivers/mwv207/nir/mwv207_disasm.c` | 1030 | `OPC_2_SRCS_SRC0_SRC1_ALU` | `#define OPC_2_SRCS_SRC0_SRC1_ALU(opc, flags) [INST_OPCODE_##opc] = {#opc, convert_inst, BIN_SRCS_SRC0_SRC1_ALU` |
+| `drivers/mwv207/nir/mwv207_disasm.c` | 1031 | `OPC_2_SRCS_SRC0_SRC1_CC_ALU` | `#define OPC_2_SRCS_SRC0_SRC1_CC_ALU(opc, flags) [INST_OPCODE_##opc] = {#opc, convert_inst, BIN_SRCS_SRC0_SRC1_` |
+| `drivers/mwv207/nir/mwv207_disasm.c` | 1032 | `OPC_2_SRCS_SRC0_SRC2_ALU` | `#define OPC_2_SRCS_SRC0_SRC2_ALU(opc, flags) [INST_OPCODE_##opc] = {#opc, convert_inst, BIN_SRCS_SRC0_SRC2_ALU` |
+| `drivers/mwv207/nir/mwv207_disasm.c` | 1033 | `OPC_2_SRCS_SRC1_SRC2_ALU` | `#define OPC_2_SRCS_SRC1_SRC2_ALU(opc, flags) [INST_OPCODE_##opc] = {#opc, convert_inst, BIN_SRCS_SRC1_SRC2_ALU` |
+| `drivers/mwv207/nir/mwv207_disasm.c` | 1034 | `OPC_1_SRC_SRC0_ALU` | `#define OPC_1_SRC_SRC0_ALU(opc, flags) [INST_OPCODE_##opc] = {#opc, convert_inst, UNA_SRC_SRC0_ALU_INST, (flag` |
+| `drivers/mwv207/nir/mwv207_disasm.c` | 1035 | `OPC_1_SRC_SRC1_ALU` | `#define OPC_1_SRC_SRC1_ALU(opc, flags) [INST_OPCODE_##opc] = {#opc, convert_inst, UNA_SRC_SRC1_ALU_INST, (flag` |
+| `drivers/mwv207/nir/mwv207_disasm.c` | 1036 | `OPC_1_SRC_SRC2_ALU` | `#define OPC_1_SRC_SRC2_ALU(opc, flags) [INST_OPCODE_##opc] = {#opc, convert_inst, UNA_SRC_SRC2_ALU_INST, (flag` |
+| `drivers/mwv207/nir/mwv207_disasm.c` | 1037 | `OPC_PACK` | `#define OPC_PACK(opc, flags) [INST_OPCODE_##opc] = {#opc, convert_inst, PACK_INST, (flags), (0x1 \| 0x2 \| 0x4)}` |
+| `drivers/mwv207/nir/mwv207_disasm.c` | 1038 | `OPC_SAMPLE` | `#define OPC_SAMPLE(opc, flags) [INST_OPCODE_##opc] = {#opc, convert_inst, SAMPLE_INST, (flags), (0x1 \| 0x2 \| 0` |
+| `drivers/mwv207/nir/mwv207_disasm.c` | 1039 | `OPC_LOAD` | `#define OPC_LOAD(opc, flags) [INST_OPCODE_##opc] = {#opc, convert_inst, LOAD_INST, (flags), (0x1 \| 0x2)}` |
+| `drivers/mwv207/nir/mwv207_disasm.c` | 1040 | `OPC_IMG_LOAD` | `#define OPC_IMG_LOAD(opc, flags) [INST_OPCODE_##opc] = {#opc, convert_inst, IMG_LOAD_INST, (1U<<2) \| (flags), ` |
+| `drivers/mwv207/nir/mwv207_disasm.c` | 1041 | `OPC_STORE` | `#define OPC_STORE(opc, flags) [INST_OPCODE_##opc] = {#opc, convert_inst, STORE_INST, (flags), (0x1 \| 0x2 \| 0x4` |
+| `drivers/mwv207/nir/mwv207_disasm.c` | 1042 | `OPC_IMG_STORE` | `#define OPC_IMG_STORE(opc, flags) [INST_OPCODE_##opc] = {#opc, convert_inst, IMG_STORE_INST, (1U<<2) \| (flags)` |
+| `drivers/mwv207/nir/mwv207_disasm.c` | 1043 | `OPC_IMG_ATOM` | `#define OPC_IMG_ATOM(opc, flags) [INST_OPCODE_##opc] = {#opc, convert_inst, IMG_ATOM_INST, (1U<<2) \| (flags), ` |
+| `drivers/mwv207/nir/mwv207_disasm.c` | 1044 | `OPC_STORE_ATTR` | `#define OPC_STORE_ATTR(opc, flags) [INST_OPCODE_##opc] = {#opc, convert_inst, STORE_ATTR_INST, (flags), (0x1 \|` |
+| `drivers/mwv207/nir/mwv207_disasm.c` | 1045 | `OPC_SELECT_MAP` | `#define OPC_SELECT_MAP(opc, flags) [INST_OPCODE_##opc] = {#opc, convert_inst, SELECT_MAP_INST, (flags), (0x1 \|` |
+| `drivers/mwv207/nir/mwv207_disasm.c` | 1046 | `OPC_BRANCH` | `#define OPC_BRANCH(opc, flags) [INST_OPCODE_##opc] = {#opc, convert_branch, DIRECT_BRANCH0_INST, (flags), (0x1` |
+| `drivers/mwv207/nir/mwv207_disasm.c` | 1047 | `OPC_CALL` | `#define OPC_CALL(opc, flags) [INST_OPCODE_##opc] = {#opc, convert_call, DIRECT_CALL_INST, (flags), (0x4)}` |
+| `drivers/mwv207/nir/mwv207_disasm.c` | 1048 | `OPC_LOOP` | `#define OPC_LOOP(opc, flags) [INST_OPCODE_##opc] = {#opc, convert_inst, LOOP_INST, (flags), (0x2)}` |
+| `drivers/mwv207/nir/mwv207_disasm.c` | 1049 | `OPC_CONV` | `#define OPC_CONV(opc, flags) [INST_OPCODE_##opc] = {#opc, convert_inst, CONV_INST, (flags), (0x2 \| 0x4)}` |
+| `drivers/mwv207/nir/mwv207_disasm.c` | 1050 | `OPC_SCATTER` | `#define OPC_SCATTER(opc, flags) [INST_OPCODE_##opc] = {#opc, convert_inst, SCATTER_INST, (flags), (0x2 \| 0x4)}` |
+| `drivers/mwv207/nir/mwv207_disasm.c` | 1051 | `OPC_CMPLX` | `#define OPC_CMPLX(opc, flags) [INST_OPCODE_##opc] = {#opc, convert_inst, CMPLX_INST, (flags), (0x1 \| 0x2 \| 0x4` |
+| `drivers/mwv207/nir/mwv207_disasm.c` | 1052 | `OPC_CLAMP0_MAX` | `#define OPC_CLAMP0_MAX(opc, flags) [INST_OPCODE_##opc] = {#opc, convert_clamp0_max, BIN_SRCS_SRC0_SRC1_ALU_CC_` |
+| `drivers/mwv207/nir/mwv207_disasm.c` | 1053 | `OPC_EXT_EMIT` | `#define OPC_EXT_EMIT(opc, flags) [0x7f + INST_EXT_OPCODE_##opc] = {#opc, convert_inst, EMIT_INST, (flags), (0x` |
+| `drivers/mwv207/nir/mwv207_disasm.c` | 1054 | `OPC_EXT_2_SRCS_SRC0_SRC1_ALU` | `#define OPC_EXT_2_SRCS_SRC0_SRC1_ALU(opc, flags) [0x7f + INST_EXT_OPCODE_##opc] = {#opc, convert_inst, BIN_SRC` |
+| `drivers/mwv207/nir/mwv207_disasm.c` | 1055 | `OPC_EXT_1_SRC_SRC0_ALU` | `#define OPC_EXT_1_SRC_SRC0_ALU(opc, flags) [0x7f + INST_EXT_OPCODE_##opc] = {#opc, convert_inst, UNA_SRC_SRC0_` |
+| `drivers/mwv207/nir/mwv207_disasm.c` | 1056 | `OPC_SAMPLE_EXT` | `#define OPC_SAMPLE_EXT(opc, flags) [0x7f + INST_EXT_OPCODE_##opc] = {#opc, convert_inst, SAMPLE_EXT_INST, (fla` |
+| `drivers/mwv207/nir/mwv207_disasm.c` | 1057 | `OPC_EXT_LOAD` | `#define OPC_EXT_LOAD(opc, flags) [0x7f + INST_EXT_OPCODE_##opc] = {#opc, convert_inst, LOAD_INST, (flags), (0x` |
 | `drivers/mwv207/nir/mwv207_disasm.h` | 31 | `PRINT` | `#define PRINT(format, ...) print_with_update_length(print_length, format, ##__VA_ARGS__)` |
 | `drivers/mwv207/nir/mwv207_emit.h` | 32 | `emit` | `#define emit(type, args...) mwv207_emit_##type(c, args)` |
 | `drivers/mwv207/nir/mwv207_emit.h` | 34 | `DST_REG` | `#define DST_REG(idx, m)   ((struct mwv207_inst_dst){.use = 1, .reg = idx, .write_mask = m})` |
@@ -1283,7 +1285,7 @@
 | `drivers/mwv207/nir/mwv207_emit.h` | 42 | `UNIFORM` | `#define UNIFORM(x)      CONST_VAL(MWV207_IMMEDIATE_UNIFORM, x)` |
 | `drivers/mwv207/nir/mwv207_emit.h` | 43 | `TEXSCALE` | `#define TEXSCALE(x, i)  CONST_VAL(MWV207_IMMEDIATE_TEXRECT_SCALE_X + (i), x)` |
 | `drivers/mwv207/nir/mwv207_emit.h` | 44 | `TEXSIZE` | `#define TEXSIZE(x, i)   CONST_VAL(MWV207_UNIFORM_TEXTURE_WIDTH + (i), x)` |
-| `drivers/mwv207/nir/mwv207_lower.c` | 1532 | `do_by_default` | `#define do_by_default(OPT) (debug_get_bool_option("OPT_"#OPT, false))` |
+| `drivers/mwv207/nir/mwv207_lower.c` | 1562 | `do_by_default` | `#define do_by_default(OPT) (debug_get_bool_option("OPT_"#OPT, false))` |
 | `drivers/mwv207/nir/mwv207_opcode.c` | 42 | `OPCT` | `#define OPCT(nir, op, src, cond, type, round, eop) [nir_op_##nir] = { \` |
 | `drivers/mwv207/nir/mwv207_opcode.c` | 50 | `OPC` | `#define OPC(nir, op, src, cond) OPCT(nir, op, src, cond, F32, DEFAULT, NONE)` |
 | `drivers/mwv207/nir/mwv207_opcode.c` | 51 | `IOPC` | `#define IOPC(nir, op, src, cond) OPCT(nir, op, src, cond, S32, DEFAULT, NONE)` |

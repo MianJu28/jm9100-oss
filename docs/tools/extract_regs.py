@@ -9,10 +9,17 @@ per-register report.
 import os, re, sys, json
 from collections import defaultdict
 
+# 2026-11-02 起 UMD 适配代码独立存放在 src/mwv207-umd/（oh-mesa 里是符号链接，
+# os.walk 不跟链接）。路径按脚本位置推导，不再硬编码仓库绝对路径。
+HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.normpath(os.path.join(HERE, '..'))            # docs/
+REPO = os.path.normpath(os.path.join(ROOT, '..'))            # 仓库根
+SRC = os.path.join(REPO, 'src', 'mwv207-umd')
 ROOTS = [
-    "/home/admin/jm9100-oss/src/oh-mesa/User_source_code/mesa-24.1.2/src/gallium/drivers/mwv207",
-    "/home/admin/jm9100-oss/src/oh-mesa/User_source_code/mesa-24.1.2/src/gallium/winsys/mwv207",
+    os.path.join(SRC, 'drivers', 'mwv207'),
+    os.path.join(SRC, 'winsys', 'mwv207'),
 ]
+OUT = os.path.join(ROOT, 'registers', 'command-registers.json')
 MACROS = ["MWV207_EMITFS", "MWV207_EMITS", "MWV207_EMITF", "MWV207_EMIT", "MWV207_STALL"]
 
 def scan_call(text, start):
@@ -80,7 +87,7 @@ for root in ROOTS:
                 regs[reg.lower()].append({"file": rel, "line": line, "macro": macro, "value": value})
 
 out = {k: v for k, v in sorted(regs.items())}
-json.dump(out, open("/home/admin/jm9100-oss/docs/registers/command-registers.json", "w"), indent=1, ensure_ascii=False)
+json.dump(out, open(OUT, "w"), indent=1, ensure_ascii=False)
 
 print("scanned files:", files)
 print("distinct registers:", len(out))

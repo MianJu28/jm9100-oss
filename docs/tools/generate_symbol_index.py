@@ -9,9 +9,14 @@
 """
 import os, re, collections
 
-SRC = '/home/admin/jm9100-oss/src/oh-mesa/User_source_code/mesa-24.1.2/src/gallium'
+# 2026-11-02 起 UMD 适配代码独立存放在 src/mwv207-umd/；路径按脚本位置推导。
+# 输出的相对路径仍是 drivers/mwv207/... 与 winsys/mwv207/...（以新 SRC 为基准）。
+HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.normpath(os.path.join(HERE, '..'))            # docs/
+REPO = os.path.normpath(os.path.join(ROOT, '..'))            # 仓库根
+SRC = os.path.join(REPO, 'src', 'mwv207-umd')
 SUBS = ('drivers/mwv207', 'winsys/mwv207')
-OUT = '/home/admin/jm9100-oss/docs/api/09-SYMBOL-INDEX.md'
+OUT = os.path.join(ROOT, 'api', '09-SYMBOL-INDEX.md')
 
 TYPE_RE = re.compile(r'^(?:static\s+|inline\s+|extern\s+|const\s+)*'
                      r'(?:struct\s+\w+|union\s+\w+|enum\s+\w+|unsigned|signed|void|char|short|int|long|'

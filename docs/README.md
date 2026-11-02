@@ -20,7 +20,7 @@
 | [06-KNOWN-ISSUES.md](api/06-KNOWN-ISSUES.md) | 已知缺陷本树复核状态、winsys 新观察 O1–O12、本轮定位的 3 个问题、E/F/G/H/I 五组通读发现 |
 | [07-WINSYS-AUDIT.md](api/07-WINSYS-AUDIT.md) | O2/O3 真实影响面追踪与最小修复建议 |
 | [08-KMD.md](api/08-KMD.md) | **KMD 内核侧**：probe/remove/PM 次序、6 个 ioctl 实现、TTM 搬运路径、调度器与 fence、中断 demux、KMS/CRTC、K 系列复核与新增 N1–N14 |
-| [09-SYMBOL-INDEX.md](api/09-SYMBOL-INDEX.md) | **符号索引**：666 个函数定义、194 个结构体/枚举、182 个函数宏（含签名与 file:line） |
+| [09-SYMBOL-INDEX.md](api/09-SYMBOL-INDEX.md) | **符号索引**：668 个函数定义、194 个结构体/枚举、182 个函数宏（含签名与 file:line） |
 | [10-HARDWARE-BLOCKS.md](api/10-HARDWARE-BLOCKS.md) | **硬件功能块总览**：1392 个寄存器按块统计、地址段分布、功能推断与驱动使用情况 |
 | [registers/REGISTERS.md](registers/REGISTERS.md) | **寄存器参考**：驱动寄存器号 ↔ 厂商寄存器映射、覆盖率、未映射清单 |
 | [registers/REGISTERS-FIELDS.md](registers/REGISTERS-FIELDS.md) | 每个驱动所用寄存器的字段位域、命名取值、驱动写入点 |
