@@ -229,3 +229,21 @@
   `umd verify` 新增 `[OK] CDI 挂载源存在` 断言，防止回归。
 - 验证：三个玲珑应用均可启动；`eglinfo -B` 只枚举 1 个 platform device；
   火狐 WebRender 页面渲染不受影响（直方图与修复后一致）。
+
+## 火狐 WebGL 页仍未到 vsync 上限（性能，剩余项）
+
+- 现状（r9，零 env）：CSS 动画页 **96.6 FPS / 10.35ms**（已到 100Hz 面板上限），
+  WebGL 动画页 **42.0–44.5 FPS / 23.5ms**（llvmpipe 同条件 28.5 FPS / 35.05ms，
+  即我方 1.5–2.0×）。
+- 已修的两个大头（见 `reports/FF-RENDER-20261102.md` §13、`patches/0018`）：
+  ① 每帧重编译 VS+FS（约 100 次/秒、每次 ~1.4ms）——根因是
+  `mwv207_set_current_shader()` 拿 `ctx->dirty` 当"状态变过"的判据，而
+  `mwv207_submit()` 末尾把 `dirty` 重置成 `MWV207_DIRTY_ALL`；改为把四个
+  状态指纹并入 `state->shader_list` 的缓存查找条件。
+  ② 128 位纹理 split/merge 对 WC 显存逐标量读写（~100MB/s）——改为逐行
+  `memcpy` 中转，平均 2192µs → 258µs。
+- 剩余瓶颈的判据：WebGL 页 5 秒内**总 CPU 只有 120–180ms（≈2.4–3.6% 单核）**，
+  说明剩下的时间不是驱动在算，而是 WebRender 自身的帧节奏/合成与呈现等待。
+  下一步应查 WebRender 的 `RenderBackend`/`Compositor` 帧调度，而不是继续优化
+  GL 侧。
+- 参考：`reports/FF-RENDER-20261102.md` §13。
