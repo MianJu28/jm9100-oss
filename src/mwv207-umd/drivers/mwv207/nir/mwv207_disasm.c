@@ -640,7 +640,7 @@ decode_inst_type(enum kinds_of_inst kind_of_inst, struct instr *inst)
    uint32_t inst_type;
 
    /* FIX(jm9100-oss): 原公式 inst_type = bit0 | (bit1_2 << 1) 与汇编器
-    * mwv207_assemble() (nir/mwv207_common.c:277-340) 的编码相反:
+    * mwv207_assemble() (nir/mwv207_common.c:264-326) 的编码相反:
     * assemble 把 type_bit2=(type>>2)&1 写进 dword1[21] (即 inst_type_bit0
     * 所在位), 把 type_bit01=type&3 写进 dword2[31:30] (即 inst_type_bit1_2)。
     * 位序交换导致 type!=0 时 _str_inst_type[] 打印全错
