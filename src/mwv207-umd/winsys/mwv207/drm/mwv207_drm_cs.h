@@ -32,6 +32,6 @@
 
 void mwv207_cs_init_function(struct mwv207_winsys *ws);
 
-void mwv207_cs_destory(struct mwv207_winsys *ws);
+void mwv207_cs_destroy(struct mwv207_winsys *ws);
 
 #endif

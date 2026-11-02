@@ -130,8 +130,11 @@ mwv207_context_vertex_init(struct pipe_context *pctx);
 void
 mwv207_context_blend_init(struct pipe_context *pctx);
 
-void
-mwv207_context_zsa_init(struct pipe_context *pctx);
+/* FIX(jm9100-oss): E9 —— 删掉 mwv207_context_zsa_init() 的声明。
+ * 全树没有任何定义、也没有任何调用者（zsa 相关状态是在
+ * mwv207_state.c 的 mwv207_context_state_init() 里直接赋回调的，
+ * 只有 vertex/blend 有独立的 _init）。留着声明会让人误以为存在
+ * 一个未接入的初始化步骤；若真有人照着调用会在链接期失败。 */
 
 void
 mwv207_set_framebuffer_state(struct pipe_context *pctx,

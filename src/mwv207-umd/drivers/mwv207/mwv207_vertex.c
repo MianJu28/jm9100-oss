@@ -428,7 +428,7 @@ mwv207_config_uniform(struct mwv207_context *ctx, enum pipe_shader_type stage)
       case MWV207_IMMEDIATE_ATOMIC_BO:
          unifrom[i % 4] = get_atomic_offset(ctx, stage, val, (cmd_buf + (i % 4) + 1), 0);
          break;
-      case MWV207_IMMEDIATE_GLOBAL_MEMEORY_OFFSET:
+      case MWV207_IMMEDIATE_GLOBAL_MEMORY_OFFSET:
          unifrom[i % 4] = get_global_offset(ctx, val, (cmd_buf + (i % 4) + 1), 0);
          break;
 
@@ -545,7 +545,7 @@ mwv207_emit_kernel_params(struct mwv207_context *ctx, const struct pipe_grid_inf
       case MWV207_IMMEDIATE_WORK_GROUP_SIZE:
          unifrom[i % 4] = info->block[val];
          break;
-      case MWV207_IMMEDIATE_GLOBAL_MEMEORY_OFFSET:
+      case MWV207_IMMEDIATE_GLOBAL_MEMORY_OFFSET:
          if (const_count != 0)
             val = bit_scann(val, shader->ubo_mask);
          unifrom[i % 4] = get_global_offset(ctx, val, (cmd_buf + (i % 4) + 1), 0);

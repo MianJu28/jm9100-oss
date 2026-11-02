@@ -137,6 +137,40 @@ mwv207_ws_init(struct mwv207_winsys *ws)
    args.op = 0x0;
    err = drmCommandWriteRead(ws->fd, 0x4, &args, sizeof(args));
 
+   /* FIX(jm9100-oss): 恢复 GBM/Wayland 平台。
+    * 我们这 6 个私有 ioctl（0x0..0x5 号 drmCommand）在 KMD 里声明成
+    * DRM_AUTH | DRM_RENDER_ALLOW（src/kernel-6.6/mwv207_drv.c），
+    * drm_ioctl_permit() 只放行"已认证的 card 客户端或 render 客户端"。
+    * X11/EGL 桌面走 DRI3 拿到的是 renderD128，天然放行；
+    * 而 GBM 平台（egl_dri2 的 platform_gbm）交给 winsys 的 fstat 是
+    * /dev/dri/card0，未经认证 → 这里恒返回 -EACCES，于是
+    * "mwv207: failed to create kernel context, fd=5 err=-13" 之后
+    * gbm 后端整体不可用。实测：renderD128 上 ioctl ret=0，card0 上 ret=-1 errno=13。
+    * 修法：碰到 -EACCES 就换成同一张卡对应的 render 节点重试（只换我们自己
+    * dup 出来的 ws->fd，不动调用者的 fd）。X11 路径 fd 本来就是 render
+    * 节点，不会进这个分支，行为不变。 */
+   if (err == -EACCES) {
+      char *rname = drmGetRenderDeviceNameFromFd(ws->fd);
+      if (rname) {
+         int rfd = open(rname, O_RDWR | O_CLOEXEC);
+         if (rfd >= 0) {
+            int nfd = fcntl(rfd, F_DUPFD_CLOEXEC, 3);
+            close(rfd);
+            if (nfd >= 0) {
+               close(ws->fd);
+               ws->fd = nfd;
+               memset(&args, 0, sizeof(args));
+               args.op = 0x0;
+               err = drmCommandWriteRead(ws->fd, 0x4, &args, sizeof(args));
+               if (err == 0)
+                  fprintf(stderr, "mwv207: 私有 ioctl 被拒(EACCES)，"
+                                  "已改用 render 节点 %s\n", rname);
+            }
+         }
+         free(rname);
+      }
+   }
+
    if (err < 0) {
       fprintf(stderr, "mwv207: failed to create kernel context, fd=%d err=%d\n",
               ws->fd, err);

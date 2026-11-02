@@ -131,6 +131,9 @@ struct mwv207_shader {
    int inner_outer_count;
 
    int ps_color_out_reg[8];
+   /* FIX(jm9100-oss): F.3.3 —— 已设置的颜色输出个数（1..8）。
+    * 原来 dump 时靠 "reg != 0" 判终止，而 r0 是合法寄存器。 */
+   int ps_color_out_num;
    int ps_depth_out_reg;
    bool useFragCoord;
    bool usePointCoord;

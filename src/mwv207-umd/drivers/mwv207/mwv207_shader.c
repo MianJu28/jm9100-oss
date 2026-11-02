@@ -897,6 +897,8 @@ mwv207_create_shader(struct mwv207_shader_state *state, struct mwv207_shader_key
    shader->vs_pointsize_out_reg = -1;
 
    memset(&shader->ps_color_out_reg, 0, sizeof(shader->ps_color_out_reg));
+   /* FIX(jm9100-oss): F.3.3 —— 每次编译前清零颜色输出个数。 */
+   shader->ps_color_out_num = 0;
    memset(&shader->ubo_mask, 0, sizeof(shader->ubo_mask));
    shader->ps_depth_out_reg = -1;
 

@@ -1304,8 +1304,10 @@ mwv207_emit_output(struct mwv207_compile *c,
       switch (var->data.location) {
       case FRAG_RESULT_COLOR:
       case FRAG_RESULT_DATA0:
-         if (var->data.index == 0)
+         if (var->data.index == 0) {
             c->shader->ps_color_out_reg[0] = src.reg;
+            c->shader->ps_color_out_num = MAX2(c->shader->ps_color_out_num, 1);
+         }
          break;
 
       case FRAG_RESULT_DATA1:
@@ -1316,6 +1318,9 @@ mwv207_emit_output(struct mwv207_compile *c,
       case FRAG_RESULT_DATA6:
       case FRAG_RESULT_DATA7:
          c->shader->ps_color_out_reg[var->data.location - FRAG_RESULT_DATA0] = src.reg;
+         c->shader->ps_color_out_num =
+            MAX2(c->shader->ps_color_out_num,
+                 (int) (var->data.location - FRAG_RESULT_DATA0) + 1);
          break;
 
       case FRAG_RESULT_DEPTH:
@@ -1664,7 +1669,7 @@ emit_intrinsic(struct mwv207_compile *c, nir_intrinsic_instr *intr)
          .opcode = 0x32,
          .type = get_alu_inst_type(nir_type_uint, intr->def.bit_size),
          .dst = mwv207_dest(c, &intr->def, &dst_swiz),
-         .src[0] = mwv207_const(c, &CONST_VAL(MWV207_IMMEDIATE_GLOBAL_MEMEORY_OFFSET, index), 1),
+         .src[0] = mwv207_const(c, &CONST_VAL(MWV207_IMMEDIATE_GLOBAL_MEMORY_OFFSET, index), 1),
          .src[1] = mwv207_src(c, &intr->src[1]),
       };
 
@@ -1682,7 +1687,7 @@ emit_intrinsic(struct mwv207_compile *c, nir_intrinsic_instr *intr)
          .dst = {
             .write_mask = (1 << num_components) - 1,
          },
-         .src[0] = mwv207_const(c, &CONST_VAL(MWV207_IMMEDIATE_GLOBAL_MEMEORY_OFFSET, index), 1),
+         .src[0] = mwv207_const(c, &CONST_VAL(MWV207_IMMEDIATE_GLOBAL_MEMORY_OFFSET, index), 1),
          .src[1] = mwv207_src(c, &intr->src[2]),
          .src[2] = mwv207_src(c, &intr->src[0]),
       };

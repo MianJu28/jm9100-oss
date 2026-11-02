@@ -124,10 +124,21 @@ mwv207_drm_cmdbuf_create(struct mwv207_winsys *ws)
 {
    struct mwv207_cmd *cmd = CALLOC_STRUCT(mwv207_cmd);
 
+   /* FIX(jm9100-oss): W12 —— 四处分配都要判空，并把原来的
+    * assert(cmd->buf) 换成显式错误返回。release 构建会定义 NDEBUG，
+    * assert 被整个编译掉，届时分配失败会一路带到 GPU 提交阶段才炸，
+    * 现场完全看不出是内存不足。调用方（mwv207_create_cmd）已 assert
+    * 返回值非空，故这里返回 NULL 即可。 */
+   if (!cmd)
+      return NULL;
+
    cmd->ws = ws;
 
    cmd->buf = (uint8_t *)MALLOC(0x8000);
-   assert(cmd->buf);
+   if (!cmd->buf) {
+      FREE(cmd);
+      return NULL;
+   }
 
    cmd->size = 0x8000;
    cmd->offset = 0;
@@ -142,6 +153,15 @@ mwv207_drm_cmdbuf_create(struct mwv207_winsys *ws)
    cmd->mwv207_bos = CALLOC(cmd->nr_max_bos, sizeof(struct mwv207_bo *));
    cmd->bos = CALLOC(cmd->nr_max_bos, sizeof(struct drm_mwv207_bo_acc));
 
+   if (!cmd->relocs || !cmd->mwv207_bos || !cmd->bos) {
+      FREE(cmd->relocs);
+      FREE(cmd->mwv207_bos);
+      FREE(cmd->bos);
+      FREE(cmd->buf);
+      FREE(cmd);
+      return NULL;
+   }
+
    cmd->mwv207_dats.size = 0;
    cmd->mwv207_dats.nr_relocs = 0;
    cmd->nr_dats = 0;
@@ -150,7 +170,7 @@ mwv207_drm_cmdbuf_create(struct mwv207_winsys *ws)
 }
 
 static void
-mwv207_drm_cmdbuf_destory(struct mwv207_winsys *ws, struct mwv207_cmd *cmd)
+mwv207_drm_cmdbuf_destroy(struct mwv207_winsys *ws, struct mwv207_cmd *cmd)
 {
    for (int i = 0; i <cmd->nr_bos; i++)
       cmd->ws->bo_reference(cmd->ws, &cmd->mwv207_bos[i], NULL);
@@ -218,7 +238,7 @@ mwv207_drm_cmdbuf_add_bo(struct mwv207_cmd *cmd, struct mwv207_bo *bo, uint32_t 
 static int
 mwv207_drm_cmdbuf_add_dat(struct mwv207_cmd *cmd, struct cmd_dat *src_dat)
 {
-   struct cmd_dat_arrary *dest_dat = &cmd->mwv207_dats;
+   struct cmd_dat_array *dest_dat = &cmd->mwv207_dats;
 
    if (cmd->nr_dats == 0) {
       dest_dat->size = 0;
@@ -350,7 +370,7 @@ mwv207_drm_cmdbuf_print(struct mwv207_winsys *ws, struct mwv207_cmd *cmd)
    printf("================================================\n");
 }
 
-static void mwv207_print_dat(struct cmd_dat_arrary *dat)
+static void mwv207_print_dat(struct cmd_dat_array *dat)
 {
    for (int i = 0; i < dat->nr_relocs; ++i)
       printf("reloc[%d] ids %d offset %d\n", i, dat->relocs[i].idx, dat->relocs[i].cmd_offset);
@@ -425,16 +445,30 @@ mwv207_drm_cmdbuf_commit(struct mwv207_winsys *ws,
 
    err = drmCommandWriteRead(ws->fd, 0x5, &submit, sizeof(submit));
 
-   while (err == -EBUSY) {
+   /* FIX(jm9100-oss): O4 —— 原来的 -EBUSY 重试是没有上限的 busy-loop，
+    * 内核一旦因为队列满而长期返回 -EBUSY（例如上一个 job 卡住），这里就
+    * 永远转下去，用户态表现为 firefox/游戏直接冻住且无法 Ctrl-C。
+    * 另外每次重试都会让 KMD 重新走一遍 submit 路径；如果内核已经
+    * fd_install 过 fence_fd 才失败，重试会把它覆盖掉 → fd 泄漏。
+    * 改成有上限（约 2 秒）并直接放弃，同时把错误上报给调用方。 */
+   for (int retry = 0; err == -EBUSY && retry < 2000; retry++) {
       usleep(1000);
       err = drmCommandWriteRead(ws->fd, 0x5, &submit, sizeof(submit));
-
-      printf("retry submit\n");
    }
 
    if (err) {
-      printf("%s ret : %d\n", __FUNCTION__, err);
+      fprintf(stderr, "%s: submit failed: %d (%s)\n",
+              __func__, err, strerror(-err));
       mwv207_drm_context_print(cmd);
+      /* 失败时 KMD 可能已经 fd_install 过 out-fence（KMD 的
+       * mwv207_submit_commit() 是"先 fd_install 再 push job"，push 失败
+       * 时 fd 已经装好却没人接管）→ 这里主动关掉避免泄漏。
+       * 注意只能关"KMD 新装的那个"：如果本次带了 in-fence，
+       * submit.fence_fd 上原本就是调用者的输入 fd，关它会直接破坏
+       * 调用者的 fence。判据是"请求了 out-fence 且值不等于输入 fd"。 */
+      if (out_fence_fd && submit.fence_fd >= 0 &&
+          (in_fence_fd < 0 || submit.fence_fd != (unsigned) in_fence_fd))
+         close(submit.fence_fd);
    }
 
    if (!err && out_fence_fd)
@@ -461,7 +495,7 @@ void mwv207_cs_init_function(struct mwv207_winsys *ws)
    ws->fence_accumulate = mwv207_drm_fence_accumulate;
 
    ws->cmdbuf_create     = mwv207_drm_cmdbuf_create;
-   ws->cmdbuf_destory    = mwv207_drm_cmdbuf_destory;
+   ws->cmdbuf_destroy    = mwv207_drm_cmdbuf_destroy;
    ws->cmdbuf_add_bo     = mwv207_drm_cmdbuf_add_bo;
    ws->cmdbuf_add_dat    = mwv207_drm_cmdbuf_add_dat;
    ws->cmdbuf_add_relloc = mwv207_drm_cmdbuf_add_relloc;

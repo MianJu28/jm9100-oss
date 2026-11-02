@@ -154,6 +154,14 @@ struct mwv207_context {
    uint32_t dirty;
    int      in_fence_fd;
 
+   /* FIX(jm9100-oss): E2 —— 绘制序号必须跟着 context 走。
+    * 原来 mwv207_config_draw() 里写的是函数内 static uint32_t draw_count，
+    * 被所有 context 共享：多 context（应用多线程 + 驱动内部 blit/query
+    * context）时序号会互相串，且每帧递增无上限。硬件侧 0xE27
+    * (MWV207REG_DRAW_ID) 是 32 位自由计数器，语义上就是"这次绘制是第几次"，
+    * 每个 context 各自计数即可。 */
+   uint32_t draw_count;
+
    /* 影响着色器编译的状态"指纹"。mwv207_submit() 会把 ctx->dirty 重置成
     * MWV207_DIRTY_ALL（新 cmdbuf 必须重发全部状态），因此 dirty 不能用来
     * 判断"某个状态是否真的变了"——用它做判据会导致每次绘制都重编译着色器。

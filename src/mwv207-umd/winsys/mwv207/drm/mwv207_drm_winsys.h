@@ -150,7 +150,7 @@ struct cmd_dat {
    int nr_relocs;
 };
 
-struct cmd_dat_arrary {
+struct cmd_dat_array {
    uint8_t *data;
    uint32_t size;
    int max_size;
@@ -177,7 +177,7 @@ struct mwv207_cmd {
    int nr_bos;
    int nr_max_bos;
 
-   struct cmd_dat_arrary mwv207_dats;
+   struct cmd_dat_array mwv207_dats;
    struct drm_mwv207_submit_cmd_dat dats;
    int    nr_dats;
 
@@ -250,7 +250,7 @@ struct mwv207_winsys {
 
    struct mwv207_cmd *(*cmdbuf_create)(struct mwv207_winsys *ws);
 
-   void (*cmdbuf_destory)(struct mwv207_winsys *ws, struct mwv207_cmd *cmd);
+   void (*cmdbuf_destroy)(struct mwv207_winsys *ws, struct mwv207_cmd *cmd);
 
    int (*cmdbuf_add_bo)(struct mwv207_cmd *cmd, struct mwv207_bo *bo, uint32_t flags);
 

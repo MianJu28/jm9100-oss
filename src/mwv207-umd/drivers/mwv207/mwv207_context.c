@@ -126,7 +126,7 @@ mwv207_context_destroy(struct pipe_context *pctx)
    util_set_vertex_buffers_count(ctx->vertex_buffer,
       &ctx->num_vertex_buffers, NULL, 0, false);
 
-   mwv207_context_query_destory(pctx);
+   mwv207_context_query_destroy(pctx);
 
    util_unreference_framebuffer_state(&ctx->fb_state);
 
@@ -138,9 +138,9 @@ mwv207_context_destroy(struct pipe_context *pctx)
 
    util_blitter_destroy(ctx->blitter);
 
-   ctx->ws->cmdbuf_destory(ctx->ws, ctx->cmd);
+   ctx->ws->cmdbuf_destroy(ctx->ws, ctx->cmd);
 
-   ctx->ws->cmdbuf_destory(ctx->ws, ctx->dma);
+   ctx->ws->cmdbuf_destroy(ctx->ws, ctx->dma);
 
    if (ctx->in_fence_fd >= 0) {
       close(ctx->in_fence_fd);

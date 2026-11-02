@@ -885,7 +885,9 @@ mwv207_config_draw(struct mwv207_context *ctx,
                    const struct pipe_draw_start_count_bias *draws,
                    unsigned num_draws)
 {
-   static uint32_t draw_count = 0;
+   /* FIX(jm9100-oss): E2 —— 见 include/mwv207_context.h 的 draw_count 注释。
+    * 原来的函数内 static 会让所有 context 共享同一个计数器。 */
+   uint32_t draw_count = ctx->draw_count;
    uint32_t count = draws->count;
    uint32_t offset = draws->start;
    uint32_t draw_mode = 0x0;
@@ -905,6 +907,7 @@ mwv207_config_draw(struct mwv207_context *ctx,
       MWV207_EMIT(cmd_buf, 0xE03, (ALIGN_BIT((uint32_t) (ENABLE), 0x4) & (0x10)));
 
    MWV207_EMIT(cmd_buf, 0xE27, draw_count++);
+   ctx->draw_count = draw_count;
 
    MWV207_EMIT(cmd_buf, 0xE02, (ALIGN_BIT((uint32_t) (0x5), 0x0) & (0x1F)) |
       (ALIGN_BIT((uint32_t) (0x7), 0x8) & (0x1F00)));
@@ -1009,17 +1012,25 @@ mwv207_config_other(struct mwv207_context *ctx)
             (ALIGN_BIT((uint32_t) (true), 0x1A) & (0x4000000)) |
             (ALIGN_BIT((uint32_t) (true), 0x18) & (0x1000000)));
       } else {
-         struct mwv207_shader *fs = ctx->shader_states[PIPE_SHADER_FRAGMENT]->current;
-         bool use_w = fs->useFragCoord;
+         /* FIX(jm9100-oss): E4 —— 没有深度附件时也要用到 FS 的 useFragCoord
+          * 位，但原来直接解引用 ctx->shader_states[PIPE_SHADER_FRAGMENT]。
+          * 该指针在 "只设了 framebuffer 还没 bind_fs" 的窗口内可以为空
+          * （例如 clear 之后紧跟的第一次绘制、或应用先 FBO 再 shader 的
+          * 顺序），此时是空指针解引用。同一函数上面几行的 ps_modify_z
+          * 已经用了 && 短路做同样的保护，这里照抄。 */
+         struct mwv207_shader_state *fs_state = ctx->shader_states[PIPE_SHADER_FRAGMENT];
+         struct mwv207_shader *fs = fs_state ? fs_state->current : NULL;
+         bool use_w = fs ? fs->useFragCoord : false;
 
-         if (ctx->shader_states[PIPE_SHADER_GEOMETRY])
+         if (ctx->shader_states[PIPE_SHADER_GEOMETRY] &&
+             ctx->shader_states[PIPE_SHADER_GEOMETRY]->current)
             use_w |= ctx->shader_states[PIPE_SHADER_GEOMETRY]->current->gs_use_layer;
 
          MWV207_EMIT(cmd_buf, 0x382, ra_control |
             (ALIGN_BIT(0x1, 0x1E) & (0xC0000000)) |
             (ALIGN_BIT((uint32_t) (DISABLE), 0x1C) & (0x30000000)) |
             (ALIGN_BIT((uint32_t) (use_w), 0x1A) & (0x4000000)) |
-            (ALIGN_BIT((uint32_t) (fs->useFragCoord), 0x18) & (0x1000000)));
+            (ALIGN_BIT((uint32_t) (fs ? fs->useFragCoord : false), 0x18) & (0x1000000)));
       }
    }
 

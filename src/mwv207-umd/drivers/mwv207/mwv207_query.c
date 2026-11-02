@@ -287,9 +287,24 @@ mwv207_get_query_result(struct pipe_context *pctx,
    case PIPE_QUERY_PRIMITIVES_GENERATED:
       result->u64 = results[0];
       break;
+   case PIPE_QUERY_SO_STATISTICS:
+   case PIPE_QUERY_PIPELINE_STATISTICS:
+   case PIPE_QUERY_PIPELINE_STATISTICS_SINGLE:
    default:
-      printf("unhangled query type: %s\n", util_str_query_type(query->type, true));
-      unreachable("unexpected query type");
+      /* FIX(jm9100-oss): E7 —— 这几类查询的 begin_query 只 break、不发射任何
+       * 寄存器（硬件侧没有对应的计数器），所以这里根本拿不到数据。
+       * 原实现落到 default 的 unreachable()，release 构建下 unreachable
+       * 是 __builtin_unreachable()，等于把"不支持"变成未定义行为 ——
+       * 一旦应用真的用 GL_ARB_pipeline_statistics_query，就是随机崩溃。
+       * 正确做法是按 Gallium 契约返回 false（表示"结果不可用"），
+       * 上层 st/mesa 会把它报成 GL_QUERY_RESULT_AVAILABLE = 0，
+       * 应用拿到的是合法的"暂无结果"，不会崩。
+       * result 已在 switch 之前 util_query_clear_result() 清零，这里只需
+       * 归还 BO 映射并复位槽位计数。 */
+      memset(results, 0, 64 * query->query_id);
+      ctx->ws->bo_unmap(ctx->ws, query->bo);
+      query->query_id = 0;
+      return false;
    }
 
    memset(results, 0, 64 * query->query_id);
@@ -406,7 +421,7 @@ mwv207_context_query_init(struct pipe_context *pctx)
 }
 
 void
-mwv207_context_query_destory(struct pipe_context *pctx)
+mwv207_context_query_destroy(struct pipe_context *pctx)
 {
    struct mwv207_context *ctx = mwv207_context(pctx);
 

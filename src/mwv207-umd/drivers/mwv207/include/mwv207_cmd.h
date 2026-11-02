@@ -39,7 +39,7 @@ struct mwv207_context;
 
 enum cache_mask {
    CACHE_TEXTURE_L2       = 1 << 0,
-   CACHE_TEXUTRE_L1       = 1 << 1,
+   CACHE_TEXTURE_L1       = 1 << 1,
    CACHE_TEXTURE_DESC     = 1 << 2,
    CACHE_VST_L2           = 1 << 3,
    CACHE_VST_L1           = 1 << 4,
@@ -53,7 +53,7 @@ enum cache_mask {
    CACHE_L2               = 1 << 12,
    CACHE_VERTEX_DATA      = 1 << 13,
 
-   CACHE_TEXTURE_DATA     = CACHE_TEXTURE_L2 | CACHE_TEXUTRE_L1,
+   CACHE_TEXTURE_DATA     = CACHE_TEXTURE_L2 | CACHE_TEXTURE_L1,
    CACHE_TEXTURE_ALL      = CACHE_TEXTURE_DATA | CACHE_TEXTURE_DESC,
    CACHE_VST_DATA         = CACHE_VST_L2 | CACHE_VST_L1,
    CACHE_VST_ALL          = CACHE_VST_DATA | CACHE_VST_DESC,

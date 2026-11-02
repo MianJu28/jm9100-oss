@@ -1246,7 +1246,10 @@ mwv207_disasm(uint32_t *dwords, int sizedwords)
 {
    uint32_t i;
 
-   assert((sizedwords % 2) == 0);
+   /* FIX(jm9100-oss): F.3.2 —— 断言写的是 %2，但下面循环步长是 4，
+    * 非 4 对齐的 sizedwords（例如截断的 shader、或只 dump 前若干条时）
+    * 会在最后一次迭代越界读 3 个 dword。改成 %4 与循环一致。 */
+   assert((sizedwords % 4) == 0);
 
    for (i = 0; i < sizedwords; i += 4)
       convert_and_print_inst(&dwords[i], i / 4);
@@ -1306,7 +1309,10 @@ mwv207_dump_shader_nir(const struct mwv207_shader *shader)
       printf("  vs_pointsize_out_reg=%i\n", shader->vs_pointsize_out_reg);
       printf("  vs_load_balancing=0x%08x\n", shader->vs_load_balancing);
    } else {
-      for (int idx = 0; idx < 8 && shader->ps_color_out_reg[idx] != 0; idx++)
+      /* FIX(jm9100-oss): F.3.3 —— 原来用 "!= 0" 当终止条件，但 0 是合法
+       * 寄存器号（r0）。只要 RT0 的颜色输出落在 r0，后面的 RT1..RT7 就都不会
+       * 打印。改用编译期记录的个数。 */
+      for (int idx = 0; idx < shader->ps_color_out_num; idx++)
          printf("  ps_color_out_reg=%i\n", shader->ps_color_out_reg[idx]);
 
       printf("  ps_depth_out_reg=%i\n", shader->ps_depth_out_reg);

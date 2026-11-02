@@ -52,7 +52,7 @@ mwv207_clean_up_buffer_managers(struct mwv207_winsys *ws)
 }
 
 static void
-mwv207_drm_bo_destory(struct mwv207_winsys *ws,
+mwv207_drm_bo_destroy(struct mwv207_winsys *ws,
                       struct mwv207_bo *bo)
 {
    struct drm_gem_close args;
@@ -81,7 +81,7 @@ mwv207_bo_destroy(void *winsys, struct pb_buffer_lean *buf)
 {
    struct mwv207_bo *bo = mwv207_bo(buf);
 
-   mwv207_drm_bo_destory(bo->ws, bo);
+   mwv207_drm_bo_destroy(bo->ws, bo);
 }
 
 static void
@@ -280,8 +280,15 @@ mwv207_drm_bo_map(struct mwv207_winsys *ws, struct mwv207_bo *bo)
    args.in.handle = bo->handle;
 
    err = drmCommandWriteRead(ws->fd, 0x2, &args, sizeof(args));
-   if (err < 0)
-      printf("%s ret : %d\n", __FUNCTION__, err);
+   /* FIX(jm9100-oss): W7 —— GEM_MMAP 失败必须返回 NULL。
+    * 原来只 printf 然后继续用 args.out.offset；该 ioctl 失败时这个字段
+    * 没有被内核写过（这里 memset 过所以是 0），等于拿 offset 0 去 mmap，
+    * 映射到的不是本 BO —— 后续读写会破坏相邻显存，而且完全没有报错。 */
+   if (err < 0) {
+      fprintf(stderr, "%s: DRM_IOCTL_MWV207_GEM_MMAP failed: %d (%s)\n",
+              __func__, err, strerror(-err));
+      return NULL;
+   }
 
    ptr = os_mmap(0, bo->base.base.size, PROT_READ | PROT_WRITE, MAP_SHARED, ws->fd, args.out.offset);
 
@@ -387,6 +394,13 @@ mwv207_drm_bo_from_handle(struct mwv207_winsys *ws,
    }
 
    bo = CALLOC_STRUCT(mwv207_bo);
+   /* FIX(jm9100-oss): W6 —— CALLOC 之后必须判空再解引用。
+    * 原代码直接 pb_cache_init_entry(&bo->u.real.cache_entry, ...)，
+    * 分配失败时立刻写空指针；而本函数（外部 handle 导入路径）的其它
+    * 出错分支都是 goto unlock 返回 bo（此时 bo 为 NULL），调用方已有
+    * NULL 处理，所以这里同样走 unlock 即可。 */
+   if (!bo)
+      goto unlock;
    pb_cache_init_entry(&ws->bo_cache, &bo->u.real.cache_entry, &bo->base.base, 0);
    bo->base.base.placement = size;
    bo->base.base.usage = 0;
@@ -528,7 +542,7 @@ mwv207_bo_slab_alloc(void *priv, unsigned heap,
    return &slab->base;
 
 fail_buffer:
-   mwv207_drm_bo_destory(ws, slab->buffer);
+   mwv207_drm_bo_destroy(ws, slab->buffer);
 fail:
    FREE(slab);
    return NULL;
@@ -541,7 +555,7 @@ mwv207_bo_slab_free(void *priv, struct pb_slab *pslab)
    struct mwv207_slab *slab = mwv207_slab(pslab);
 
    FREE(slab->entries);
-   mwv207_drm_bo_destory(ws, slab->buffer);;
+   mwv207_drm_bo_destroy(ws, slab->buffer);;
    FREE(slab);
 }
 

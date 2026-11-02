@@ -45,7 +45,7 @@ void
 mwv207_video_cs_release(struct mwv207_video_cs *cs)
 {
    if (cs->cmd) {
-      cs->ws->cmdbuf_destory(cs->ws, cs->cmd);
+      cs->ws->cmdbuf_destroy(cs->ws, cs->cmd);
    }
 }
 
@@ -116,7 +116,10 @@ mwv207_video_cs_submit(struct mwv207_video_cs *cs,
    cs->cmd->offset = (cs->cmdbuf_cur - cs->cmdbuf_start) * sizeof(uint32_t);
 
    if (unlikely(cs->ws->debug & MWV207_DEBUG_VIDEO)) {
-      int out_fence_fd;
+      /* FIX(jm9100-oss): 必须初始化为 -1。submit 失败时 cmdbuf_commit()
+       * 不再写 *out_fence_fd（见 mwv207_drm_cs.c 的 O4 修复），
+       * 未初始化的话下面 fence_create() 会拿一个栈上垃圾 fd 去 sync_wait()。 */
+      int out_fence_fd = -1;
 
       cs->codec_time->codec_wait_hw_start_time = os_time_get();
 

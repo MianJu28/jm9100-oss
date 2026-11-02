@@ -50,24 +50,24 @@ dmesg 里 GPU 相关错误计数为 0。
 
 | # | 位置 | 问题 | 当前证据 | 建议 |
 |---|---|---|---|---|
-| **W6** | `winsys/mwv207/drm/mwv207_drm_bo.c:382-383` 分配、`:405-406` 解引用 | `CALLOC` 后无 NULL 检查 | 【复核】分配与解引用分处两处，中间无判空 | 分配后判空返回 |
-| **W7** | `winsys/mwv207/drm/mwv207_drm_bo.c:283-284` | `GEM_MMAP` 失败仅 `printf` **不返回**，继续用可能为 0 的 `args.out.offset` 调 `os_mmap()` | 【复核】`if (err < 0) printf(...)` 后直接 `os_mmap(...)` | 失败即 `return NULL` |
-| **W12** | `winsys/mwv207/drm/mwv207_drm_cs.c:125-147` | `cmdbuf_create` 依赖 `assert(cmd->buf)`；release 构建下 `NDEBUG` 会移除 | 【复核】连续 4 处 `CALLOC`/`MALLOC` 均无返回值检查 | 改返回错误码 |
-| **O5** | `winsys/mwv207/drm/mwv207_drm_cs.c:89-101` | `fence->fd < 0` 时 `fence_wait()` **恒返回 true** → 提交失败被上层静默当作已完成 | 【复核】`if (fence->fd >= 0) {…} return true;` | 需先枚举 `fd<0` 的全部来源再定 |
-| **E4** | `mwv207_draw.c:1012`（约） | 无深度模板时解引用 FS `shader_states` 未判空 | 静态 | 加判空 |
+| ~~W6~~ | `winsys/mwv207/drm/mwv207_drm_bo.c` | ~~`CALLOC` 后无 NULL 检查~~ | **已修**（2026-11-02）：加 `if (!bo) goto unlock;` | — |
+| ~~W7~~ | `winsys/mwv207/drm/mwv207_drm_bo.c` | ~~`GEM_MMAP` 失败仅 `printf` 不返回~~ | **已修**（2026-11-02）：失败改 `fprintf` + `return NULL` | — |
+| ~~W12~~ | `winsys/mwv207/drm/mwv207_drm_cs.c` | ~~依赖 `assert`，release 下被移除~~ | **已修**（2026-11-02）：4 处分配全部判空、失败释放并返回 NULL | — |
+| **O5** | `winsys/mwv207/drm/mwv207_drm_cs.c:100-118` | `fence->fd < 0` 时 `fence_wait()` 恒返回 true | 【复核】`fd<0` 来源已枚举：`video_cs.c` 的 `out_fence_fd` 未初始化 → **已修**（改 `int out_fence_fd = -1;`）；`fence_create(NULL)` 由调用方判空。剩余：提交失败时 `flush(pfence)` 仍用 `fence_create(ws, -1)` 造出"永远就绪"的 fence，但失败本身现在会 `fprintf` 报错 | 低（失败已可见，不再静默） |
+| ~~E4~~ | `mwv207_draw.c` | ~~无深度模板时解引用 FS `shader_states` 未判空~~ | **已修**（2026-11-02）：`fs_state ? fs_state->current : NULL`，GEOMETRY 同样加 `&& ->current` | — |
 
 ### 1.2 会直接影响可观测行为（需行为验证）
 
 | # | 位置 | 问题 | 当前证据 | 建议 |
 |---|---|---|---|---|
-| **E1** | `mwv207_draw.c:751-754` | `color_8` 四个分量**都** `<< 8` → 高位互相覆盖 | 【复核】四行 `float_to_ubyte(...) << 8` 相或 | 按目标字段宽度改移位 |
-| **E2** | `mwv207_draw.c:888` `static uint32_t draw_count` | 函数内 `static` → **跨 context 共享**，多线程/多 context 下计数互串；`:907` 用它 emit `0xE27` | 【复核】`static uint32_t draw_count = 0;` 在函数体内 | 移入 `mwv207_context` |
+| **E1** | `mwv207_draw.c:751-754` | `color_8` 四个分量都 `<< 8` | **【实测更正】不是高位覆盖**：`/tmp/blendcolor` 用 `glBlendFunc(GL_CONSTANT_COLOR, GL_ZERO)` + `glBlendColor(0.5,0.25,0.125,1.0)` 实测，llvmpipe `(26,26,19,204)`（= 期望值），我们 `(25,25,19,204)` —— **只差 1 LSB，A 通道完全正确**，说明硬件确实按"低 8 位 + 某个位宽"解释了该寄存器，没有互相覆盖。原文档"高位互相覆盖"的判断作废 | 不改（按目标字段宽度改移位缺乏验证手段，可能引入真错）；如需精确到 0 LSB 再查 `0x509` 定义 |
+| ~~E2~~ | `mwv207_draw.c` | ~~`static uint32_t draw_count` 跨 context 共享~~ | **已修**（2026-11-02）：移入 `struct mwv207_context` 的 `uint32_t draw_count;`，`mwv207_config_draw()` 读写 context 字段 | — |
 | **E6** | `mwv207_query.c:108,201,284` | `TIMESTAMP` / `TIMESTAMP_DISJOINT` 用 **CPU** `os_time_get_nano()`，不是 GPU 时间戳 | 【复核】三处均 `os_time_get_nano()`；【实测】`GL_TIMESTAMP` 返回 ≈31.7 小时 = CPU 开机时长 | 硬件寄存器已找到：`MWV207REG_DRAW_PRIMITIVE_START/END_TIME_STAMP`(0x00490/0x00494)、`COUNTER0-3`(0x00544–0x00550) |
-| **E7** | `mwv207_query.c:156-163`、`:279-282` | `PIPELINE_STATISTICS` / `SO_STATISTICS` / `GPU_FINISHED` 的 `begin` 只 `break`（不发射寄存器），`get_result` 走 `unreachable()` | 【复核】`case PIPE_QUERY_SO_STATISTICS: break;` 等；`unreachable("mwv207: unknown query type")` 在 `:165` | 最小可行：`get_result` 报 `available=false` |
+| ~~E7~~ | `mwv207_query.c` | ~~不支持的 query 类型走 `unreachable()`~~ | **已修**（2026-11-02）：`SO_STATISTICS` / `PIPELINE_STATISTICS` / `PIPELINE_STATISTICS_SINGLE` / 未知类型统一 `return false`（按 Gallium 契约＝结果不可用），不再 `unreachable()`（release 下是 `__builtin_unreachable()`＝未定义行为） | 剩余：这些类型仍无真实硬件计数 |
 | **E8** | `mwv207_state.c:335-354` | 只保留单份视口/裁剪，`set_viewport_states` 忽略 `num_viewports` | 静态；GL `GL_MAX_VIEWPORTS` 报 0/1 → **很可能硬件本身就受限** | 先确认硬件是否支持多视口 |
 | **E3** | `mwv207_blit.c:568-584` | 压缩格式分支里算好的 `task_info` 被随后无条件赋值覆盖 | 静态 | 需先确定正确值 |
 | **E5** | `mwv207_state.c:326-331` | `stencil_back_reference` 与正面索引交叉 → 背面取到正面值 | 静态 | 需双面模板测试确认期望 |
-| **O4** | `mwv207_drm_cs.c` commit 的 `-EBUSY` 重试 | 无上限 busy-loop；若内核已 `fd_install` 出 fence fd 再失败，重试路径可能泄漏 fd | 静态（需读 KMD `submit.c` 确认） | 加上限 + 失败回收 fd |
+| ~~O4~~ | `winsys/mwv207/drm/mwv207_drm_cs.c` | ~~`-EBUSY` 无上限 busy-loop；重试可能泄漏 fd~~ | **已修**（2026-11-02）：重试上限 2000 次（≈2s）；失败改 `fprintf` 并关闭 KMD 已 `fd_install` 的 out-fence（判据：`out_fence_fd && submit.fence_fd >= 0 && (in_fence_fd < 0 || submit.fence_fd != in_fence_fd)`，避免误关调用者的 in-fence） | — |
 
 ### 1.3 声明与实现不符（诚实性问题，需拍板）
 
@@ -164,8 +164,9 @@ dmesg 里 GPU 相关错误计数为 0。
 
 | 批次 | 内容 | 前置 | 代价 |
 |---|---|---|---|
-| **1** | 1.1 全部（W6/W7/W12/E4）+ E9/E10 拼写 + F.3.2/F.3.3 | 无 | 零/极低，纯错误路径与死代码 |
-| **2** | E1/E2/E6/E7 + O5 | 每条配一个针对性探针 | 低-中，需行为验证 |
+| ~~**1**~~ | ~~1.1 全部（W6/W7/W12/E4）+ E9/E10 拼写 + F.3.2/F.3.3~~ | — | **已完成（2026-11-02）** |
+| ~~**2**~~ | ~~E2 / E7 / O4 + GBM-Wayland `err=-13`~~ | — | **已完成（2026-11-02）** |
+| **2b** | E1（已降级为 1 LSB，暂不改）/ E6 / E8 / E3 / E5 / O5 | 每条配一个针对性探针 | 低-中，需行为验证 |
 | **3** | **拍板** 1.3 的 C1/C2/C3/I-3 | 用户决策 | 不是技术难度，是诚实性取舍 |
 | **4** | **真机 `kmd install`**（解锁全部 KMD 条目） | 用户同意黑屏风险；备 SSH/TTY | 一次性风险，之后所有 KMD 修复可生效 |
 | **5** | VP9 解码（D1） | 真实 VP9 码流 | 中-大，但模板齐全、可行性最高 |
@@ -261,7 +262,7 @@ dmesg 里 GPU 相关错误计数为 0。
   GL 侧。
 - 参考：`reports/FF-RENDER-20261102.md` §13。
 
-## GBM / Wayland 平台不可用：`err=-13`（EACCES）—— 已定位根因，未修
+## ~~GBM / Wayland 平台不可用：`err=-13`（EACCES）~~ —— **已修（2026-11-02）**
 
 - 现象：`eglinfo -B` 的 **GBM platform** 与 **Wayland platform** 全部报
   `mwv207: failed to create kernel context, fd=5 err=-13`，随后回落到
@@ -280,13 +281,17 @@ dmesg 里 GPU 相关错误计数为 0。
   自写探针 `/tmp/ctxtest.c` 逐节点验证：
   `/dev/dri/renderD128: ioctl ret=0 handle=0` / `/dev/dri/card0: ioctl ret=-1 errno=13`。
   → **同一份 UMD，拿 render 节点能过，拿主节点必失败。**
-- 两条候选修法：
-  - **UMD 侧（可立即验证，推荐）**：在 `mwv207_ws_init()` 建 ctx 失败且
-    `errno == EACCES` 时，用 `drmGetRenderDeviceNameFromFd(ws->fd)` 取同卡
-    的 render 节点另开一个 fd 只用于本驱动的私有 ioctl（GEM_CREATE/MMAP/
-    WAIT/SUBMIT/CTX 在 render 节点上都合法），KMS 相关的仍走原 fd。
-  - **KMD 侧（要部署才生效）**：把 `mwv207_ioctls_drm[]` 的 `DRM_AUTH` 去掉，
-    只留 `DRM_RENDER_ALLOW`。代价是放宽权限（未认证客户端也能分配显存/提交），
-    单用户桌面可接受，但要重新评估。
-- 影响面：X11 桌面不受影响（走 DRI3，用 render 节点）；受影响的是一切**纯
-  GBM/Wayland** 的使用场景（Wayland 合成器、`kmscube`、容器内 GBM 应用）。
+- **修法（已实施，UMD 侧）**：`mwv207_ws_init()` 里 `drmCommandWriteRead(ws->fd, 0x4, ...)`
+  返回 `-EACCES` 时，用 `drmGetRenderDeviceNameFromFd(ws->fd)` 取同卡 render 节点，
+  `open(O_RDWR|O_CLOEXEC)` + `fcntl(F_DUPFD_CLOEXEC, 3)` 另开我们**自己 dup 出来的**
+  `ws->fd` 后重试（不动调用者的 fd）；成功时打一行
+  `mwv207: 私有 ioctl 被拒(EACCES)，已改用 render 节点 /dev/dri/renderD128`。
+  X11 路径 fd 本来就是 render 节点，不会进这个分支，行为不变。
+- **验证（`LIBGL_DRIVERS_PATH=/tmp/gd3 MESA_LOADER_DRIVER_OVERRIDE=mwv207 eglinfo`）**：
+  GBM platform 从"`err=-13` 后回落 swrast"变成
+  `EGL driver name: mwv207` + `OpenGL core profile renderer: MWV207 (JingjiaMicro Corporation)`
+  + `4.0 (Core Profile) Mesa 24.1.2 (git-9466c83cfc)`，完整 EGL 扩展串正常列出，
+  `EGL_MESA_platform_gbm` / `EGL_KHR_platform_gbm` / `EGL_KHR_platform_wayland` 都在。
+- 备选（未采用）：KMD 侧把 `mwv207_ioctls_drm[]` 的 `DRM_AUTH` 去掉只留
+  `DRM_RENDER_ALLOW`。能一次解决，但放宽了权限（未认证客户端也能分配显存/提交），
+  且要重新部署模块才生效 —— 既然 UMD 侧已验证可行，就不动 KMD ABI。

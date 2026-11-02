@@ -55,6 +55,6 @@ bool
 mwv207_check_render_cond(struct pipe_context *pctx);
 
 void
-mwv207_context_query_destory(struct pipe_context *pctx);
+mwv207_context_query_destroy(struct pipe_context *pctx);
 
 #endif

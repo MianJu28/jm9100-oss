@@ -133,7 +133,7 @@ mwv207_flush_cache(uint32_t **pbuf, enum cache_mask mask)
    if (mask & CACHE_VERTEX_DATA)
       flush_state |= (ALIGN_BIT((uint32_t) (ENABLE), 0xE) & (0x4000));
 
-   if (mask & CACHE_TEXUTRE_L1)
+   if (mask & CACHE_TEXTURE_L1)
       flush_state |= ((ALIGN_BIT((uint32_t) (ENABLE), 0xC) & (0x1000))  |
          (ALIGN_BIT((uint32_t) (ENABLE), 0xD) & (0x2000)));
 
