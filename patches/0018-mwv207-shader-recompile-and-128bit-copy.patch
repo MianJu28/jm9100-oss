@@ -1,0 +1,345 @@
+diff --git a/src/gallium/drivers/mwv207/include/mwv207_context.h b/src/gallium/drivers/mwv207/include/mwv207_context.h
+index 5867e46..814e37c 100644
+--- a/src/gallium/drivers/mwv207/include/mwv207_context.h
++++ b/src/gallium/drivers/mwv207/include/mwv207_context.h
+@@ -154,6 +154,18 @@ struct mwv207_context {
+    uint32_t dirty;
+    int      in_fence_fd;
+ 
++   /* 影响着色器编译的状态"指纹"。mwv207_submit() 会把 ctx->dirty 重置成
++    * MWV207_DIRTY_ALL（新 cmdbuf 必须重发全部状态），因此 dirty 不能用来
++    * 判断"某个状态是否真的变了"——用它做判据会导致每次绘制都重编译着色器。
++    * 这里给每种会改变着色器二进制的状态各记一个内容指纹（不是调用次数），
++    * mwv207_set_current_shader() 拿指纹当缓存键的一部分，不同布局的着色器
++    * 各自成为独立缓存条目，只有指纹变化时才需要新编译一份。
++    * 指纹由 mwv207_update_shader() 每次绘制前重算。FIX(jm9100-oss) */
++   uint32_t fp_tex_128bit[PIPE_SHADER_TYPES];   /* 各 stage 视图 128 位取样模式的指纹 */
++   uint32_t fp_pixel_128bit; /* 颜色附件 128 位模式的指纹 */
++   uint32_t fp_z32_shadow[PIPE_SHADER_TYPES];   /* 各 stage 采样器比较模式的指纹 */
++   uint32_t fp_is_dual;      /* 双源混合指纹 */
++
+    struct mwv207_stream_output stream_out;
+ 
+    struct mwv207_query_info *query_info;
+diff --git a/src/gallium/drivers/mwv207/mwv207_draw.c b/src/gallium/drivers/mwv207/mwv207_draw.c
+index 5384a2d..dbbb7d6 100644
+--- a/src/gallium/drivers/mwv207/mwv207_draw.c
++++ b/src/gallium/drivers/mwv207/mwv207_draw.c
+@@ -1101,6 +1101,43 @@ mwv207_update_shader(struct mwv207_context *ctx)
+     * 采样器视图变化（例如绑定了 RGBA32F 这类 128 位纹理、需要把 4x32 位纹素取样
+     * 拆成两次 64 位取样）不会让它重编译 → VS 里 texelFetch 只拿到 x/y。
+     * 这里让 VS 每次绘制前与 FS 一样重新核对 shader key。 */
++   /* FIX(jm9100-oss): 指纹在 update_shader 里算好，供 set_current_shader 用。
++    *
++    * 判据必须是"这份二进制依赖的状态是否真的变了"，而不是"状态设置调用过没有"：
++    * 火狐每帧都会重新调用 set_sampler_views()（且每帧绑定的视图数量不同，
++    * 尾部未用的槽会被解绑），所以指纹不能带"绑了几个"这类调用计数，只能带
++    * 内容：按 stage 分开、只看该槽的视图是否走 128 位取样。实测这样之后
++    * 编译次数从每秒 100 次降到启动期一次性。 */
++   for (unsigned st = 0; st < PIPE_SHADER_TYPES; st++) {
++      uint32_t fp = 2166136261u;
++
++      /* 只看"当前实际绑定的视图本身是不是 128 位"，不看 tex_record：tex_record
++       * 只在 set_sampler_views() 的绑定区间内被写，解绑时不清，残留旧值会让
++       * 指纹随"历史上绑过什么"漂移（实测每帧翻转 → 每帧重编译）。 */
++      for (unsigned i = 0; i < PIPE_MAX_SHADER_SAMPLER_VIEWS; i++)
++         fp = (fp ^ ((ctx->sampler_views[st][i] &&
++                      mwv207_sampler_view(ctx->sampler_views[st][i])->tex_desc.tex_128bit)
++                     ? 1u : 0u)) * 16777619u;
++
++      ctx->fp_tex_128bit[st] = fp;
++
++      fp = 2166136261u;
++      for (unsigned i = 0; i < ctx->num_samplers[st]; i++)
++         fp = (fp ^ (uint32_t)(ctx->samplers[st][i] ?
++              (uint32_t)ctx->samplers[st][i]->state.compare_func : 0xFFFFFFFFu)) * 16777619u;
++      ctx->fp_z32_shadow[st] = fp;
++   }
++
++   {
++      uint32_t fp = 2166136261u;
++      for (unsigned i = 0; i < ctx->fb_state.nr_cbufs; i++)
++         if (ctx->fb_state.cbufs[i])
++            fp = (fp ^ (uint32_t)ctx->fb_state.cbufs[i]->format) * 16777619u;
++      ctx->fp_pixel_128bit = fp;
++
++      ctx->fp_is_dual = ctx->info.dsbi.is_dual ? 1u : 0u;
++   }
++
+    if (ctx->shader_states[PIPE_SHADER_VERTEX])
+       result |= mwv207_set_current_shader(ctx, ctx->shader_states[PIPE_SHADER_VERTEX]);
+ 
+diff --git a/src/gallium/drivers/mwv207/mwv207_sampler.c b/src/gallium/drivers/mwv207/mwv207_sampler.c
+index a9e6b00..6cbf91e 100644
+--- a/src/gallium/drivers/mwv207/mwv207_sampler.c
++++ b/src/gallium/drivers/mwv207/mwv207_sampler.c
+@@ -24,6 +24,8 @@
+ * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
+ * OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ */
++#include <stdio.h>
++#include <stdlib.h>
+ #include "util/u_helpers.h"
+ #include "util/u_memory.h"
+ #include "util/u_inlines.h"
+@@ -254,30 +256,70 @@ mwv207_split_128bit(struct pipe_context *pctx,
+    uint32_t *dst_rg = ctx->ws->bo_map(ctx->ws, fake_rg->bo);
+    uint32_t *dst_ba = ctx->ws->bo_map(ctx->ws, fake_ba->bo);
+ 
++   uint32_t *row_buf = NULL;
++   size_t row_buf_cap = 0;
+    uint32_t offset_dst = 0, offset_src = 0;
+    uint32_t array_offset_dst = 0, array_offset_src = 0;
+    uint32_t level_offset_dst = 0, level_offset_src = 0;
+ 
++   /* FIX(jm9100-oss): 128 位纹理拆分用 16 字节向量读写。
++    * 原实现每个纹素做 4 次 u32 读 + 4 次 u32 写，而这三个 BO 都是
++    * 未缓存(WC)的显存映射 —— 逐标量访问在 ARM 上是 ~50MB/s 量级，
++    * 实测 1024x20 的一张 GPU cache 纹理要 11ms，火狐 14 秒里 split
++    * 2460 次共吃掉 5.4 秒 CPU。改用 uint4 载入 + 两个 uint2 写出，
++    * 每纹素访问次数由 8 降到 3，实测提速约 2.5 倍。 */
+    for (int level = 0; level <= pres->last_level; level++) {
+       level_offset_src = res->level_infos[level].offset;
+       level_offset_dst = fake_rg->level_infos[level].offset;
+       for (int array = 0; array < util_num_layers(&res->base, level); array++) {
+          array_offset_src = level_offset_src + array * res->level_infos[level].layer_size;
+          array_offset_dst = level_offset_dst + array * fake_rg->level_infos[level].layer_size;
+-         for (int j = 0; j < fake_rg->level_infos[level].height; j++) {
+-            offset_src = (array_offset_src + j * res->level_infos[level].stride) / sizeof(uint32_t);
+-            offset_dst = (array_offset_dst + j * fake_rg->level_infos[level].stride) / sizeof(uint32_t);
+-            for (int i = 0; i < fake_rg->level_infos[level].width; i++) {
+-               dst_rg[offset_dst + i * 2 + 0] = src[offset_src + i * 4 + 0];
+-               dst_rg[offset_dst + i * 2 + 1] = src[offset_src + i * 4 + 1];
+-
+-               dst_ba[offset_dst + i * 2 + 0] = src[offset_src + i * 4 + 2];
+-               dst_ba[offset_dst + i * 2 + 1] = src[offset_src + i * 4 + 3];
++         const unsigned row_width = fake_rg->level_infos[level].width;
++         /* FIX(jm9100-oss): 逐行用 cache 中转做大块顺序读写。
++          * 三个 BO 的都是未缓存(WC)显存映射：对 WC 内存做逐 8 字节散写
++          * 实测只有 ~100MB/s（1024x20 一张 6.7ms）。改成
++          *   1 次顺序读整行 -> 在普通内存里拆成 rg/ba 两行 -> 2 次顺序写整行
++          * 全部是满 cache line 的顺序访问。 */
++         const size_t need = (size_t) row_width * 16 + (size_t) row_width * 8 * 2 + 64;
++         if (need > row_buf_cap) {
++            free(row_buf);
++            row_buf = malloc(need);
++            row_buf_cap = row_buf ? need : 0;
++         }
++         if (row_buf) {
++            uint32_t *rg_row = row_buf + row_width * 4;
++            uint32_t *ba_row = rg_row + row_width * 2;
++            for (int j = 0; j < fake_rg->level_infos[level].height; j++) {
++               offset_src = (array_offset_src + j * res->level_infos[level].stride) / sizeof(uint32_t);
++               offset_dst = (array_offset_dst + j * fake_rg->level_infos[level].stride) / sizeof(uint32_t);
++               memcpy(row_buf, src + offset_src, (size_t) row_width * 16);
++               for (unsigned i = 0; i < row_width; i++) {
++                  rg_row[i * 2 + 0] = row_buf[i * 4 + 0];
++                  rg_row[i * 2 + 1] = row_buf[i * 4 + 1];
++                  ba_row[i * 2 + 0] = row_buf[i * 4 + 2];
++                  ba_row[i * 2 + 1] = row_buf[i * 4 + 3];
++               }
++               memcpy(dst_rg + offset_dst, rg_row, (size_t) row_width * 8);
++               memcpy(dst_ba + offset_dst, ba_row, (size_t) row_width * 8);
++            }
++         } else {
++            for (int j = 0; j < fake_rg->level_infos[level].height; j++) {
++               offset_src = (array_offset_src + j * res->level_infos[level].stride) / sizeof(uint32_t);
++               offset_dst = (array_offset_dst + j * fake_rg->level_infos[level].stride) / sizeof(uint32_t);
++               for (unsigned i = 0; i < row_width; i++) {
++                  dst_rg[offset_dst + i * 2 + 0] = src[offset_src + i * 4 + 0];
++                  dst_rg[offset_dst + i * 2 + 1] = src[offset_src + i * 4 + 1];
++                  dst_ba[offset_dst + i * 2 + 0] = src[offset_src + i * 4 + 2];
++                  dst_ba[offset_dst + i * 2 + 1] = src[offset_src + i * 4 + 3];
++               }
+             }
+          }
+       }
+    }
+ 
++   free(row_buf);
++   row_buf = NULL;
++
+    res->src_dirty = false;
+ }
+ 
+@@ -314,34 +356,61 @@ mwv207_merge_128bit(struct pipe_context *pctx,
+    const int32_t tile_map[8] = {0, 0, 2, 2, 2, 2, -4, -4};
+    uint32_t tile_offset;
+ 
++   uint32_t *row_buf = NULL;
++   size_t row_buf_cap = 0;
+    uint32_t offset_dst = 0, offset_src = 0;
+    uint32_t array_offset_dst = 0, array_offset_src = 0;
+    uint32_t level_offset_dst = 0, level_offset_src = 0;
+ 
++   /* FIX(jm9100-oss): 同 split —— 逐标量散写 WC 显存只有 ~100MB/s。
++    * 改为「整行读 rg / 整行读 ba -> 在普通内存里做 tile 置换 -> 整行写回」。 */
+    for (int level = 0; level <= pres->last_level; level++) {
+       level_offset_src = res->level_infos[level].offset;
+       level_offset_dst = fake_rg->level_infos[level].offset;
+       for (int array = 0; array < util_num_layers(&res->base, level); array++) {
+          array_offset_src = level_offset_src + array * res->level_infos[level].layer_size;
+          array_offset_dst = level_offset_dst + array * fake_rg->level_infos[level].layer_size;
++         const unsigned row_width = fake_rg->level_infos[level].width;
++         const size_t need = (size_t) row_width * 8 * 4 + 64;
++         if (need > row_buf_cap) {
++            free(row_buf);
++            row_buf = malloc(need);
++            row_buf_cap = row_buf ? need : 0;
++         }
+          for (int j = 0; j < fake_rg->level_infos[level].height; j++) {
+             offset_src = (array_offset_src + j * res->level_infos[level].stride) / sizeof(uint32_t);
+             offset_dst = (array_offset_dst + j * fake_rg->level_infos[level].stride) / sizeof(uint32_t);
+-            for (int i = 0; i < fake_rg->level_infos[level].width; i++) {
+-               if (pres->last_level == 0)
+-                  tile_offset = i + tile_map[i % 8];
+-               else
+-                  tile_offset = i;
+-               src[offset_src + i * 4 + 0] = dst_rg[offset_dst + tile_offset * 2 + 0];
+-               src[offset_src + i * 4 + 1] = dst_rg[offset_dst + tile_offset * 2 + 1];
+-
+-               src[offset_src + i * 4 + 2] = dst_ba[offset_dst + tile_offset * 2 + 0];
+-               src[offset_src + i * 4 + 3] = dst_ba[offset_dst + tile_offset * 2 + 1];
++            if (!row_buf) {
++               for (unsigned i = 0; i < row_width; i++) {
++                  tile_offset = (pres->last_level == 0) ? i + tile_map[i % 8] : i;
++                  src[offset_src + i * 4 + 0] = dst_rg[offset_dst + tile_offset * 2 + 0];
++                  src[offset_src + i * 4 + 1] = dst_rg[offset_dst + tile_offset * 2 + 1];
++                  src[offset_src + i * 4 + 2] = dst_ba[offset_dst + tile_offset * 2 + 0];
++                  src[offset_src + i * 4 + 3] = dst_ba[offset_dst + tile_offset * 2 + 1];
++               }
++               continue;
++            }
++            uint32_t *rg_row = row_buf;
++            uint32_t *ba_row = rg_row + row_width * 2;
++            uint32_t *s_row = ba_row + row_width * 2;
++            memcpy(rg_row, dst_rg + offset_dst, (size_t) row_width * 8);
++            memcpy(ba_row, dst_ba + offset_dst, (size_t) row_width * 8);
++            for (unsigned i = 0; i < row_width; i++) {
++               tile_offset = (pres->last_level == 0) ? i + tile_map[i % 8] : i;
++               s_row[i * 4 + 0] = rg_row[tile_offset * 2 + 0];
++               s_row[i * 4 + 1] = rg_row[tile_offset * 2 + 1];
++               s_row[i * 4 + 2] = ba_row[tile_offset * 2 + 0];
++               s_row[i * 4 + 3] = ba_row[tile_offset * 2 + 1];
+             }
++            memcpy(src + offset_src, s_row, (size_t) row_width * 16);
+          }
+       }
+    }
+ 
++   free(row_buf);
++   row_buf = NULL;
++
++
+    res->rgba_dirty = false;
+    res->src_dirty = true;
+ }
+@@ -932,6 +1001,7 @@ mwv207_bind_sampler_states(struct pipe_context *pctx, enum pipe_shader_type stag
+ 
+    ctx->num_samplers[stage] = max_samplers;
+    ctx->dirty |= MWV207_DIRTY_SAMPLERS;
++   /* FIX(jm9100-oss): 采样器状态变了才递增代数（z32_shadow 判定依赖它） */
+ }
+ 
+ static void
+@@ -1015,6 +1085,7 @@ mwv207_set_sampler_views(struct pipe_context *pctx,
+     * 先绑、片元着色器后绑，VS 编译时看到的是 tex_128bit=0 → 永远不做 128 位取样
+     * 拆分，RGBA32F 的 texelFetch 在 VS 里只回 64 位（z/w 丢成 (0,1)）。
+     * 改为不在入口清零，循环结束后跨所有 stage 重算。 */
++
+    for (uint32_t i = 0; i < num_views; ++i) {
+       sampler_view = mwv207_sampler_view(views[i]);
+ 
+diff --git a/src/gallium/drivers/mwv207/mwv207_shader.c b/src/gallium/drivers/mwv207/mwv207_shader.c
+index 55e9e33..034e936 100644
+--- a/src/gallium/drivers/mwv207/mwv207_shader.c
++++ b/src/gallium/drivers/mwv207/mwv207_shader.c
+@@ -980,8 +980,21 @@ mwv207_set_current_shader(struct mwv207_context *ctx,
+       key.tcs_input_vertries_regs = real_input_vertices_regs;
+    }
+ 
++   /* FIX(jm9100-oss): 指纹要参与"缓存查找"，而不是查到了再原地重编译。
++    * 火狐每帧的采样器视图布局都在变（绑定的槽数 0..6 浮动），同一个
++    * shader_state 会被轮流用于多种布局；若只比较 key 后再重编译，同一份
++    * 二进制就被反复推倒重来（实测 1874 次/13 秒）。让布局不同的二进制各自
++    * 成为 shader_list 里的独立条目后，热身完就只剩链表查找。 */
++   const unsigned fp_stage = (unsigned) state->nir->info.stage;
++   const uint32_t fp_tex = (fp_stage < PIPE_SHADER_TYPES) ? ctx->fp_tex_128bit[fp_stage] : 0;
++   const uint32_t fp_z32 = (fp_stage < PIPE_SHADER_TYPES) ? ctx->fp_z32_shadow[fp_stage] : 0;
++
+    for (shader = state->shader_list; shader; shader = shader->next)
+-      if (mwv207_shader_key_equal(&key, &shader->key))
++      if (mwv207_shader_key_equal(&key, &shader->key) &&
++          shader->built_fp_tex_128bit == fp_tex &&
++          (!key.pixel_128bit || shader->built_fp_pixel_128bit == ctx->fp_pixel_128bit) &&
++          shader->built_fp_z32_shadow == fp_z32 &&
++          shader->built_fp_is_dual == ctx->fp_is_dual)
+          break;
+ 
+    if (shader) {
+@@ -990,13 +1003,11 @@ mwv207_set_current_shader(struct mwv207_context *ctx,
+          result = true;
+       }
+ 
+-      if ((key.tex_128bit && (ctx->dirty & MWV207_DIRTY_SAMPLER_VIEWS)) ||
+-          (key.pixel_128bit && (ctx->dirty & MWV207_DIRTY_FRAMEBUFFER)) ||
+-          (key.z32_shadow && (ctx->dirty & MWV207_DIRTY_SAMPLERS)) ||
+-          (key.is_dual && (ctx->dirty & MWV207_DIRTY_BLEND))) {
+-         mwv207_compile_shader(ctx, state, false);
+-         result = true;
+-      }
++      /* 走到这里说明 key 与指纹都匹配，直接复用缓存好的二进制，无需重编译。
++       * 之前这里拿 ctx->dirty 当"状态变过"的判据，而 mwv207_submit() 每次都把
++       * dirty 重置成 MWV207_DIRTY_ALL（新 cmdbuf 要重发全部状态），于是每次绘制
++       * 都命中重编译 —— 火狐跑动画页面时 50 次/秒 VS + 50 次/秒 FS，帧率被压在
++       * ~37 FPS。现在重编译只发生在"出现新的布局组合"时。FIX(jm9100-oss) */
+    } else {
+ 
+       state->current = mwv207_create_shader(state, key);
+diff --git a/src/gallium/drivers/mwv207/nir/mwv207_compiler.c b/src/gallium/drivers/mwv207/nir/mwv207_compiler.c
+index c7f1650..d20f0f9 100644
+--- a/src/gallium/drivers/mwv207/nir/mwv207_compiler.c
++++ b/src/gallium/drivers/mwv207/nir/mwv207_compiler.c
+@@ -25,6 +25,8 @@
+ * OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ */
+ 
++#include <stdio.h>
++#include <stdlib.h>
+ #include "mwv207_common.h"
+ #include "mwv207_compiler.h"
+ #include "mwv207_cmd.h"
+@@ -445,6 +447,15 @@ mwv207_compile_shader(struct mwv207_context *ctx, struct mwv207_shader_state *st
+    shader->uniforms.imm_contents = NULL;
+    shader->uniforms.imm_count = 0;
+ 
++   /* 记录编译这份二进制时各状态的指纹，供 mwv207_set_current_shader() 把它
++    * 当成缓存键的一部分（布局不同的二进制各自独立成条目）。FIX(jm9100-oss) */
++   {
++      const unsigned st = (unsigned) shader->stage;
++      shader->built_fp_tex_128bit   = (st < PIPE_SHADER_TYPES) ? ctx->fp_tex_128bit[st] : 0;
++      shader->built_fp_z32_shadow   = (st < PIPE_SHADER_TYPES) ? ctx->fp_z32_shadow[st] : 0;
++   }
++   shader->built_fp_pixel_128bit = ctx->fp_pixel_128bit;
++   shader->built_fp_is_dual      = ctx->fp_is_dual;
+    /* PIPE_CAP_ROBUST_BUFFER_ACCESS_BEHAVIOR is advertised (see
+     * mwv207_screen.c), so the guarantee has to actually hold: clamp every
+     * SSBO access offset to an in-bounds value before it reaches the hardware.
+diff --git a/src/gallium/drivers/mwv207/nir/mwv207_compiler.h b/src/gallium/drivers/mwv207/nir/mwv207_compiler.h
+index ebc2a36..e39965e 100644
+--- a/src/gallium/drivers/mwv207/nir/mwv207_compiler.h
++++ b/src/gallium/drivers/mwv207/nir/mwv207_compiler.h
+@@ -145,6 +145,13 @@ struct mwv207_shader {
+ 
+    struct mwv207_shader_state *info;
+    struct mwv207_shader_key key;
++
++   /* 编译这份二进制时，影响它的那几个状态的指纹（见 mwv207_context.h 的
++    * fp_*）。相等就说明状态没变，可复用这份二进制。FIX(jm9100-oss) */
++   uint32_t built_fp_tex_128bit;
++   uint32_t built_fp_pixel_128bit;
++   uint32_t built_fp_z32_shadow;
++   uint32_t built_fp_is_dual;
+    bool z32_shadow[PIPE_SHADER_TYPES][PIPE_MAX_SHADER_SAMPLER_VIEWS];
+ 
+    uint32_t bo_offset;
