@@ -25,6 +25,8 @@
 * OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 
+#include <stdio.h>
+#include <stdlib.h>
 #include "mwv207_common.h"
 #include "mwv207_compiler.h"
 #include "mwv207_cmd.h"
@@ -445,6 +447,15 @@ mwv207_compile_shader(struct mwv207_context *ctx, struct mwv207_shader_state *st
    shader->uniforms.imm_contents = NULL;
    shader->uniforms.imm_count = 0;
 
+   /* 记录编译这份二进制时各状态的指纹，供 mwv207_set_current_shader() 把它
+    * 当成缓存键的一部分（布局不同的二进制各自独立成条目）。FIX(jm9100-oss) */
+   {
+      const unsigned st = (unsigned) shader->stage;
+      shader->built_fp_tex_128bit   = (st < PIPE_SHADER_TYPES) ? ctx->fp_tex_128bit[st] : 0;
+      shader->built_fp_z32_shadow   = (st < PIPE_SHADER_TYPES) ? ctx->fp_z32_shadow[st] : 0;
+   }
+   shader->built_fp_pixel_128bit = ctx->fp_pixel_128bit;
+   shader->built_fp_is_dual      = ctx->fp_is_dual;
    /* PIPE_CAP_ROBUST_BUFFER_ACCESS_BEHAVIOR is advertised (see
     * mwv207_screen.c), so the guarantee has to actually hold: clamp every
     * SSBO access offset to an in-bounds value before it reaches the hardware.

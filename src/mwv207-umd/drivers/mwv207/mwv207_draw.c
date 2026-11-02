@@ -1101,6 +1101,43 @@ mwv207_update_shader(struct mwv207_context *ctx)
     * 采样器视图变化（例如绑定了 RGBA32F 这类 128 位纹理、需要把 4x32 位纹素取样
     * 拆成两次 64 位取样）不会让它重编译 → VS 里 texelFetch 只拿到 x/y。
     * 这里让 VS 每次绘制前与 FS 一样重新核对 shader key。 */
+   /* FIX(jm9100-oss): 指纹在 update_shader 里算好，供 set_current_shader 用。
+    *
+    * 判据必须是"这份二进制依赖的状态是否真的变了"，而不是"状态设置调用过没有"：
+    * 火狐每帧都会重新调用 set_sampler_views()（且每帧绑定的视图数量不同，
+    * 尾部未用的槽会被解绑），所以指纹不能带"绑了几个"这类调用计数，只能带
+    * 内容：按 stage 分开、只看该槽的视图是否走 128 位取样。实测这样之后
+    * 编译次数从每秒 100 次降到启动期一次性。 */
+   for (unsigned st = 0; st < PIPE_SHADER_TYPES; st++) {
+      uint32_t fp = 2166136261u;
+
+      /* 只看"当前实际绑定的视图本身是不是 128 位"，不看 tex_record：tex_record
+       * 只在 set_sampler_views() 的绑定区间内被写，解绑时不清，残留旧值会让
+       * 指纹随"历史上绑过什么"漂移（实测每帧翻转 → 每帧重编译）。 */
+      for (unsigned i = 0; i < PIPE_MAX_SHADER_SAMPLER_VIEWS; i++)
+         fp = (fp ^ ((ctx->sampler_views[st][i] &&
+                      mwv207_sampler_view(ctx->sampler_views[st][i])->tex_desc.tex_128bit)
+                     ? 1u : 0u)) * 16777619u;
+
+      ctx->fp_tex_128bit[st] = fp;
+
+      fp = 2166136261u;
+      for (unsigned i = 0; i < ctx->num_samplers[st]; i++)
+         fp = (fp ^ (uint32_t)(ctx->samplers[st][i] ?
+              (uint32_t)ctx->samplers[st][i]->state.compare_func : 0xFFFFFFFFu)) * 16777619u;
+      ctx->fp_z32_shadow[st] = fp;
+   }
+
+   {
+      uint32_t fp = 2166136261u;
+      for (unsigned i = 0; i < ctx->fb_state.nr_cbufs; i++)
+         if (ctx->fb_state.cbufs[i])
+            fp = (fp ^ (uint32_t)ctx->fb_state.cbufs[i]->format) * 16777619u;
+      ctx->fp_pixel_128bit = fp;
+
+      ctx->fp_is_dual = ctx->info.dsbi.is_dual ? 1u : 0u;
+   }
+
    if (ctx->shader_states[PIPE_SHADER_VERTEX])
       result |= mwv207_set_current_shader(ctx, ctx->shader_states[PIPE_SHADER_VERTEX]);
 

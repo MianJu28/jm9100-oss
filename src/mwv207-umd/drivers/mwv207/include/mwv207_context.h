@@ -154,6 +154,18 @@ struct mwv207_context {
    uint32_t dirty;
    int      in_fence_fd;
 
+   /* 影响着色器编译的状态"指纹"。mwv207_submit() 会把 ctx->dirty 重置成
+    * MWV207_DIRTY_ALL（新 cmdbuf 必须重发全部状态），因此 dirty 不能用来
+    * 判断"某个状态是否真的变了"——用它做判据会导致每次绘制都重编译着色器。
+    * 这里给每种会改变着色器二进制的状态各记一个内容指纹（不是调用次数），
+    * mwv207_set_current_shader() 拿指纹当缓存键的一部分，不同布局的着色器
+    * 各自成为独立缓存条目，只有指纹变化时才需要新编译一份。
+    * 指纹由 mwv207_update_shader() 每次绘制前重算。FIX(jm9100-oss) */
+   uint32_t fp_tex_128bit[PIPE_SHADER_TYPES];   /* 各 stage 视图 128 位取样模式的指纹 */
+   uint32_t fp_pixel_128bit; /* 颜色附件 128 位模式的指纹 */
+   uint32_t fp_z32_shadow[PIPE_SHADER_TYPES];   /* 各 stage 采样器比较模式的指纹 */
+   uint32_t fp_is_dual;      /* 双源混合指纹 */
+
    struct mwv207_stream_output stream_out;
 
    struct mwv207_query_info *query_info;

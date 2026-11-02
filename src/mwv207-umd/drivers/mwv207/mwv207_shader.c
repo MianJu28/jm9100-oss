@@ -980,8 +980,21 @@ mwv207_set_current_shader(struct mwv207_context *ctx,
       key.tcs_input_vertries_regs = real_input_vertices_regs;
    }
 
+   /* FIX(jm9100-oss): 指纹要参与"缓存查找"，而不是查到了再原地重编译。
+    * 火狐每帧的采样器视图布局都在变（绑定的槽数 0..6 浮动），同一个
+    * shader_state 会被轮流用于多种布局；若只比较 key 后再重编译，同一份
+    * 二进制就被反复推倒重来（实测 1874 次/13 秒）。让布局不同的二进制各自
+    * 成为 shader_list 里的独立条目后，热身完就只剩链表查找。 */
+   const unsigned fp_stage = (unsigned) state->nir->info.stage;
+   const uint32_t fp_tex = (fp_stage < PIPE_SHADER_TYPES) ? ctx->fp_tex_128bit[fp_stage] : 0;
+   const uint32_t fp_z32 = (fp_stage < PIPE_SHADER_TYPES) ? ctx->fp_z32_shadow[fp_stage] : 0;
+
    for (shader = state->shader_list; shader; shader = shader->next)
-      if (mwv207_shader_key_equal(&key, &shader->key))
+      if (mwv207_shader_key_equal(&key, &shader->key) &&
+          shader->built_fp_tex_128bit == fp_tex &&
+          (!key.pixel_128bit || shader->built_fp_pixel_128bit == ctx->fp_pixel_128bit) &&
+          shader->built_fp_z32_shadow == fp_z32 &&
+          shader->built_fp_is_dual == ctx->fp_is_dual)
          break;
 
    if (shader) {
@@ -990,13 +1003,11 @@ mwv207_set_current_shader(struct mwv207_context *ctx,
          result = true;
       }
 
-      if ((key.tex_128bit && (ctx->dirty & MWV207_DIRTY_SAMPLER_VIEWS)) ||
-          (key.pixel_128bit && (ctx->dirty & MWV207_DIRTY_FRAMEBUFFER)) ||
-          (key.z32_shadow && (ctx->dirty & MWV207_DIRTY_SAMPLERS)) ||
-          (key.is_dual && (ctx->dirty & MWV207_DIRTY_BLEND))) {
-         mwv207_compile_shader(ctx, state, false);
-         result = true;
-      }
+      /* 走到这里说明 key 与指纹都匹配，直接复用缓存好的二进制，无需重编译。
+       * 之前这里拿 ctx->dirty 当"状态变过"的判据，而 mwv207_submit() 每次都把
+       * dirty 重置成 MWV207_DIRTY_ALL（新 cmdbuf 要重发全部状态），于是每次绘制
+       * 都命中重编译 —— 火狐跑动画页面时 50 次/秒 VS + 50 次/秒 FS，帧率被压在
+       * ~37 FPS。现在重编译只发生在"出现新的布局组合"时。FIX(jm9100-oss) */
    } else {
 
       state->current = mwv207_create_shader(state, key);

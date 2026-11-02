@@ -145,6 +145,13 @@ struct mwv207_shader {
 
    struct mwv207_shader_state *info;
    struct mwv207_shader_key key;
+
+   /* 编译这份二进制时，影响它的那几个状态的指纹（见 mwv207_context.h 的
+    * fp_*）。相等就说明状态没变，可复用这份二进制。FIX(jm9100-oss) */
+   uint32_t built_fp_tex_128bit;
+   uint32_t built_fp_pixel_128bit;
+   uint32_t built_fp_z32_shadow;
+   uint32_t built_fp_is_dual;
    bool z32_shadow[PIPE_SHADER_TYPES][PIPE_MAX_SHADER_SAMPLER_VIEWS];
 
    uint32_t bo_offset;
