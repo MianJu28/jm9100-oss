@@ -460,6 +460,10 @@ mwv207_drm_cmdbuf_commit(struct mwv207_winsys *ws,
       fprintf(stderr, "%s: submit failed: %d (%s)\n",
               __func__, err, strerror(-err));
       mwv207_drm_context_print(cmd);
+      /* FIX(jm9100-oss): O5 —— 失败时让 *out_fence_fd 保持 -1（见 O4 修复：
+       * 只有 !err 才写它），调用方 fence_create(-1) 会拿到一个"永远就绪"的
+       * fence，应用据此跳过等待，等于把失败伪装成完成。现在调用方
+       * (video_cs.c) 已改为对 fd<0 不创建 fence。 */
       /* 失败时 KMD 可能已经 fd_install 过 out-fence（KMD 的
        * mwv207_submit_commit() 是"先 fd_install 再 push job"，push 失败
        * 时 fd 已经装好却没人接管）→ 这里主动关掉避免泄漏。

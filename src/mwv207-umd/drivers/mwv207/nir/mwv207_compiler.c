@@ -695,5 +695,8 @@ mwv207_link_shader(struct mwv207_context *ctx,
    if (next_shader->stage == PIPE_SHADER_FRAGMENT)
       next_shader->link = *info;
 
-   return false;
+   /* FIX(jm9100-oss): 本函数是完整的 varying 匹配/链接过程, 走到这里即链接成功。
+    * 原来恒 return false, 而所有调用者 (mwv207_shader.c:322/450/579) 都不检查
+    * 返回值, 一旦未来有人检查就会把成功当失败。语义化返回 true。 */
+   return true;
 }

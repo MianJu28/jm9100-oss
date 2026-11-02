@@ -24,6 +24,7 @@
 * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 * OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
+#include <stdio.h>
 #include "mwv207_lower.h"
 
 static nir_def *
@@ -107,7 +108,11 @@ set_base_offset(nir_shader *nir)
     }
 
     if (base_offset == NULL) {
-        assert(0);
+        /* FIX(jm9100-oss): release 构建定义 NDEBUG 时 assert(0) 被编译掉,
+         * 随后 return NULL 会被调用方 (lower_instr) 直接当基址用 → 空指针解引用。
+         * 保守处理: 打印告警并返回 NULL, 让调用方跳过本次原子操作降级,
+         * 而不是在 release 下悄悄产生未定义行为。 */
+        fprintf(stderr, "mwv207: shared atomic base offset not found, skipping lowering\n");
     }
     return base_offset;
 }

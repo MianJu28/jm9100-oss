@@ -1040,8 +1040,17 @@ mwv207_config_other(struct mwv207_context *ctx)
       MWV207_EMIT(cmd_buf, 0x507, ctx->zsa->stencil_config[ctx->rast_state->base.front_ccw] |
          ctx->stencil_ref.stencil_reference[ctx->rast_state->base.front_ccw]);
 
+      /* FIX(jm9100-oss): 0x528 (PE_EXTRA_REFERENCE, 厂商 0x14A0) 是全局单份的
+       * "backside reference" 寄存器, 而 mwv207_set_stencil_ref() 在 set 时已把
+       * stencil_back_reference[0/1] 按 [背面,正面] 语义填好
+       * ([0]=(ref_value[1]&0xFF)|~0x1FF, [1]=(ref_value[0]&0xFF)|~0x1FF, 见
+       * mwv207_state.c:320-334)。这里原代码再按 front_ccw 挑一次, 造成双重互换:
+       * front_ccw=1 时发射的是正面值。恒取 [0](背面) 即与硬件单份寄存器语义一致;
+       * 0x507 的正面数组未在 set 时预互换, 保持按 front_ccw 是正确的。
+       * 佐证: PA_CONTROL_EX.FRONT_FACE (0xAB0 bit0) 在 UMD 从未被写, winding
+       * 完全由 cull_mode 承担 —— 单份寄存器+软件挑值就是该硬件的设计用法。 */
       MWV207_EMIT(cmd_buf, 0x528,
-         ctx->stencil_ref.stencil_back_reference[ctx->rast_state->base.front_ccw]);
+         ctx->stencil_ref.stencil_back_reference[0]);
 
       MWV207_EMIT(cmd_buf, 0x52E,
          ctx->zsa->stencil_back_config[ctx->rast_state->base.front_ccw]);

@@ -125,7 +125,11 @@ mwv207_video_cs_submit(struct mwv207_video_cs *cs,
 
       cs->ws->cmdbuf_commit(cs->ws, cs->cmd, -1, &out_fence_fd);
       struct pipe_fence_handle *out_fence;
-      out_fence = cs->ws->fence_create(cs->ws, out_fence_fd);
+      /* FIX(jm9100-oss): O5 —— submit 失败时 cmdbuf_commit() 保持
+       * *out_fence_fd == -1（见 mwv207_drm_cs.c 的 O4/O5 修复），此时
+       * fence_create(-1) 会造出一个"永远就绪"的 fence，应用据此跳过等待，
+       * 把失败伪装成完成。fd<0 时不创建 fence，让上层把这次提交当失败。 */
+      out_fence = (out_fence_fd >= 0) ? cs->ws->fence_create(cs->ws, out_fence_fd) : NULL;
       if (out_fence) {
          cs->ws->fence_wait(cs->ws, out_fence, OS_TIMEOUT_INFINITE);
          cs->ws->fence_reference(&out_fence, NULL);

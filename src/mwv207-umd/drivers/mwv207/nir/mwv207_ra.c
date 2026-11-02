@@ -24,6 +24,7 @@
 * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 * OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
+#include <stdio.h>
 #include "util/register_allocate.h"
 
 #include "mwv207_cmd.h"
@@ -818,7 +819,17 @@ mwv207_init_reg_state(struct mwv207_context *ctx, struct mwv207_compile *c,
 
    ra_set_finalize(regs, q_values);
 
-   while(!mwv207_ra(c, nir, regs, ctx->ws->debug)) {
+   /* FIX(jm9100-oss): 原循环无上限且循环体只释放 c->g/c->live_map ——
+    * 不重建就再次进入 mwv207_ra() 会 use-after-free; 若 spilling 永不收敛
+    * (mwv207_spill_reg() 找不到候选时 assert(false), release 下是
+    * __builtin_unreachable()) 则死循环冻结应用。加上限, 失败时明确报错退出。 */
+   for (int retry = 0; ; retry++) {
+      if (mwv207_ra(c, nir, regs, ctx->ws->debug))
+         break;
+      if (retry >= 32) {
+         fprintf(stderr, "mwv207: register allocation failed to converge after %d spill rounds\n", retry);
+         unreachable("mwv207 RA: spill did not converge");
+      }
       ralloc_free(c->g);
       ralloc_free(c->live_map);
    }
