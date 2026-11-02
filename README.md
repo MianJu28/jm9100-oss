@@ -30,7 +30,7 @@ sudo ./switch-mwv207.sh kmd install         # KMD 切换为自建带修复版 (�
 | `patches/` | 缺陷修复补丁集 0001-0012 (KMD 2 个 + UMD 4 个 + 硬解移植 1 个 + 10bit HEVC 黑屏修复 1 个 + GLES 3.2/鲁棒访问/16位格式 1 个 + 显存单位与 winsys O2/O3 1 个 + KMD 6.6 移植 1 个) |
 | `payload-24/` | Mesa 24.1.2 全功能栈载荷源 (GL+VA+VDPAU+OpenCL, MANIFEST 校验) —— **不含** GLES 3.2 等后续修复 |
 | `payload-25/` | 由 `tools/make-payload.sh` 从 build-full 组装的 r2 载荷 (含 GLES 3.2 / 鲁棒访问 / 16位格式 / 显存修正), 待部署 |
-| `tools/` | `make-payload.sh`: 从构建树组装新载荷 (改 rpath/SONAME 自检/重算 MANIFEST/打印与上游 md5 差异); `enable-ssh-rescue.sh`: 装 openssh-server 并做最小暴露加固 (仅公钥/禁 root/白名单), 为 KMD 部署建立黑屏救援通道 |
+| `tools/` | `make-payload.sh`: 从构建树组装新载荷 (改 rpath/SONAME 自检/重算 MANIFEST/打印与上游 md5 差异); `enable-ssh-rescue.sh`: 装 openssh-server 建黑屏救援通道, 默认仅公钥, `--password-auth` 开口令登录 (可用 `PASSWORD_FROM` 限定网段) |
 | `docs/` | 驱动 API 与寄存器参考 (17 文件 / 约 1.77 万行): 架构 / winsys / 核心对象 / 绘制 / NIR / 视频 / 已知问题 / 可行性 / 寄存器四表 |
 | `tests/` | 硬件验证套件: run-all.sh / run-full-regression.sh + 源码与二进制 |
 | `compat-env/` | 兼容运行环境 (libva 2.22 deb + 解包根, 供旧 libva 系统临时定向) |
