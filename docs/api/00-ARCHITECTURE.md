@@ -212,7 +212,7 @@ glTexImage2D → st_TexImage/st_TexSubImage
         用 2D BLT（mwv207_blit_resource_box）把 staging 拷进真实资源
 ```
 
-⚠ **坑**：最后那一步 BLT 对 16 位多通道布局**不能保持字节精确**，这些格式必须走 `LINEAR`（见 `mwv207_tile_supported_format()` 与 `patches/0010-mwv207-16bit-formats-linear-layout.patch`）。
+⚠ **坑**：最后那一步 BLT 对 16 位多通道布局**不能保持字节精确**，这些格式必须走 `LINEAR`（见 `mwv207_tile_supported_format()`）。
 
 ---
 

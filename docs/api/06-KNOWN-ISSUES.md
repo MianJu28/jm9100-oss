@@ -61,8 +61,7 @@ K8/K9/K12 引自原报告，本树未复核（KMD 的 `irq.c`/`sched.c`/`ttm.c` 
   不能保持字节精确（实测 `00 40 00 c0` 被读成 `00 c3 00 c3`）。
 - 修复：`mwv207_tile_supported_format()` 对 6 个 16 位格式返回 `false`，强制 LINEAR，
   走逐字节精确的 CPU 路径。
-- 产物：`patches/0010-mwv207-16bit-formats-linear-layout.patch`，
-  报告 `reports/ES3-FORMATS-LINEAR-REPORT.md`。
+- 报告：`reports/ES3-FORMATS-LINEAR-REPORT.md`。
 - **遗留**：数据已字节精确，但 `R16G16_UNORM` / `R16_SNORM` / `R16G16_SNORM`
   采样仍恒为 0；6 位采样器格式码 `0x00–0x36` 全扫描无一组能同时读通两个通道
   （厂商文档中的 RG16 码 `0x34/0x35` 读出全 0）。属**信息边界**，非驱动笔误。
@@ -405,7 +404,6 @@ K8/K9/K12 引自原报告，本树未复核（KMD 的 `irq.c`/`sched.c`/`ttm.c` 
 | O3 | `mwv207_drm_cs.c` `mwv207_add_dat()` | 拼接前 `memset(dest_dat->data + dest_dat->size, 0, 0x100)`；memcpy 长度收敛为 `MIN2(src_dat->size, 0x100u)`；`+= 0x100` 不变 | 不再把每槽尾部 100 字节未初始化内存发往 GPU |
 
 - 提交：`cd90d9f`（GLES 3.2 + 鲁棒缓冲访问 + 16 位格式，6 文件）、`5499360`（上述 3 项，3 文件）。
-- 补丁：`patches/0011-mwv207-vram-unit-and-winsys-o2-o3.patch`（60 行 / 3 文件 / +24 −3）。
 - 回归：`tests/tri-test` → `HARDWARE TRIANGLE RENDER: PASS`；`tests/fbo-test` →
   `FBO status: 0x8cd5 COMPLETE` + `FBO HARDWARE RENDER: PASS`；`glxinfo` 仍为
   GL core 4.0 / **GLES 3.2 (git-6cb20bd761)**。

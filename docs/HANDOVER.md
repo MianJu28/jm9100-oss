@@ -27,17 +27,18 @@ glxgears 100.3 FPS，Firefox 硬件渲染正常（内容+性能都修完），Op
 - 全功能栈（GL/VAAPI/VDPAU/rusticl）、GLES 3.2 原生点亮、自建 KMD 真机运行、
   切换脚本统一（`switch-mwv207.sh`，umd/kmd/all 三层）。
 - **Firefox 图元全丢**：根因 = VS 里 RGBA32F `texelFetch` 只回 64 位
-  （`nir/mwv207_lower_128bit()` 只对 FS 生效）→ `patches/0017`，最小复现
+  （`nir/mwv207_lower_128bit()` 只对 FS 生效）→ 提交 `bda3749`（取样）+
+  `d7c52a3`（重编译记录），最小复现
   `tests/vstf-128bit/`（`/tmp/wrreplay` 运行器，判据 = 与 llvmpipe FB_HASH 逐字节一致）。
 - **Firefox 性能**：① 重编译判据误用 `ctx->dirty`（每次 submit 被重置为全量）→
   "128 位模式指纹参与着色器缓存键"（`mwv207_shader.c:985-1015`，`built_fp_*`）；②
   128 位纹理 split/merge 对 WC 显存逐标量拷贝（~100MB/s）→ 逐行 memcpy。WebGL 36→42+
-  FPS（llvmpipe 28.5），CSS 页 97-99 FPS（vsync 上限）→ `patches/0018`。
+  FPS（llvmpipe 28.5），CSS 页 97-99 FPS（vsync 上限）→ 提交 `d7c52a3`。
 - **GitHub 概率性崩溃**：dual-source blend 的 `sampler_index`（`num_samplers`）与
   视图槽位（`num_sampler_views`）不一致 + 无判空 → SIGSEGV `get_rt_texture_coord`
-  → `patches/0020`。
+  → 提交 `40d5d76`。
 - **健壮性批次 1/2 + GBM/Wayland**：W6/W7/W12/E2/E4/E7/E9/E10/F.3.2/F.3.3/O4 +
-  GBM EACCES（render 节点回退）→ `patches/0019`。玲珑 CDI 冲突修复（EGL ICD
+  GBM EACCES（render 节点回退）→ 提交 `841e300`。玲珑 CDI 冲突修复（EGL ICD
   原地改写，**不要删厂商 `10_mwv207.json`**）。
 - **A 类修复（`5dee412`，r12 已部署）**：E5 双面模板双重互换（0x528 恒取
   `stencil_back_reference[0]`）、F.3.1 反汇编 type 位序（`(bit0<<2)|bit1_2`）、
@@ -108,9 +109,8 @@ C-2 16 位采样编码（硬件边界）、D7 Vulkan（官方闭源也没有）�
 3. `./tools/build-umd.sh check`（FIX 文件计数应递增）。
 4. `git commit`；需要时 `tools/make-payload.sh -v …-rN` 出包 → `umd install --force`
    → **status+md5 确认实装** → 零 env 验收（glxinfo/glmark2/query tests）。
-5. 导出补丁：`git diff HEAD~1 HEAD -- src/mwv207-umd | sed -e
-   's\|a/src/mwv207-umd/\|a/src/gallium/\|' -e 's\|b/src/mwv207-umd/\|b/src/gallium/\|'
-   > patches/00NN-…patch`，更新 `docs/UNRESOLVED.md` 与 README 版本号，push。
+5. 更新 `docs/UNRESOLVED.md` 与 README 版本号，push。**不再导出补丁**（用户
+   2026-11-03 决定，`patches/` 已删除）：改动以 git 提交为唯一记录。
 
 ## 8. 杂项备忘
 
@@ -124,3 +124,6 @@ C-2 16 位采样编码（硬件边界）、D7 Vulkan（官方闭源也没有）�
 - KMD 热切换不可行（refcnt 恒 1，内核内部引用），只能重启；脚本有 `kmd stage`
   （只放置）与 `refresh_initramfs`。
 - 上游枚举陷阱：`p_format.h` 只在 `ref/mesa-22.3.7/...`（`find` 要 `-L`）。
+- **补丁流程已废止**（2026-11-03 用户决定）：`patches/` 目录与"导出补丁"步骤一并
+  删除，之后不再生成任何 `*.patch` 归档；版本记录只靠 git 提交，需要对外提交时
+  直接引提交哈希（或 `git format-patch` 临时生成、不入库）。

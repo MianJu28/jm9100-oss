@@ -22,7 +22,6 @@ MWV207/JM9100 写的驱动，由 oh-mesa 移植接到 Mesa 24.1.2 上。所以�
 - `ref/oh-mesa/User_source_code/mesa-24.1.2/` —— 整个 Mesa 24.1.2 树（只读参考 + 构建宿主）。
   本目录通过符号链接挂进它的 `src/gallium/drivers/mwv207` 与 `src/gallium/winsys/mwv207`，
   meson 构建时无感。
-- `patches/0009..0013` —— 本轮改动作为补丁留存，可用于对照/复现（内容已在本树里）。
 
 ## 构建
 

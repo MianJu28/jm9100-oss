@@ -34,7 +34,6 @@ sudo ./switch-mwv207.sh kmd install         # KMD 切换为自建带修复版 (�
 | `switch-mwv207.sh` | 统一切换脚本 (根目录入口, 1200+ 行): `umd` 用户态层 + `kmd` 内核态层; 不带层名的 `status`/`check`/`verify` 同时跑两层。全局选项 `--root`/`--dry-run` 可写在任意位置。EGL ICD 采用**原地改写**（不删厂商 `10_mwv207.json`，保住 `/etc/cdi/jmgpu.yaml` 的 CDI 挂载源 → 玲珑应用可用） |
 | `src/mwv207-umd/` | 我们维护的用户态驱动源码（`drivers/mwv207` + `winsys/mwv207`，唯一可改处；上游树 `ref/oh-mesa/...` 里是指向它的符号链接） |
 | `src/kernel-6.6/` | 我们维护的内核态驱动（2026-11-03 并入本仓库管理；原独立 git 仓历史在 `ref/kernel-6.6-old-git`。社区 6.6 移植基线 + K1–K8/K10 修复 + N15 零重定位 submit BUG 修复） |
-| `patches/` | 修复补丁集 0001–0020（KMD 4 个 + UMD 12 个 + 硬解移植/10bit HEVC/GLES 3.2/显存与 winsys/KMD 6.6 移植/矩形纹理与持久映射/VS 128 位取样/重编译与 128 位拷贝/健壮性批次 1-2 与 GBM/dual-blend 空视图） |
 | `payload-36/` | 当前活动载荷（`24.1.2-fullstack-r12`，11 个实体文件含 glvnd ICD `libEGL_jm.so.0`，MANIFEST 校验）。历史载荷已清理，只在 `/var/lib/mwv207-oss/switch-history` 留最近 3 个回滚快照 |
 | `tools/` | `make-payload.sh`（从构建树组装载荷: 版本戳一致性自检/rpath/MANIFEST/与上游 md5 差异）；`build-umd.sh`（check/relink/build/sim）；`map-monitor.c`（X Map 死区缓解守护）；`enable-ssh-rescue.sh`（黑屏 SSH 救援通道） |
 | `docs/` | 驱动 API 与寄存器参考（19 文件 / 约 1.83 万行）+ `UNRESOLVED.md` 未修问题总账（40 项，含已修索引与批次推进表） |
@@ -43,7 +42,8 @@ sudo ./switch-mwv207.sh kmd install         # KMD 切换为自建带修复版 (�
 | `reports/` | 阶段报告 15 份（见下索引）+ 火狐取证证据目录 |
 
 > 历史清理：旧脚本与 archive/（2026-10-21）；旧载荷 payload-24…34、14 个回滚
-> 快照、/tmp 下全部实验 profile 与旧 DRI 副本（2026-11-03）。
+> 快照、/tmp 下全部实验 profile 与旧 DRI 副本（2026-11-03）。同日删除 `patches/`
+> 补丁集并停止生成补丁：改动以 git 提交为唯一记录，复现/对外提交直接引用提交哈希。
 
 ## 报告索引 (reports/)
 
@@ -67,13 +67,14 @@ sudo ./switch-mwv207.sh kmd install         # KMD 切换为自建带修复版 (�
 - **首帧黑屏**：Xorg 合成器侧死区（与 GL 栈无关），缓解守护 `tools/map-monitor.c`。
 - **WebRender 图元全丢**（2026-11-02 修复）：根因是顶点着色器对 RGBA32F 纹理的
   `texelFetch` 只回 64 位 —— `nir/mwv207_lower_128bit()` 原来只对 FS 生效。
-  修复散见 `patches/0017`（VS 128 位 + 重编译记录重置）；取证过程与最小复现
+  修复见 `src/mwv207-umd/`（提交 `bda3749` 为 VS 128 位取样，`d7c52a3` 为重编译
+  记录重置）；取证过程与最小复现
   （`tests/vstf-128bit/`）见 `reports/FF-RENDER-20261102.md` §10–§12。
-- **性能**（2026-11-02 修复，`patches/0018`）：① 重编译判据误用 `ctx->dirty`
+- **性能**（2026-11-02 修复，提交 `d7c52a3`）：① 重编译判据误用 `ctx->dirty`
   （每次提交后被重置为全量）→ 改为"128 位模式指纹参与着色器缓存键"；②
   128 位纹理 split/merge 对 WC 显存逐标量拷贝（~100MB/s）→ 改逐行 memcpy。
   结果: WebGL 36→42+ FPS（llvmpipe 同页 28.5），CSS 页 97–99 FPS（vsync 上限）。
-- **GitHub 概率性崩溃**（2026-11-03 修复，`patches/0020`）：dual-source blend
+- **GitHub 概率性崩溃**（2026-11-03 修复，提交 `40d5d76`）：dual-source blend
   的 RT 视图绑在 `num_sampler_views` 槽而 `sampler_index` 记 `num_samplers`
   （两计数不等），`mwv207_lower_dual.c:115` 无条件解引用 → SIGSEGV 0x48。
   现已判空 + 槽位统一 + 三级回退。
@@ -84,7 +85,8 @@ sudo ./switch-mwv207.sh kmd install         # KMD 切换为自建带修复版 (�
 
 `/etc/modprobe.d/mwv207-devfreq.conf`: `softdep mwv207 pre: governor_performance` —
 修复 in-tree KMD devfreq 启动即失败的缺陷 (GPU 停 vbios 低频), 重启后自动生效。
-源码正解为 `patches/0008-KMD-devfreq-governor-softdep.patch` (MODULE_SOFTDEP)。
+源码正解在 `src/kernel-6.6/mwv207_drv.c:543` 的
+`MODULE_SOFTDEP("pre: governor_performance")`。
 
 ## 路径约定
 

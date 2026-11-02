@@ -53,7 +53,7 @@ dmesg 里 GPU 相关错误计数为 0。
 - 根因：① `mwv207_config_dual_blend()`（`mwv207_draw.c:1214`）把 RT blit 视图绑在 `num_sampler_views[FS]` 槽，但 `dsbi.sampler_index` 记的是 `num_samplers[FS]`（两计数不等，视图槽回缩后错位）；② `mwv207_lower_dual.c:115` 无条件解引用 `sampler_views[4][sampler_index]->texture`（`0x48` = `pipe_sampler_view::texture` 偏移）。
 - 修复：`cbufs[0]`/`create_sampler_view` 为 NULL 时关闭 is_dual；`sampler_index` 与 `bind_sampler_states` 槽统一为 `num_sampler_views[FS]`；`get_rt_texture_coord()` 判空并回退到 `fb_state` 渲染目标尺寸。
 - 回归：wrreplay VT/brush/triv 全 OK；query tests PASS=4；glxgears/GLES 3.2/2048MB 不变；Firefox GitHub 45s 静止加载崩溃 0（原崩溃概率性触发，需日常使用观察）。
-- 提交：`40d5d76`；补丁 `patches/0020-mwv207-dual-blend-null-view-fix.patch`（85 行，`fb9c9b1`）。
+- 提交：`40d5d76`（`src/mwv207-umd`，2 文件 / +42 −4）。
 
 ### 1.1 错误路径 / 健壮性（低风险，可直接改）
 
@@ -198,8 +198,8 @@ dmesg 里 GPU 相关错误计数为 0。
 
 | 日期 | 项 | 提交 |
 |---|---|---|
-| 2026-11-02 | 条件渲染真实现（`render_condition` 钩子 + CPU 侧谓词判断，GL 4.0 恢复） | `patches/0015`（`src/mwv207-umd`） |
-| 2026-11-02 | KMD：零重定位提交未初始化 `drm_sched_job` 导致 `BUG_ON(!entity)` 内核崩溃（N15） | `28bc73d` / `patches/0014` |
+| 2026-11-02 | 条件渲染真实现（`render_condition` 钩子 + CPU 侧谓词判断，GL 4.0 恢复） | `216a96a`（`src/mwv207-umd`） |
+| 2026-11-02 | KMD：零重定位提交未初始化 `drm_sched_job` 导致 `BUG_ON(!entity)` 内核崩溃（N15） | `28bc73d`（`src/kernel-6.6`） |
 | 2026-11-02 | 分层：`src/mwv207-umd/` 独立存放适配代码，oh-mesa 只作参考 | 结构变更 |
 | 2026-10-31 | 遮挡查询失真（按簇计数求和）、条件渲染 SIGSEGV（cap 回退） | `b2ab2c9` |
 | 2026-10-30 | VRAM cap 单位（`1024<<20` → `1024`）、O2（bo_map 返回语义）、O3（每槽尾 100 字节未初始化上 GPU） | `5499360` |
@@ -207,9 +207,7 @@ dmesg 里 GPU 相关错误计数为 0。
 | 2026-10-31 | 工具：合并 UMD/KMD 切换脚本、新增 `all install` | `f4b1221`、`af15fda` |
 | 2026-10-31 | 文档：`ref/reverse-source/docs/` 反编译五篇、`06-KNOWN-ISSUES` C4/C5 | `e63fcf3`、`fd31971` |
 
-补丁：`patches/0009`（GLES3.2+混合）、`0010`（16 位格式）、`0011`（VRAM+O2/O3）、
-`0012`（KMD 6.6 移植）、`0013`（遮挡查询+条件渲染）、`0014`（KMD 空 entity）、
-`0015`（条件渲染真实现）。
+补丁已废止（2026-11-03，`patches/` 删除）：上述改动以 git 提交为唯一记录。
 
 ---
 
@@ -258,7 +256,7 @@ dmesg 里 GPU 相关错误计数为 0。
 - 现状（r9，零 env）：CSS 动画页 **96.6 FPS / 10.35ms**（已到 100Hz 面板上限），
   WebGL 动画页 **42.0–44.5 FPS / 23.5ms**（llvmpipe 同条件 28.5 FPS / 35.05ms，
   即我方 1.5–2.0×）。
-- 已修的两个大头（见 `reports/FF-RENDER-20261102.md` §13、`patches/0018`）：
+- 已修的两个大头（见 `reports/FF-RENDER-20261102.md` §13、提交 `d7c52a3`）：
   ① 每帧重编译 VS+FS（约 100 次/秒、每次 ~1.4ms）——根因是
   `mwv207_set_current_shader()` 拿 `ctx->dirty` 当"状态变过"的判据，而
   `mwv207_submit()` 末尾把 `dirty` 重置成 `MWV207_DIRTY_ALL`；改为把四个
