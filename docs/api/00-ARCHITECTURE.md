@@ -291,7 +291,7 @@ sudo ./switch-mwv207.sh umd install              # 会重启 lightdm
 
 - 上游 25.x 移除/改写了大量接口（`pipe_shader_type`、`nir_def::parent_instr`、`pipe_surface`、`pipe_caps` 等），本实现锚定 **24.1.2**；升级需先做大范围 API 适配。
 - 与 Mesa 24.3（发行版）**不能混跑**：版本戳与内部 ABI 都不同，混用会出现 `DRI driver not from this Mesa build` 或渲染错乱。
-- 与厂商闭源栈**不共享**任何内部 ABI：闭源的 HAL 在 `libdrm_jmgpu.so`（`jmo_*`），KMD 侧用 13 个 `DRM_IOCTL_JM_*`；反编译结论见 `docs/reverse/`。
+- 与厂商闭源栈**不共享**任何内部 ABI：闭源的 HAL 在 `libdrm_jmgpu.so`（`jmo_*`），KMD 侧用 13 个 `DRM_IOCTL_JM_*`；反编译结论见 `ref/reverse-source/docs/`。
 
 向上游移植时的已知断点（基线 24.1.2）：
 
@@ -324,4 +324,4 @@ sudo ./switch-mwv207.sh umd install              # 会重启 lightdm
 
 1. `include/mwv207_cmd.h`（命令字怎么发）→ 2. `mwv207_screen.c`（能力面）→ 3. `winsys/mwv207/drm/mwv207_drm_{winsys,bo,cs}.c`（对象与提交）→ 4. `mwv207_context.c` + `mwv207_state.c`（状态）→ 5. `mwv207_draw.c`（主路径）→ 6. `mwv207_format.c` / `mwv207_resource.c`（资源与格式）→ 7. `mwv207_sampler.c` / `mwv207_vertex.c`（采样与顶点）→ 8. `nir/` 全目录（编译器）→ 9. `video-codec/`（视频，可用时再读）。
 
-配套材料：`docs/api/01-WINSYS-KMD.md`、`02-CORE-OBJECTS.md`、`03-DRAW-PIPELINE.md`、`04-NIR-COMPILER.md`、`05-VIDEO-CODEC.md`、`06-KNOWN-ISSUES.md`、`07-WINSYS-AUDIT.md`、`08-KMD.md`、`09-SYMBOL-INDEX.md`、`10-HARDWARE-BLOCKS.md`、`11-FIX-FEASIBILITY.md`；寄存器：`docs/registers/`；闭源对照：`docs/reverse/`。
+配套材料：`docs/api/01-WINSYS-KMD.md`、`02-CORE-OBJECTS.md`、`03-DRAW-PIPELINE.md`、`04-NIR-COMPILER.md`、`05-VIDEO-CODEC.md`、`06-KNOWN-ISSUES.md`、`07-WINSYS-AUDIT.md`、`08-KMD.md`、`09-SYMBOL-INDEX.md`、`10-HARDWARE-BLOCKS.md`、`11-FIX-FEASIBILITY.md`；寄存器：`docs/registers/`；闭源对照：`ref/reverse-source/docs/`。

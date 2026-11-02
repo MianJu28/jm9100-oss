@@ -164,7 +164,7 @@ dmesg 里 GPU 相关错误计数为 0。
 反编译提取寄存器时，宽松口径曾得出"413 个寄存器被 HAL 引用"，但零假设检验显示：
 候选空间 55297、随机命中率 2.45%，实测命中 1165 次 vs 随机期望 367.5 → **信噪比仅 3.2×**
 （约 1/3 可能是巧合）。发布数已收敛为最严口径 **379**（只取 `Load/Flush/Set/Write`
-类函数内且 `v >= 0x18` 的立即数）。见 `reverse/03-REGISTERS.md` §3.1。
+类函数内且 `v >= 0x18` 的立即数）。见 `ref/reverse-source/docs/03-REGISTERS.md` §3.1。
 **教训：总量显著 ≠ 单条可信**，单条必须靠函数名 + 开源驱动自身用法双重印证。
 
 ---
@@ -205,7 +205,7 @@ dmesg 里 GPU 相关错误计数为 0。
 | 2026-10-30 | VRAM cap 单位（`1024<<20` → `1024`）、O2（bo_map 返回语义）、O3（每槽尾 100 字节未初始化上 GPU） | `5499360` |
 | 2026-10-30 | GLES 3.2 + 鲁棒缓冲访问 + 16 位格式上传字节精确 | `cd90d9f` |
 | 2026-10-31 | 工具：合并 UMD/KMD 切换脚本、新增 `all install` | `f4b1221`、`af15fda` |
-| 2026-10-31 | 文档：`docs/reverse/` 反编译五篇、`06-KNOWN-ISSUES` C4/C5 | `e63fcf3`、`fd31971` |
+| 2026-10-31 | 文档：`ref/reverse-source/docs/` 反编译五篇、`06-KNOWN-ISSUES` C4/C5 | `e63fcf3`、`fd31971` |
 
 补丁：`patches/0009`（GLES3.2+混合）、`0010`（16 位格式）、`0011`（VRAM+O2/O3）、
 `0012`（KMD 6.6 移植）、`0013`（遮挡查询+条件渲染）、`0014`（KMD 空 entity）、
@@ -217,8 +217,8 @@ dmesg 里 GPU 相关错误计数为 0。
 
 - 缺陷细节与推导：[api/06-KNOWN-ISSUES.md](api/06-KNOWN-ISSUES.md)
 - 逐条可行性评估：[api/11-FIX-FEASIBILITY.md](api/11-FIX-FEASIBILITY.md)
-- 反编译与寄存器：[reverse/README.md](reverse/README.md)、
-  [reverse/05-OCCLUSION-QUERY.md](reverse/05-OCCLUSION-QUERY.md)
+- 反编译与寄存器：[ref/reverse-source/docs/README.md](ref/reverse-source/docs/README.md)、
+  [ref/reverse-source/docs/05-OCCLUSION-QUERY.md](ref/reverse-source/docs/05-OCCLUSION-QUERY.md)
 - KMD 6.6 移植：[../reports/KMD-6.6-PORT-REPORT.md](../reports/KMD-6.6-PORT-REPORT.md)
 - 验证工具：`tests/query/run-query-tests.sh`、`tests/run-all.sh`
 

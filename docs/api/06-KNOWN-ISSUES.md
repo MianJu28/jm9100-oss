@@ -107,7 +107,7 @@ K8/K9/K12 引自原报告，本树未复核（KMD 的 `irq.c`/`sched.c`/`ttm.c` 
 - **破译依据**：反编译闭源 `libdrm_jmgpu.so` 的 `jmo_HARDWARE_SetQuery`(0xdbc00, size 0x960)
   得到寄存器常量 `0x3824 / 0x3830 / 0x3860`，正是开源 `0xE09 / 0xE0C / 0xE18` 的 `<<2`，
   对应厂商 `MWV207REG_OCCLUSION_ADDRESS / _DATA / _CONTROL`（`MODE` 取值含 `COUNT 0x0`、
-  `BOOLEAN 0x1`、`RENDER 0x6`…）。详见 `docs/reverse/05-OCCLUSION-QUERY.md`。
+  `BOOLEAN 0x1`、`RENDER 0x6`…）。详见 `ref/reverse-source/docs/05-OCCLUSION-QUERY.md`。
   ⚠ 此前判"厂商库查不到"是 **grep 假象**：厂商头地址是**大写 5 位** `0x03824`，
   早先按小写 4 位 `0x3824` 检索故零命中。
 - **实测**：`GL_SAMPLES_PASSED=4096`、`GL_ANY_SAMPLES_PASSED=1`，且计数随几何面积单调
