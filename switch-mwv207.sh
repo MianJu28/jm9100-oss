@@ -115,10 +115,15 @@ VDPAU_LINK="/usr/lib/aarch64-linux-gnu/vdpau/libvdpau_mwv207.so.1"
 # 10_mwv207.json 指向闭源 libEGL_mwv207.so.0 → 需要从未加载的 jmgpu.ko,
 # 实测必然失败(veglGetModule: Fail to load library / _OpenDevice FATAL)。
 EGL_ICD_DIR="/usr/share/glvnd/egl_vendor.d"
-EGL_ICD_JSON="$EGL_ICD_DIR/20_jm.json"
-EGL_ICD_JSON_DISABLED="$EGL_ICD_DIR/20_jm.json.oss-disabled"
+# 我们**原地改写**厂商这条 json 指向自己的 ICD, 不新建 json、也不把它挪走:
+#   - /etc/cdi/jmgpu.yaml 用它的路径做 rbind hostPath, 文件消失会让 ll-box 建容器
+#     失败(微信/日历/看图等玲珑应用全部打不开);
+#   - 另建一条指向同一 libEGL_jm.so.0 的 json 会让 glvnd 枚举两次。
+EGL_ICD_JSON="/usr/share/glvnd/egl_vendor.d/20_jm.json"          # 旧版遗留, 仅用于清理
+EGL_ICD_JSON_DISABLED="/usr/share/glvnd/egl_vendor.d/20_jm.json.oss-disabled"
 VENDOR_EGL_ICD_JSON="$EGL_ICD_DIR/10_mwv207.json"
 VENDOR_EGL_ICD_DISABLED="$EGL_ICD_DIR/10_mwv207.json.oss-disabled"
+VENDOR_EGL_ICD_ORIG="$EGL_ICD_DIR/10_mwv207.json.vendor-orig"    # 厂商原件备份
 
 XORG_LOG="/var/log/Xorg.0.log"
 # 注意: "Initialized DRISWRAST" 不可作失败标记! 2026-10-21 10:02 实证: glamor
@@ -200,6 +205,7 @@ MANAGED=(
     "$EGL_ICD_JSON_DISABLED"
     "$VENDOR_EGL_ICD_JSON"
     "$VENDOR_EGL_ICD_DISABLED"
+    "$VENDOR_EGL_ICD_ORIG"
 )
 
 
@@ -471,7 +477,7 @@ umd_deploy_files() {
     # --dry-run 保护: 本函数的部署动作是普通文件操作(不走 run()), 若不拦会真改系统。
     if [ "$DRY_RUN" = 1 ]; then
         log "[dry-run] 将部署载荷 -> $INST_DIR; 写 $LDCONF; 建 DRI/VA/VDPAU 软链;"
-        log "[dry-run] 停用厂商 EGL ICD 并注册 $EGL_ICD_JSON; 写 $OPENCL_ICD; ldconfig"
+        log "[dry-run] 原地改写 $VENDOR_EGL_ICD_JSON 指向我们的 ICD (不删文件, 保 CDI 挂载源); 写 $OPENCL_ICD; ldconfig"
         UMD_DEPLOYED_VER="dry-run"
         return 0
     fi
@@ -519,14 +525,29 @@ umd_deploy_files() {
     # 5.5) glvnd EGL ICD —— 让"走系统 glvnd 的应用"(火狐等) 吃到我们的硬件 EGL。
     # 系统 libEGL.so.1 只是转发器, 真正提供驱动的是 egl_vendor.d/*.json 指向的
     # ICD。厂商那条指向闭源 libEGL_mwv207.so.0, 需要从未加载的 jmgpu.ko,
-    # 实测必然失败, 故停用(可回滚)并换成我们 glvnd 构建的 libEGL_jm.so.0。
+    # 实测必然失败 —— 但**不能把它 mv 走**:
+    #   /etc/cdi/jmgpu.yaml 把本文件当作 rbind 的 hostPath, 源不存在时
+    #   ll-box 建容器直接失败, 所有玲珑/linyaps 应用(微信/日历/看图 …)都打不开,
+    #   报 "child process error: No such file or directory"。
+    # 正确做法: 保留文件本身(CDI 挂载源始终存在), 只把内容原地改写成指向我们的
+    # ICD; 并且不再另建 20_jm.json —— glvnd 会读目录下所有 *.json, 两个文件指向
+    # 同一个 libEGL_jm.so.0 会被枚举两次(重复 vendor/device)。
     mkdir -p "$EGL_ICD_DIR"
-    if [ -f "$VENDOR_EGL_ICD_JSON" ]; then
-        mv -f "$VENDOR_EGL_ICD_JSON" "$VENDOR_EGL_ICD_DISABLED" \
-            || die "停用厂商 EGL ICD 失败: $VENDOR_EGL_ICD_JSON"
-        log "已停用厂商闭源 EGL ICD -> $(basename "$VENDOR_EGL_ICD_DISABLED")"
+    # 兼容旧版遗留: 若之前 mv 出过 .oss-disabled, 先把原文件放回去再做原地改写
+    if [ -f "$VENDOR_EGL_ICD_DISABLED" ] && [ ! -e "$VENDOR_EGL_ICD_JSON" ]; then
+        mv -f "$VENDOR_EGL_ICD_DISABLED" "$VENDOR_EGL_ICD_JSON" \
+            || die "恢复厂商 EGL ICD 失败: $VENDOR_EGL_ICD_DISABLED"
+        log "已恢复厂商 EGL ICD 文件本体 (旧版曾改名停用)"
     fi
-    cat > "$EGL_ICD_JSON" <<EOF
+    # 原先由我们创建的 20_jm.json(以及它的 .oss-disabled) 一律清掉, 避免重复枚举
+    rm -f "$EGL_ICD_JSON" "$EGL_ICD_JSON_DISABLED"
+    # 首次改写前留一份厂商原件; 后续 install 不再覆盖这份备份
+    if [ -f "$VENDOR_EGL_ICD_JSON" ] && [ ! -e "$VENDOR_EGL_ICD_ORIG" ]; then
+        cp -a "$VENDOR_EGL_ICD_JSON" "$VENDOR_EGL_ICD_ORIG" \
+            || die "备份厂商 EGL ICD 失败: $VENDOR_EGL_ICD_ORIG"
+        log "已备份厂商 EGL ICD 原件 -> $(basename "$VENDOR_EGL_ICD_ORIG")"
+    fi
+    cat > "$VENDOR_EGL_ICD_JSON" <<EOF
 {
     "file_format_version" : "1.0.0",
     "ICD" : {
@@ -534,8 +555,8 @@ umd_deploy_files() {
     }
 }
 EOF
-    chmod 0644 "$EGL_ICD_JSON"
-    log "已注册 glvnd EGL ICD: $EGL_ICD_JSON -> $INST_DIR/libEGL_jm.so.0"
+    chmod 0644 "$VENDOR_EGL_ICD_JSON"
+    log "已注册 glvnd EGL ICD: $VENDOR_EGL_ICD_JSON -> $INST_DIR/libEGL_jm.so.0"
 
     # 6) RUSTICL_ENABLE env (OpenCL 设备门控; GL/VA/VDPAU 零 env)
     mkdir -p /etc/environment.d
@@ -725,18 +746,25 @@ umd_verify() {
     [ -e "$INST_DIR/libEGL_jm.so.0" ] \
         && echo "  [OK] $INST_DIR/libEGL_jm.so.0" \
         || { echo "  [FAIL] 缺 $INST_DIR/libEGL_jm.so.0"; rc=1; }
-    if [ -f "$EGL_ICD_JSON" ]; then
-        if grep -q "$INST_DIR/libEGL_jm.so.0" "$EGL_ICD_JSON"; then
+    if [ -f "$VENDOR_EGL_ICD_JSON" ]; then
+        if grep -q "$INST_DIR/libEGL_jm.so.0" "$VENDOR_EGL_ICD_JSON"; then
             echo "  [OK] glvnd EGL ICD 已注册 -> $INST_DIR/libEGL_jm.so.0"
         else
-            echo "  [FAIL] $EGL_ICD_JSON 未指向我们的 ICD"; rc=1
+            echo "  [FAIL] $VENDOR_EGL_ICD_JSON 未指向我们的 ICD (走 glvnd 的应用会退回 llvmpipe)"; rc=1
         fi
     else
-        echo "  [FAIL] 缺 $EGL_ICD_JSON (走 glvnd 的应用会退回 llvmpipe)"; rc=1
+        echo "  [FAIL] 缺 $VENDOR_EGL_ICD_JSON (走 glvnd 的应用会退回 llvmpipe)"; rc=1
     fi
-    [ -f "$VENDOR_EGL_ICD_JSON" ] \
-        && echo "  [WARN] 厂商闭源 EGL ICD 又出现 ($VENDOR_EGL_ICD_JSON 需 jmgpu.ko), 需重新 install" \
-        || echo "  [OK] 厂商闭源 EGL ICD 已停用"
+    # 该文件同时被 /etc/cdi/jmgpu.yaml 当作 rbind 源: 消失 → ll-box 建容器失败 →
+    # 所有玲珑应用打不开。这里显式检查它的存在性, 防止再次被"停用"掉。
+    if [ -f /etc/cdi/jmgpu.yaml ] && grep -q "$VENDOR_EGL_ICD_JSON" /etc/cdi/jmgpu.yaml; then
+        [ -e "$VENDOR_EGL_ICD_JSON" ] \
+            && echo "  [OK] CDI 挂载源存在 (玲珑/linyaps 应用可用)" \
+            || { echo "  [FAIL] $VENDOR_EGL_ICD_JSON 被移除, 玲珑应用会打不开"; rc=1; }
+    fi
+    if [ -e "$EGL_ICD_JSON" ]; then
+        echo "  [WARN] 旧版遗留的 $EGL_ICD_JSON 仍存在, 会与 10_mwv207.json 重复枚举, 需重新 install"
+    fi
 
     echo "  -- 安装目录内容完整性:"
     if [ -f "$CACHE_DIR/manifest.sha256" ]; then

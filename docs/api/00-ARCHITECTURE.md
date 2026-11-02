@@ -255,7 +255,7 @@ meson setup ref/oh-mesa/User_source_code/mesa-24.1.2/build-full \
   -Dzstd=disabled -Dvalgrind=disabled -Dlibunwind=disabled -Dlmsensors=disabled \
   --buildtype=debugoptimized
 
-# glvnd 版（产出 EGL ICD libEGL_jm.so.0.0.0，供 /usr/share/glvnd/egl_vendor.d/20_jm.json 使用）
+# glvnd 版（产出 EGL ICD libEGL_jm.so.0.0.0，由 /usr/share/glvnd/egl_vendor.d/10_mwv207.json 引用）
 meson setup ref/oh-mesa/User_source_code/mesa-24.1.2/build-glvnd \
   ref/oh-mesa/User_source_code/mesa-24.1.2 -Dgallium-drivers=mwv207 \
   -Dglvnd=enabled -Dglvnd-vendor-name=jm -Dgles1=enabled -Dgles2=enabled ...
@@ -283,7 +283,9 @@ sudo ./switch-mwv207.sh umd install              # 会重启 lightdm
 
 产物路径：`build-full/src/gallium/targets/dri/libmwv207_dri.so`，并有一份 `mwv207_dri.so` 符号链接（DRI 加载器按 `<driver>_dri.so` 查找）。
 
-**部署布局**：`/usr/local/lib/mwv207-oss/`（经 `/etc/ld.so.conf.d/00-mwv207-oss.conf` 抢占）+ `/usr/local/lib/aarch64-linux-gnu/dri/mwv207_dri.so`；glvnd 侧 `/usr/share/glvnd/egl_vendor.d/20_jm.json` 指向我们的 ICD（厂商的 `10_mwv207.json` 已停用）。
+**部署布局**：`/usr/local/lib/mwv207-oss/`（经 `/etc/ld.so.conf.d/00-mwv207-oss.conf` 抢占）+ `/usr/local/lib/aarch64-linux-gnu/dri/mwv207_dri.so`；glvnd 侧把 `/usr/share/glvnd/egl_vendor.d/10_mwv207.json` **原地改写**（`library_path` → 我们的 `libEGL_jm.so.0`，原件备份为 `.vendor-orig`）。
+
+> ⚠ **不要把 `10_mwv207.json` 改名或删除**：`/etc/cdi/jmgpu.yaml`（厂商 1.8.0 的 CDI 规格，38 个挂载源）把它当作 `rbind` 的 `hostPath`。源文件不存在时 `ll-box` 建容器直接失败（`child process error: No such file or directory` → `container process exited before reaching expected stage exec_ready`），**所有玲珑/linyaps 应用（微信、日历、看图…）都打不开**。这正是 r6 时期"微信/日历/看图打不开"的根因。同理不要再另建 `20_jm.json`：glvnd 会读目录下所有 `*.json`，两条指向同一 ICD 会重复枚举 vendor/device。
 
 ## 8. 版本与 API 边界
 

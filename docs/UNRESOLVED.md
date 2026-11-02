@@ -209,3 +209,23 @@
 - 疑点方向：chrome 文字用 R8 字形图集，其 UV / 取样位置可能有问题；与
   128 位纹理路径无关（那条路径已修好并有回归）。
 - 参考：`reports/FF-RENDER-20261102.md` 第 11.7 节。
+
+## 玲珑（linyaps）应用打不开：CDI 挂载源被我们删掉（已修）
+
+- 现象：微信 / 日历 / 看图等玲珑应用全部打不开，`ll-cli run <id>` 报
+  `[FATAL] container.cpp:1630 clone_fn: child process error: No such file or directory`
+  + `container process exited before reaching expected stage exec_ready`。
+- 根因：`switch-mwv207.sh` 为了停用厂商闭源 EGL ICD，把
+  `/usr/share/glvnd/egl_vendor.d/10_mwv207.json` **`mv` 成 `.oss-disabled`**；而
+  厂商 1.8.0 的 CDI 规格 `/etc/cdi/jmgpu.yaml` 把它当作 `rbind` 的 `hostPath`
+  （38 个挂载源里唯一缺失的那个）。源文件不存在 → `ll-box` 建容器失败 →
+  所有玲珑应用启动不了。strace 的最后一根稻草就是
+  `openat(AT_FDCWD, "/usr/share/glvnd/egl_vendor.d/10_mwv207.json", O_PATH) = -1 ENOENT`，
+  紧接着 `sendto(4, "\0\0.\0\0\0child process error: No su"...)` 后 `exit_group(1)`。
+  **与显卡无关，是我们的安装脚本与厂商 CDI 规格冲突。**
+- 修法（`switch-mwv207.sh`）：不再改名/删除，改为**原地改写**该 json
+  的 `library_path` 指向我们的 `libEGL_jm.so.0`（原件备份 `.vendor-orig`）；
+  同时清掉旧版遗留的 `20_jm.json`（两条 json 指向同一 ICD 会被 glvnd 重复枚举）。
+  `umd verify` 新增 `[OK] CDI 挂载源存在` 断言，防止回归。
+- 验证：三个玲珑应用均可启动；`eglinfo -B` 只枚举 1 个 platform device；
+  火狐 WebRender 页面渲染不受影响（直方图与修复后一致）。
