@@ -4,7 +4,7 @@ Deepin 25 aarch64 / 内核 6.6.155-arm64-desktop-hwe / JingjiaMicro JM9100
 [0731:9100] @ PCI 0000:07:00.0 —— 开源驱动 (KMD+Mesa UMD) 逐行分析、缺陷修复、
 全功能栈构建与系统切换的完整工作区。
 
-当前系统状态: **oss-24.1.2-fullstack-r11**（UMD + KMD 均为自建带修复版，
+当前系统状态: **oss-24.1.2-fullstack-r12**（UMD + KMD 均为自建带修复版，
 零 env 下 GL 4.0 / GLES 3.2 / `Video memory: 2048MB`，`umd verify` 全过）。
 
 里程碑速览：全功能栈（GL/VAAPI/VDPAU/rusticl OpenCL）→ GLES 3.2 原生点亮 →
@@ -35,7 +35,7 @@ sudo ./switch-mwv207.sh kmd install         # KMD 切换为自建带修复版 (�
 | `src/mwv207-umd/` | 我们维护的用户态驱动源码（`drivers/mwv207` + `winsys/mwv207`，唯一可改处；上游树 `ref/oh-mesa/...` 里是指向它的符号链接） |
 | `src/kernel-6.6/` | 我们维护的内核态驱动（2026-11-03 并入本仓库管理；原独立 git 仓历史在 `ref/kernel-6.6-old-git`。社区 6.6 移植基线 + K1–K8/K10 修复 + N15 零重定位 submit BUG 修复） |
 | `patches/` | 修复补丁集 0001–0020（KMD 4 个 + UMD 12 个 + 硬解移植/10bit HEVC/GLES 3.2/显存与 winsys/KMD 6.6 移植/矩形纹理与持久映射/VS 128 位取样/重编译与 128 位拷贝/健壮性批次 1-2 与 GBM/dual-blend 空视图） |
-| `payload-35/` | 当前活动载荷（`24.1.2-fullstack-r11`，11 个实体文件含 glvnd ICD `libEGL_jm.so.0`，MANIFEST 校验）。历史载荷已清理，只在 `/var/lib/mwv207-oss/switch-history` 留最近 3 个回滚快照 |
+| `payload-36/` | 当前活动载荷（`24.1.2-fullstack-r12`，11 个实体文件含 glvnd ICD `libEGL_jm.so.0`，MANIFEST 校验）。历史载荷已清理，只在 `/var/lib/mwv207-oss/switch-history` 留最近 3 个回滚快照 |
 | `tools/` | `make-payload.sh`（从构建树组装载荷: 版本戳一致性自检/rpath/MANIFEST/与上游 md5 差异）；`build-umd.sh`（check/relink/build/sim）；`map-monitor.c`（X Map 死区缓解守护）；`enable-ssh-rescue.sh`（黑屏 SSH 救援通道） |
 | `docs/` | 驱动 API 与寄存器参考（19 文件 / 约 1.83 万行）+ `UNRESOLVED.md` 未修问题总账（40 项，含已修索引与批次推进表） |
 | `ref/` | 参考材料（不入库大文件除外）：上游 mesa-22.3.7 / oh-mesa(24.1.2) / kernel-5.10 / linux-source-6.6 / 厂商 1.8.0 / 旧 KMD git 仓 / `reverse-source/`（闭源栈反编译: 符号表、反汇编、寄存器映射 JSON、六篇文档） |
