@@ -113,7 +113,7 @@ dmesg 里 GPU 相关错误计数为 0。
 
 | # | 问题 | 现状 | 三个选项 |
 |---|---|---|---|
-| **C1** | `R16G16_UNORM` / `R16_SNORM` / `R16G16_SNORM` **采样恒 0**。数据本身已字节精确（强制 LINEAR 修好了上传），但 6 位采样器格式码 `0x00–0x36` **全扫无解**；厂商文档给的 RG16 码 `0x34/0x35` 读出全 0 | 【复核】`mwv207_format.c:144-147` 已声明这 4 个格式；`:462-465` BLT 码已加 | **A** 保留声明并注明 / **B** 回退到只留 `R16_UNORM` / **C** 继续追采样编码 |
+| **C1** | `R16G16_UNORM` / `R16_SNORM` / `R16G16_SNORM` **采样恒 0**。数据本身已字节精确（强制 LINEAR 修好了上传），但 6 位采样器格式码 `0x00–0x36` **全扫无解**；厂商文档给的 RG16 码 `0x34/0x35` 读出全 0 | 【复核】`mwv207_format.c:144-147` 已声明这 4 个格式；`:462-465` BLT 码已加。**【2026-11-03】10bit 解码面已启用**：`f0c7605` 让 P010/P016 在 R16/R16G16 `SAMPLER_VIEW` 受支持时通过（VA 前端据此广播 YUV420_10BPP）；真机 HEVC Main10 硬解 + DRM_PRIME_2 导出与软件解码逐位一致。**仍剩**：这 4 个格式的 GL 采样恒 0 → 10bit 帧经 GL 采样/缩放仍错（`hwdownload` 走导出，不受影响） | **A** 保留声明并注明 / **B** 回退到只留 `R16_UNORM` / **C** 继续追采样编码 |
 | **C2** | 高级混合**只有 8/15** 个方程。硬件仅实现 MULTIPLY/SCREEN/OVERLAY/DARKEN/LIGHTEN/HARDLIGHT/DIFFERENCE/EXCLUSION；`0x9–0xF` 实测**把帧缓冲清零** | 【实测】属真实硬件缺口 | 保留超额声明并注明（现状，**解锁原生 GLES 3.2 的必要代价**），或撤销该 cap（代价：丢 GLES 3.2） |
 | **C3** | `ARB_ES3_compatibility` 建立在 C1 那 6 个格式声明上，其中 3 个实际不可采样 → 用 ETC2/EAC 的应用**渲染错误但不崩** | 依赖 C1 | 同 C1 的 A/B/C |
 | **I-3** | 能力表宣告 H264 含 **High422 / High444**，但解码器**硬置** `chroma_format_idc = 1`（`video-codec/mwv207/mwv207_dec_h264.c:1184`）→ 实际只走 4:2:0 | 【复核】硬置行仍在 | 诚实路线：取消两个 profile 声明；实现路线：改硬置值（大，需硬件验证） |
@@ -232,6 +232,7 @@ dmesg 里 GPU 相关错误计数为 0。
 |---|---|---|
 | 2026-11-03 | 校验器路径失效（迁出 oh-mesa 后符号链接不进 `os.walk`）：`check_coverage.py`、`validate_register_map.py` | `d056efc`（`docs/tools/`） |
 | 2026-11-03 | A 类：E5 双面模板双重互换、F.3.1 反汇编 type 位序、F.4 三条健壮性、O5 视频路径失败 fence | `5dee412`（`src/mwv207-umd`） |
+| 2026-11-03 | 10bit 解码面启用：P010/P016 在 `R16_UNORM`/`R16G16_UNORM` 可采样时接受（真机 Main10 硬解 + 导出逐位一致） | `f0c7605`（`src/mwv207-umd`） |
 | 2026-11-03 | dual-source blend 编译期空视图解引用（火狐 GitHub 崩溃） | `40d5d76`（`src/mwv207-umd`） |
 | 2026-11-02 | 批次 1/2 健壮性（W6/W7/W12/E4/E9/E10/F.3.2/F.3.3）+ GBM/Wayland `err=-13` | `841e300`（`src/mwv207-umd`） |
 | 2026-11-02 | 条件渲染真实现（`render_condition` 钩子 + CPU 侧谓词判断，GL 4.0 恢复） | `216a96a`（`src/mwv207-umd`） |

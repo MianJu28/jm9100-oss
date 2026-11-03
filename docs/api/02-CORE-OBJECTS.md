@@ -463,7 +463,7 @@ return true;                                          /* :591 */
 | `get_compute_state_info` / `get_compute_state_subgroup_size` | `mwv207_get_compute_state_info` / `mwv207_get_compute_state_subgroup_size` | `mwv207_shader.c:1196-1197` | 同上 |
 | `blit` / `clear` / `clear_texture` / `clear_buffer` / `clear_render_target` / `clear_depth_stencil` / `generate_mipmap` / `buffer_subdata` / `texture_subdata` / `resource_copy_region` | `mwv207_blit` / `mwv207_clear` / `u_default_clear_texture` / `u_default_clear_buffer` / `mwv207_clear_render_target` / `mwv207_clear_depth_stencil` / `mwv207_gen_mipmap` / `u_default_buffer_subdata` / `u_default_texture_subdata` / `mwv207_resource_copy_region` | `mwv207_blit.c:1226-1238` | `mwv207_context_blit_init`（`:206`） |
 | `set_hw_atomic_buffers` / `set_shader_buffers` / `set_shader_images` / `set_compute_resources` / `set_global_binding` / `launch_grid` | 对应 `mwv207_*` | `mwv207_compute.c:313-318` | `mwv207_context_compute_init`（`:214`） |
-| `create_video_codec` / `create_video_buffer` | `mwv207_create_codec` / `mwv207_pipe_video_buffer_create` | `video-codec/mwv207_video_codec.c:144-145` | `mwv207_context_video_codec_init`（`:215`） |
+| `create_video_codec` / `create_video_buffer` | `mwv207_create_codec` / `mwv207_pipe_video_buffer_create` | `video-codec/mwv207_video_codec.c:155-156` | `mwv207_context_video_codec_init`（`:147`） |
 | `stream_uploader`（非纯虚表，辅助） | `u_upload_create_default(&ctx->base)` | `mwv207_context.c:58` | `mwv207_context_helper_init`（`:219` 前） |
 
 > `render_condition`、`emit_string_marker`、`set_index_buffer`、`set_vertex_buffers` 之外的 `...` 回调在本驱动**没有被赋值**（上表之外无其他赋值语句；对全目录做 `grep` 只匹配到 `mwv207_` / `util_` / `u_default_` / `NULL` 四类右值）。

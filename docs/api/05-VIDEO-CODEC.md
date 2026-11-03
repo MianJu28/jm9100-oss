@@ -186,11 +186,13 @@ return entrypoint != PIPE_VIDEO_ENTRYPOINT_ENCODE;
 
 ### 2.3 视频格式支持
 
-`mwv207_is_video_format_supported()`（`mwv207_video_codec.c:87-134`）：
+`mwv207_is_video_format_supported()`（`mwv207_video_codec.c:87-145`）：
 
-- 格式开关只接受 `PIPE_FORMAT_NV12`（`:97-99`）；
-- `:106-114` 是 jm9100-oss 修 10bit 黑屏时加的注释块（见报告 §7）；
-- `:115-132` 用 **AND** 语义合并 profile 与格式两个开关，`PIPE_VIDEO_PROFILE_UNKNOWN` 例外放行
+- 格式开关接受 `PIPE_FORMAT_NV12`（`:97-99`）与 `PIPE_FORMAT_P010`/`P016`
+  （`:100-112`；2026-11-03 新增：仅当 `R16_UNORM` / `R16G16_UNORM` 的
+  `SAMPLER_VIEW` 受支持时才接受 10bit，理由见 `:102-105` 注释）；
+- `:117-125` 注释记录上一版“OR 语义谎报 10bit 支持”的教训（见报告 §7）；
+- `:126-143` 用 **AND** 语义合并 profile 与格式两个开关，`PIPE_VIDEO_PROFILE_UNKNOWN` 例外放行
   （VPP/image 通路只需要格式、不带 profile）。
 
 另有 `mwv207_video_buffer_is_format_supported()`（`mwv207_video_buffer.c:102-130`）按 plane 检查
@@ -896,8 +898,12 @@ RGB 转换系数是内嵌常量表 `coeff[6][5]`（`:348-353`，例如 `{16384,2
 `has_shaper` 被写死 0（`:201`，`:211-215` 分支不可达）。两个调用点：
 `dec_h264.c:1416-1417` 与 `dec_hevc.c:387-388`（都传入 `target`）。
 
-> 精度代价：`out_cut_8bits` 直接丢 2 个 LSB；要保留完整 10bit 显示需要 R16_UNORM/R16G16_UNORM
-> 的格式码值，而该库的纹理格式表里没有这两个格式的权威码值（报告 §7 精度说明），故当前不可行。
+> 【2026-11-03 更新】P010/P016 解码面已启用：`mwv207_is_video_format_supported()`
+> 按 `R16_UNORM`/`R16G16_UNORM` 的 `SAMPLER_VIEW` 支持取 AND。实测 HEVC Main10
+> 硬解后用 `vaExportSurfaceHandle`（DRM_PRIME_2，fourcc=P010）导出，640×360/30 帧
+> 与软件解码逐位一致。**但 GL 侧 16 位采样仍恒 0（`UNRESOLVED.md` C1）**，所以
+> 10bit 帧在 GL 里采样/缩放仍然不正确；当目标是 8bit NV12 面（如 GL 渲染管线）时
+> `out_cut_8bits` 仍是默认路径。`out_cut_8bits` 直接丢 2 个 LSB。
 
 ---
 
