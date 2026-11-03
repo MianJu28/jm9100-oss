@@ -90,8 +90,18 @@ mwv207_flush(struct pipe_context *pctx,
          mwv207_merge_128bit(pctx, surface->base.texture);
    }
 
-   if (pfence)
-      *pfence = ctx->ws->fence_create(ctx->ws, out_fence_fd);
+   /* FIX(jm9100-oss): O5 —— submit 失败时 mwv207_drm_cmdbuf_commit() 会让
+    * out_fence_fd 保持 -1（只在 !err 时写该值）。此前这里照样调用
+    * fence_create(-1)：该 fence 的 fence_wait() 恒返回 true，调用者会把
+    * 一次提交失败当成"已完成"，等于把失败伪装成成功。改为不返回 fence；
+    * Mesa 前端对 *fence == NULL 都有判空（st_finish 与 st_manager 的
+    * ST_FLUSH_WAIT 分支）。失败本身已在 cmdbuf_commit 里打印。 */
+   if (pfence) {
+      if (out_fence_fd < 0)
+         *pfence = NULL;
+      else
+         *pfence = ctx->ws->fence_create(ctx->ws, out_fence_fd);
+   }
 }
 
 static void
