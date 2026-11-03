@@ -141,6 +141,19 @@ struct mwv207_hardware_Info texture_infos[] = {
     * ("16-bit single channel") code with R16_SNORM and is distinguished by
     * texture_desc->int_format, which mwv207_get_texture_desc() derives from
     * the pipe format's signedness (unsigned -> 0, signed 16-bit -> 2). */
+   /* FIX(jm9100-oss) 2026-11-03: the 16-bit normalized sampler codes
+    * 0x32-0x36 (RGBA16_UNORM/SNORM, RG16_UNORM/SNORM, R16_SNORM) decode to
+    * zero on the 0x1F76 GPU: forcing the working R16_FLOAT texture to code
+    * 0x36 still samples 0, while the same texture with code 7 returns the
+    * uploaded value.  The descriptor is otherwise identical (verified by
+    * dumping TXConfig/TXExtConfig/TXSize/TXStride), and swapping mode
+    * (SUPERTILED/LINEAR), alignment, TX_CONFIG2 NORM_*, TX_CONFIG3
+    * ENABLE_NEW_MODE and TX_EXT_CONFIG bit23/bit31 makes no difference.
+    * 16-bit integer formats (codes 24-26) and 16-bit float (7-9) do fetch
+    * correctly, and upload/read-back through the transfer paths is byte
+    * exact, so the failure is the sampler's normalized-16-bit decode, not
+    * the data or the descriptor packing.  Forcing LINEAR is also required
+    * for correct upload (see mwv207_tile_supported_format()). */
    {PIPE_FORMAT_R16_UNORM,          TX_FORMAT(0, 0x36),             SWIZZLE_SETS(SWIZZLE_RED, SWIZZLE_ZERO, SWIZZLE_ZERO, SWIZZLE_ONE)},
    {PIPE_FORMAT_R16_SNORM,          TX_FORMAT(0, 0x36),             SWIZZLE_SETS(SWIZZLE_RED, SWIZZLE_ZERO, SWIZZLE_ZERO, SWIZZLE_ONE)},
    {PIPE_FORMAT_R16G16_UNORM,       TX_FORMAT(0, 0x34),             SWIZZLE_SETS(SWIZZLE_RED, SWIZZLE_GREEN, SWIZZLE_ZERO, SWIZZLE_ONE)},

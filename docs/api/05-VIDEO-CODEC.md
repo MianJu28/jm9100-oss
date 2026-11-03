@@ -901,7 +901,8 @@ RGB 转换系数是内嵌常量表 `coeff[6][5]`（`:348-353`，例如 `{16384,2
 > 【2026-11-03 更新】P010/P016 解码面已启用：`mwv207_is_video_format_supported()`
 > 按 `R16_UNORM`/`R16G16_UNORM` 的 `SAMPLER_VIEW` 支持取 AND。实测 HEVC Main10
 > 硬解后用 `vaExportSurfaceHandle`（DRM_PRIME_2，fourcc=P010）导出，640×360/30 帧
-> 与软件解码逐位一致。**但 GL 侧 16 位采样仍恒 0（`UNRESOLVED.md` C1）**，所以
+> 与软件解码逐位一致。**但 GL 侧 16 位采样仍恒 0（`UNRESOLVED.md` C1；2026-11-03 已定位为
+> 0x1F76 不解码 `TX_EXT_CONFIG.FORMAT` 码 0x32–0x36，16 位整数/浮点正常）**，所以
 > 10bit 帧在 GL 里采样/缩放仍然不正确；当目标是 8bit NV12 面（如 GL 渲染管线）时
 > `out_cut_8bits` 仍是默认路径。`out_cut_8bits` 直接丢 2 个 LSB。
 
