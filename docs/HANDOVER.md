@@ -5,9 +5,10 @@
 
 ## 1. 当前状态（一句话）
 
-**r12 已部署并验收通过**。桌面零 env 下 GL 4.0 / GLES 3.2 / `Video memory: 2048MB`，
-glxgears 100.3 FPS，Firefox 硬件渲染正常（内容+性能都修完），OpenCL/VA-API/VDPAU
+**r13 已部署并验收通过**。桌面零 env 下 GL 4.0 / GLES 3.2 / `Video memory: 2048MB`，
+glxgears 110 FPS，Firefox 硬件渲染正常（内容+性能都修完），OpenCL/VA-API/VDPAU
 全走我们的栈，玲珑应用正常，自建 KMD 在跑（srcversion `D507FC2774D547E7BEBA182`）。
+r13 在 r12 基础上新增 **10bit HEVC 解码面**（P010/P016，见 §3 末条）。
 
 ## 2. 系统与仓库布局
 
@@ -16,8 +17,8 @@ glxgears 100.3 FPS，Firefox 硬件渲染正常（内容+性能都修完），Op
 | 机器 | Deepin 25 aarch64，内核 `6.6.155-arm64-desktop-hwe`，GPU `[0731:9100]` PCI 07:00.0，HDMI-1 1920×1080@100Hz，无免密 sudo（用 `printf '666\n' \| sudo -S`） |
 | 仓库 | `/home/admin/jm9100-oss`（git，远端 `git@github.com:MianJu28/jm9100-oss.git`，已推送同步） |
 | 源码 | `src/mwv207-umd/`（UMD，唯一可改处；上游树 `ref/oh-mesa/.../src/gallium/{drivers,winsys}/mwv207` 是指向它的符号链接）、`src/kernel-6.6/`（KMD，已并入本仓库） |
-| 已装栈 | `/usr/local/lib/mwv207-oss/`（r12，DRI md5 `5997efd5…`），`/lib/modules/…/updates/dkms/mwv207.ko`（自建 KMD） |
-| 载荷 | `payload-36`（`24.1.2-fullstack-r12`）；历史快照在 `/var/lib/mwv207-oss/switch-history`（留 4 个） |
+| 已装栈 | `/usr/local/lib/mwv207-oss/`（r13，DRI md5 `f80fa8e0…`），`/lib/modules/…/updates/dkms/mwv207.ko`（自建 KMD） |
+| 载荷 | `payload-37`（`24.1.2-fullstack-r13`）；历史快照在 `/var/lib/mwv207-oss/switch-history`（留 5 个） |
 | 快速回归副本 | `/tmp/gd3/`（与已装栈同 md5）。实验构建流程：改 `src/mwv207-umd` → `ninja -C ref/oh-mesa/User_source_code/mesa-24.1.2/build-full src/gallium/targets/dri/libmwv207_dri.so` → `cp` 到 `/tmp/gd3/` → 用 `LIBGL_DRIVERS_PATH=/tmp/gd3 MESA_LOADER_DRIVER_OVERRIDE=mwv207` 测 |
 | 出包安装 | `./tools/make-payload.sh -v 24.1.2-fullstack-rN` → `printf '666\n' \| sudo -S ./switch-mwv207.sh umd install --force`（**install 调用常显示 interrupted，实装已完成——必须用 `status` + md5 比对确认，勿盲目重跑**） |
 | 构建陷阱 | 性能实验必须用 `build-full`（`build-glvnd` 是旧二进制）；`meson setup --wipe` 会把 glvnd 从 auto 变 enabled → 必须显式 `-Dglvnd=false -Dgles1/2=enabled` |
@@ -47,6 +48,11 @@ glxgears 100.3 FPS，Firefox 硬件渲染正常（内容+性能都修完），Op
   llvmpipe 同为 CPU 时钟语义）。
 - 显存修正 `PIPE_CAP_VIDEO_MEMORY` = 2048（KMD 实测 2GB）；显存单位历史教训：
   该 cap 单位是 MB。
+- **10bit HEVC 解码面（`f0c7605`，r13 已部署）**：`mwv207_is_video_format_supported()`
+  对 P010/P016 改为按 `R16_UNORM`/`R16G16_UNORM` 的 `SAMPLER_VIEW` 支持取 AND（仍与
+  profile 白名单取 AND）。真机 640×360/30 帧 Main10 解码 + `vaExportSurfaceHandle`
+  （DRM_PRIME_2）导出与软件解码逐位一致；8bit HEVC/H264 回归同样逐位一致。**GL 侧
+  16 位采样恒 0（C1）仍在**，10bit 帧在 GL 里采样/缩放仍不正确。
 
 ## 4. 关键方法学（重复踩过的坑，务必遵守）
 
@@ -128,6 +134,14 @@ C-2 16 位采样编码（硬件边界）、D7 Vulkan（官方闭源也没有）�
 - KMD 热切换不可行（refcnt 恒 1，内核内部引用），只能重启；脚本有 `kmd stage`
   （只放置）与 `refresh_initramfs`。
 - 上游枚举陷阱：`p_format.h` 只在 `ref/mesa-22.3.7/...`（`find` 要 `-L`）。
+- **切换脚本的 Xorg 日志要按实际显示号解析**（2026-11-03 修）：display 不一定是
+  `:0`——`:0` 的 Xorg 崩溃后 lightdm 会起在 `:1`，日志写到 `Xorg.1.log`。原先写死
+  `/var/log/Xorg.0.log`，install 等不到新日志 → 误判"软件渲染"→ 自动回滚 + 黑屏。
+  现在 `xorg_log()` 从 `pgrep -a Xorg` 解析 `:N`（等待循环内每轮重解析），
+  `umd verify`/`umd status`/watchdog 同样走它。
+- **install 前把安装目录恢复成干净快照**：`umd install` 的快照取自"当前安装目录"，
+  如果之前手工 `cp` 过库，失败回滚会"复原"这份脏状态（2026-11-03 10:44 实证：
+  回滚后仍是新库）。先 `umd rollback` 回最近一次干净快照（或从备份恢复）再 install。
 - **补丁流程已废止**（2026-11-03 用户决定）：`patches/` 目录与"导出补丁"步骤一并
   删除，之后不再生成任何 `*.patch` 归档；版本记录只靠 git 提交，需要对外提交时
   直接引提交哈希（或 `git format-patch` 临时生成、不入库）。
