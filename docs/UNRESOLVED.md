@@ -8,7 +8,7 @@
 > **口径**：只列**当前仍未落地**的项。2026-10-30/31 已修复的（VRAM 单位、O2、O3、
 > 遮挡查询 C4）、2026-11-02 已修复的（条件渲染 C5 真实现、KMD 零重定位提交空 entity N15、
 > 批次 1/2 健壮性、GBM/Wayland `err=-13`）、2026-11-03 已修复的（dual-source blend 崩溃、
-> A 类 E5/F.3.1/F.4 三条/O5 视频路径、F.3.2/F.3.3/E9/E10）
+> A 类 E5/F.3.1/F.4 三条/O5 视频路径、F.3.2/F.3.3/E9/E10、批次 2b 的 O5 flush 失败路径）
 > 不在此列，见文末《已修复索引》。
 > 每条给出 `文件:行号`；标【实测】的表示上机验证过，未标者为静态审计结论。
 
@@ -93,7 +93,7 @@ dmesg 里 GPU 相关错误计数为 0。
 | ~~W6~~ | `winsys/mwv207/drm/mwv207_drm_bo.c` | ~~`CALLOC` 后无 NULL 检查~~ | **已修**（2026-11-02）：加 `if (!bo) goto unlock;` | — |
 | ~~W7~~ | `winsys/mwv207/drm/mwv207_drm_bo.c` | ~~`GEM_MMAP` 失败仅 `printf` 不返回~~ | **已修**（2026-11-02）：失败改 `fprintf` + `return NULL` | — |
 | ~~W12~~ | `winsys/mwv207/drm/mwv207_drm_cs.c` | ~~依赖 `assert`，release 下被移除~~ | **已修**（2026-11-02）：4 处分配全部判空、失败释放并返回 NULL | — |
-| **O5** | `winsys/mwv207/drm/mwv207_drm_cs.c:100-118` | `fence->fd < 0` 时 `fence_wait()` 恒返回 true | **【2026-11-03 复核】** 视频路径已修（`5dee412`）：`out_fence_fd` 初始化 `-1`、`fd<0` 不建 fence（`video_cs.c:119-136`），`drm_cs.c` 失败保持 `-1`（`:460-470`）；全树已无 `fence_create(-1)`。**剩余**：`mwv207_flush()`（`mwv207_context.c:90`）仍无条件 `fence_create(out_fence_fd)` → 提交失败时造出"永远就绪"fence（失败本身会 `fprintf` 报错） | 低（失败已可见）；修 flush 需先定契约——失败时返回 NULL fence 是否被 Gallium 接受 |
+| **O5** | `winsys/mwv207/drm/mwv207_drm_cs.c:100-118` | `fence->fd < 0` 时 `fence_wait()` 恒返回 true | **已修（2026-11-03，批次 2b）** 视频路径此前已修（`5dee412`）；`mwv207_flush()`（`mwv207_context.c:93-105`）在 `out_fence_fd < 0` 时返回 NULL fence，Mesa 的 `st_finish` / `st_manager` 对 NULL 判空 → 提交失败不再伪装成"已完成"。故障注入探针（拦截 `DRM_IOCTL_MWV207_SUBMIT` 返回 EIO）：glxgears 连续 92k 次失败下无崩溃/挂死，NULL 分支命中；正常路径与 query 回归均通过（提交 `4a19713`） | — |
 | ~~E4~~ | `mwv207_draw.c` | ~~无深度模板时解引用 FS `shader_states` 未判空~~ | **已修**（2026-11-02）：`fs_state ? fs_state->current : NULL`，GEOMETRY 同样加 `&& ->current` | — |
 
 ### 1.2 会直接影响可观测行为（需行为验证）
@@ -104,8 +104,8 @@ dmesg 里 GPU 相关错误计数为 0。
 | ~~E2~~ | `mwv207_draw.c` | ~~`static uint32_t draw_count` 跨 context 共享~~ | **已修**（2026-11-02）：移入 `struct mwv207_context` 的 `uint32_t draw_count;`，`mwv207_config_draw()` 读写 context 字段 | — |
 | **E6** | `mwv207_query.c:108,201,284` | `TIMESTAMP` / `TIMESTAMP_DISJOINT` 用 **CPU** `os_time_get_nano()`，不是 GPU 时间戳 | 【复核】三处均 `os_time_get_nano()`；【实测】`GL_TIMESTAMP` 返回 ≈31.7 小时 = CPU 开机时长 | **不改**（复核：与 llvmpipe 同为 CPU 时钟语义，行为一致；硬件时间戳寄存器 `0x00490/0x00494` 虽存在，切换属功能改动而非缺陷修复，且需整条 query 路径验证） |
 | ~~E7~~ | `mwv207_query.c` | ~~不支持的 query 类型走 `unreachable()`~~ | **已修**（2026-11-02）：`SO_STATISTICS` / `PIPELINE_STATISTICS` / `PIPELINE_STATISTICS_SINGLE` / 未知类型统一 `return false`（按 Gallium 契约＝结果不可用），不再 `unreachable()`（release 下是 `__builtin_unreachable()`＝未定义行为） | 剩余：这些类型仍无真实硬件计数 |
-| **E8** | `mwv207_state.c:335-354` | 只保留单份视口/裁剪，`set_viewport_states` 忽略 `num_viewports` | 静态；GL `GL_MAX_VIEWPORTS` 报 0/1 → **很可能硬件本身就受限** | 先确认硬件是否支持多视口 |
-| **E3** | `mwv207_blit.c:568-584` | 压缩格式分支里算好的 `task_info` 被随后无条件赋值覆盖 | 静态 | 需先确定正确值 |
+| **E8** | `mwv207_state.c:335-354` | 只保留单份视口/裁剪，`set_viewport_states` 忽略 `num_viewports` | **复核（2026-11-03，批次 2b）：不是缺陷**。`PIPE_CAP_MAX_VIEWPORTS = 1`（`mwv207_screen.c:160`），`GL_ARB_viewport_array` 未暴露、`GL_MAX_VIEWPORTS` 查询返回 `GL_INVALID_ENUM`（探针 `/tmp/vpquery`）→ 应用根本提交不了多视口；忽略 `num_viewports` 与声明一致 | 不改（多视口属新功能，见 D6） |
+| **E3** | `mwv207_blit.c:568-584` | 压缩格式分支里算好的 `task_info` 被随后无条件赋值覆盖 | **复核（2026-11-03，批次 2b）：路径不可达**。该分支只可能经 `mwv207_copy_layer()` 进入；`resource_copy_region` 对 `blocksize >= 8` 走 CPU 回退、压缩格式 tile 不支持且恒 LINEAR、GL 不允许压缩色彩缓冲 blit。实测 ETC2 `glCopyImageSubData` 拷贝后采样结果与源完全一致（`DIFF=0`） | 不改（死代码；将来若支持压缩 blit 再重算 `task_info`） |
 | ~~E5~~ | `mwv207_state.c:326-331` | ~~`stencil_back_reference` 与正面索引交叉 → 背面取到正面值~~ | **已修**（2026-11-03，`5dee412`）：`mwv207_draw.c:1043-1050` 的 0x528 恒取 `stencil_back_reference[0]`（set 时已按背面语义预填）；改动物理意义明确，未附专门双面模板探针记录 | — |
 | ~~O4~~ | `winsys/mwv207/drm/mwv207_drm_cs.c` | ~~`-EBUSY` 无上限 busy-loop；重试可能泄漏 fd~~ | **已修**（2026-11-02）：重试上限 2000 次（≈2s）；失败改 `fprintf` 并关闭 KMD 已 `fd_install` 的 out-fence（判据：`out_fence_fd && submit.fence_fd >= 0 && (in_fence_fd < 0 || submit.fence_fd != in_fence_fd)`，避免误关调用者的 in-fence） | — |
 
@@ -207,7 +207,7 @@ dmesg 里 GPU 相关错误计数为 0。
 |---|---|---|---|
 | ~~**1**~~ | ~~1.1 全部（W6/W7/W12/E4）+ E9/E10 拼写 + F.3.2/F.3.3~~ | — | **已完成（2026-11-02）** |
 | ~~**2**~~ | ~~E2 / E7 / O4 + GBM-Wayland `err=-13`~~ | — | **已完成（2026-11-02）** |
-| **2b** | E1（已降级为 1 LSB，暂不改）/ E6（已复核：不改）/ E8 / E3 / O5（仅剩 `mwv207_flush()` 失败路径） | 每条配一个针对性探针 | 低-中，需行为验证 |
+| ~~**2b**~~ | ~~E1（降级为 1 LSB，不改）/ E6（复核不改）/ E8（复核不改）/ E3（复核：不可达）/ O5（flush 失败路径已修）~~ | 每条配一个针对性探针 | **已完成（2026-11-03）**：O5 修（`4a19713`）；E1/E6/E8/E3 复核后不改 |
 | **3** | **拍板** 1.3 的 C1/C2/C3/I-3 | 用户决策 | 不是技术难度，是诚实性取舍 |
 | ~~**4**~~ | ~~真机 `kmd install`（解锁全部 KMD 条目）~~ | — | **已完成（2026-11-02）**：自建模块已在运行（§0），§2 剩余条目均为真实待修缺陷 |
 | **5** | VP9 解码（D1） | 真实 VP9 码流 | 中-大，但模板齐全、可行性最高 |
@@ -233,6 +233,7 @@ dmesg 里 GPU 相关错误计数为 0。
 | 2026-11-03 | 校验器路径失效（迁出 oh-mesa 后符号链接不进 `os.walk`）：`check_coverage.py`、`validate_register_map.py` | `d056efc`（`docs/tools/`） |
 | 2026-11-03 | A 类：E5 双面模板双重互换、F.3.1 反汇编 type 位序、F.4 三条健壮性、O5 视频路径失败 fence | `5dee412`（`src/mwv207-umd`） |
 | 2026-11-03 | 10bit 解码面启用：P010/P016 在 `R16_UNORM`/`R16G16_UNORM` 可采样时接受（真机 Main10 硬解 + 导出逐位一致） | `f0c7605`（`src/mwv207-umd`） |
+| 2026-11-03 | 批次 2b：`mwv207_flush()` 提交失败不再造"永远就绪"fence（返回 NULL，Mesa 前端判空）；故障注入探针通过 | `4a19713`（`src/mwv207-umd`） |
 | 2026-11-03 | dual-source blend 编译期空视图解引用（火狐 GitHub 崩溃） | `40d5d76`（`src/mwv207-umd`） |
 | 2026-11-02 | 批次 1/2 健壮性（W6/W7/W12/E4/E9/E10/F.3.2/F.3.3）+ GBM/Wayland `err=-13` | `841e300`（`src/mwv207-umd`） |
 | 2026-11-02 | 条件渲染真实现（`render_condition` 钩子 + CPU 侧谓词判断，GL 4.0 恢复） | `216a96a`（`src/mwv207-umd`） |

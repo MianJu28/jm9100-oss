@@ -71,13 +71,13 @@
 
 | # | 位置 | 修复方案 | 难度 | 卡点 |
 |---|---|---|---|---|
-| B1 **O5** | `mwv207_drm_cs.c:89-101` `fence->fd < 0` 时 `fence_wait()` 恒 `true` | 让失败提交不再被当作"已完成" | 小 | **需先枚举 `fd<0` 的所有来源**：若存在"本就无 fence 的正常路径"，改成返回 `false` 会误报错误 |
+| B1 **O5** | `mwv207_drm_cs.c:89-101` `fence->fd < 0` 时 `fence_wait()` 恒 `true` | 让失败提交不再被当作"已完成" | 小 | **已修（2026-11-03，`4a19713`）**：视频路径 `5dee412`；`mwv207_flush()` 改为失败返回 NULL fence（Mesa 前端判空），故障注入探针验证 |
 | B2 **O4** | `mwv207_drm_cs.c` commit 的 `-EBUSY` 无上限重试；KMD `mwv207_submit.c:591-599` 失败路径似不回收入 fence fd | 加上限 + 失败回收 fd | 中 | 需先读 KMD submit.c 确认是否真泄漏 |
-| B3 **E3** | `mwv207_blit.c:568-584` 压缩格式分支里算好的 `task_info` 被无条件赋值覆盖 | 恢复预期值 | 中 | 需确定**正确值**（可查 `03-DRAW-PIPELINE.md` 的 BLT 章节与寄存器表） |
-| B4 **E5** | `mwv207_state.c:326-331` `stencil_back_reference` 与正面索引交叉 | 修正索引 | 小 | 需双面模板测试确认期望 |
-| B5 **E6** | `mwv207_query.c:108-112` `TIMESTAMP` 用 CPU `os_time_get_nano()` | **改用真 GPU 时间戳** | 中 | **已找到硬件寄存器**：`MWV207REG_DRAW_PRIMITIVE_START_TIME_STAMP`(0x00490) / `_END_TIME_STAMP`(0x00494)，另有 `COUNTER0-3`(0x00544–0x00550)、`DEBUG_COUNTER_SELECT/VALUE`(0x00608/0x00610)。仍需确认单位与回绕 |
+| B3 **E3** | `mwv207_blit.c:568-584` 压缩格式分支里算好的 `task_info` 被无条件赋值覆盖 | 恢复预期值 | 中 | **2026-11-03 复核：不可达，不改**——压缩拷贝走 CPU 回退、压缩格式 tile 不支持、GL 不允许压缩 blit；ETC2 `glCopyImageSubData` 实测一致 |
+| B4 **E5** | `mwv207_state.c:326-331` `stencil_back_reference` 与正面索引交叉 | 修正索引 | 小 | **已修（2026-11-03，`5dee412`）**：`mwv207_draw.c` 的 0x528 恒取背面数组首元素（set 时已按背面语义预填） |
+| B5 **E6** | `mwv207_query.c:108-112` `TIMESTAMP` 用 CPU `os_time_get_nano()` | 改用真 GPU 时间戳 | 中 | **2026-11-03 复核：不改**——与 llvmpipe 同为 CPU 时钟语义，行为一致；硬件寄存器 `0x00490/0x00494` 虽存在，切换属功能改动且需整条 query 路径验证 |
 | B6 **E7** | `mwv207_query.c:156-163,279-282` `PIPELINE_STATISTICS`/`SO_STATISTICS` 不发射寄存器，`get_result` 走 `unreachable()` | 最小可行：`begin/end` 报 `available=false`，消除 `unreachable()` 崩溃 | 小 | 完整实现需把硬件计数器映射到各统计项，中-大 |
-| B7 **E8** | `mwv207_state.c:335-354` 只保存单份视口，忽略 `num_viewports` | 存数组并逐视口编程 | 中-大 | **很可能硬件受限**：GL `GL_MAX_VIEWPORTS` 报 0/1 → 需先确认硬件是否支持多视口 |
+| B7 **E8** | `mwv207_state.c:335-354` 只保存单份视口，忽略 `num_viewports` | 存数组并逐视口编程 | 中-大 | **2026-11-03 复核：非缺陷**——cap=1、`ARB_viewport_array` 未暴露（`GL_MAX_VIEWPORTS` 查询 INVALID_ENUM）；多视口属新功能 D6 |
 | B8 **N2** | KMD 3D `hw_submission = 30` 与硬件事件数 30 相等，违背源码注释 "must be lower than 30" | 降到 29 或按事件数推导 | 小 | **【KMD·需部署路径】**；需硬件事件位图压满的场景验证 |
 | B9 **N10** | KMD HDMI `mode_valid` 首个条件 `clock >= 384000` 先命中 → 384–594 MHz 全被拒；`phy_configure` 恒传 `bpp=8` 使 PHY 表 10/12 bpp 不可达 | 调整条件顺序、按真实 bpp 传参 | 中 | **【KMD·需部署路径】**；需 4K60+ 显示器实测，且"是否有意限制"未知 |
 | B10 **N14** | KMD `mwv207_pipe_3d.c:301-307`、`mwv207_pipe_2d.c:212-227`、`mwv207_pipe_dec.c:136-141`：`reset` 只 `dma_fence_put` 在飞 fence 而**不 signal**；`mwv207_pipe_2d.c:424-448` `destroy` 不排空 `fence_queue` | reset 时以 `-EIO` signal 在飞 fence；destroy 排空队列 | 中 | **【KMD·需部署路径】**；验证难（需构造 hang/reset），可先用假 fence 做单元验证 |

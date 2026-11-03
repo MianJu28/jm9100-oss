@@ -1281,12 +1281,12 @@ TCS/TES/GS 会先写各自的 uniform base 偏移：`0x5291` = `MWV207REG_TCS_UN
 |---|---|---|
 | A1 | `draw.c:751-754` | `color_8` 四个分量全部 `<< 8` 后按位或，第 2/3 个分量会互相覆盖（有效位仅剩 8 位），疑似复制粘贴缺陷 |
 | A2 | `draw.c:888, 907` | `draw_count` 为函数内 `static`，跨 context/跨进程共享，多上下文时 `DRAW_ID` 不单调 |
-| A3 | `blit.c:568-584` | 压缩格式分支算出的 `task_info` 被随后无条件赋值覆盖，压缩路径的 stride/nblocksy 适配未生效 |
+| A3 | `blit.c:568-584` | 压缩格式分支算出的 `task_info` 被随后无条件赋值覆盖，压缩路径的 stride/nblocksy 适配未生效。**2026-11-03 复核：分支不可达（压缩拷贝走 CPU 回退；ETC2 `glCopyImageSubData` 实测采样一致），不改** |
 | A4 | `draw.c:1012` | 无 ZS 时直接解引用 `ctx->shader_states[PIPE_SHADER_FRAGMENT]->current`，未做 NULL 检查 |
 | A5 | `mwv207_state.c:326-331` | `stencil_back_reference` 的 0/1 索引与正面交叉（`back[0]=ref[1]`），与 `stencil_reference` 的对应方式不一致；是否合硬件语义未确认 |
 | A6 | `query.c:108-112` | TIMESTAMP/TIME_ELAPSED 用 CPU `os_time_get_nano()`，`0xE26/0xE1B` 并非 GPU 时间戳 |
 | A7 | `query.c:156-163, 279-282` | `PIPELINE_STATISTICS*` / `SO_STATISTICS` begin/end 不发射寄存器，`get_query_result` 对未支持类型走到 `unreachable` → **管线统计与 SO 统计实际不可用** |
-| A8 | `mwv207_state.c:335-354` | 视口/裁剪只保留单份（忽略多视口/多裁剪 slot），Mesa 侧多视口请求会被静默丢弃 |
+| A8 | `mwv207_state.c:335-354` | 视口/裁剪只保留单份（忽略多视口/多裁剪 slot），Mesa 侧多视口请求会被静默丢弃。**2026-11-03 复核：非缺陷——`PIPE_CAP_MAX_VIEWPORTS=1` 且 `ARB_viewport_array` 未暴露，应用无法提交多视口** |
 | A9 | `mwv207_state.h:143` | `mwv207_context_zsa_init` 有声明但无定义、无调用 |
 | A10 | `mwv207_query.c:342`、`mwv207_query.h:53` | 函数名拼写 `destory`（原文） |
 
