@@ -126,6 +126,20 @@ VENDOR_EGL_ICD_DISABLED="$EGL_ICD_DIR/10_mwv207.json.oss-disabled"
 VENDOR_EGL_ICD_ORIG="$EGL_ICD_DIR/10_mwv207.json.vendor-orig"    # 厂商原件备份
 
 XORG_LOG="/var/log/Xorg.0.log"
+# Xorg 的日志文件要按实际显示号解析：display 不总是 :0（:0 的 Xorg 崩溃后
+# lightdm 会起 :1，日志写到 Xorg.1.log）。写死 Xorg.0.log 会把新会话误判成
+# “没启动”，导致 install 假失败并自动回滚（2026-11-03 10:44 实测踩坑）。
+xorg_log() {
+    local d f
+    d=$(pgrep -a Xorg 2>/dev/null | grep -oE ' :[0-9]+ ' | head -n1 | tr -d ' :')
+    if [ -n "$d" ] && [ -f "/var/log/Xorg.$d.log" ]; then
+        echo "/var/log/Xorg.$d.log"; return 0
+    fi
+    f=$(ls -t /var/log/Xorg.*.log 2>/dev/null | head -n1)
+    [ -n "$f" ] && { echo "$f"; return 0; }
+    echo "$XORG_LOG"
+}
+refresh_xorg_log() { XORG_LOG=$(xorg_log); }
 # 注意: "Initialized DRISWRAST" 不可作失败标记! 2026-10-21 10:02 实证: glamor
 # 硬件加速点亮 (Xorg 日志含 glamor enabled on MWV207, glxinfo direct
 # rendering:Yes + renderer MWV207) 的同一次引导里, Xorg GLX 模块仍会初始化
@@ -648,6 +662,8 @@ umd_wait_xorg() {
     local se i
     se=$(umd_stamp_epoch)
     for i in $(seq 1 40); do
+        # 每次重解析: Xorg 可能起在别的显示号上（:1 等），日志名随之变化
+        refresh_xorg_log
         [ -f "$XORG_LOG" ] && umd_xorg_log_is_new "$se" && break
         sleep 3
     done
@@ -703,6 +719,7 @@ umd_watchdog() {
     se=$(stat -c %Y "$stamp" 2>/dev/null || echo 0)
     for i in $(seq 1 60); do
         sleep 4
+        refresh_xorg_log
         [ -f "$XORG_LOG" ] || continue
         # Time 校验: 只认本次切换之后新起的 Xorg 写的日志
         local e; e=$(umd_xorg_log_epoch) || continue
@@ -725,6 +742,7 @@ umd_watchdog() {
 umd_verify() {
     echo "== 安装后自检 =="
     local rc=0
+    refresh_xorg_log
     for s in libEGL.so.1 libGL.so.1 libgbm.so.1 libGLESv2.so.2; do
         local hit; hit=$(ldconfig -p | grep -m1 "$s " | awk '{print $NF}')
         case "$hit" in
@@ -857,6 +875,7 @@ umd_status() {
     for s in libEGL.so.1 libGL.so.1 libgbm.so.1; do
         echo "     $s -> $(ldconfig -p | grep -m1 "$s " | awk '{print $NF}')"
     done
+    refresh_xorg_log
     echo "  -- Xorg 最近 glamor 状态:"
     sudo grep -m2 -iE "$PASS_MARKERS|$FAIL_MARKERS" "$XORG_LOG" 2>/dev/null | sed 's/^/     /' || echo "     (无日志)"
     echo "  -- ICD:"
