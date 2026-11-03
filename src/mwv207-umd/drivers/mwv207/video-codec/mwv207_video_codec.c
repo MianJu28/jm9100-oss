@@ -97,8 +97,19 @@ mwv207_is_video_format_supported(struct pipe_screen *pscreen,
    case PIPE_FORMAT_NV12:
       ret = true;
       break;
-   
-   
+   case PIPE_FORMAT_P010:
+   case PIPE_FORMAT_P016:
+      /* FIX(jm9100-oss): 10bit 视频面由 R16_UNORM / R16G16_UNORM 两个平面
+       * 组成(vl_video_buffer 的 P010/P016 模板)。只有在这两个采样格式
+       * 真的出现在 texture_infos 表里时才接受 10bit，避免再次“广播了
+       * VA_RT_FORMAT_YUV420_10BPP 却建不出平面”的谎报。 */
+      ret = pscreen->is_format_supported(pscreen, PIPE_FORMAT_R16_UNORM,
+                                         PIPE_TEXTURE_2D, 0, 0,
+                                         PIPE_BIND_SAMPLER_VIEW) &&
+            pscreen->is_format_supported(pscreen, PIPE_FORMAT_R16G16_UNORM,
+                                         PIPE_TEXTURE_2D, 0, 0,
+                                         PIPE_BIND_SAMPLER_VIEW);
+      break;
    default:
       break;
    }
