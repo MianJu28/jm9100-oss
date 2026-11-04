@@ -93,7 +93,13 @@ ffmpeg -v error -y -hwaccel vaapi -hwaccel_device /dev/dri/renderD128 \
   - 逐项排除：`NUM_TILE_COLS/ROWS` 与 legacy 字段（用 id 233/234 写 word10 的 shift20/shift15 位）、`NUM_TILE_ROWS_8K` 1/2/4、tile 行按 8 KiB 对齐、表项换成流字节偏移、`FILT_TILE_BORDER`(178, hantro 的 filter_over_tiles)=1、`DEC_TILE_INT_E` 均不改变"只解第一行"或"挂死"的结果。
   - 观察 `/usr/src/mwv207-1.8.0.uos` 里没有 VP9 解码头文件（只有一个 `jm_dec_tile_mode` 枚举，讲的是图像内存平铺，不是 VP9 tile）；厂商 UMD 在盘上只剩 0 字节 stub，无法反汇编。
   - 结论（暂定）：本 ASIC 的这条寄存器路径很可能**不支持 VP9 tile rows**（tile columns 正常）。保持"跳过 + 占位帧"的防护（`MWV207_VP9_TILEROW=1` 可强制放行，仅受控实验用，有挂死风险）。
-  - 若要继续，下一批可试的方向（都有挂死风险，需受控）：(a) 按 tile 行追加命令（每行一条，首条 `DEC_E=1`），而不是按 tile 追加；(b) 把 tile 表放到单独的 32 B/SB 的 buffer D 里（厂商 `nseg = supercols*superrows*32`），而不用 scratch 里的 4 B/表项区域；(c) 找一台有完整厂商 UMD 的同型号机器导出 `jmgpu_drv_video.so` 反汇编 `decode_frames` 的 `ctx[0x9cf0]` 分支。
+  - 追加实验（同日更晚，仍未成功）：
+    * **按 tile 行追加命令**已实现并实测：每行一条命令，窗口指向该行在拷贝缓冲里的 `(4 字节前缀 + 负载)`，首条 `DEC_E=1`、后续 `DEC_E=0`、末条 `submit_wait`，行表用真实 SB 增量 —— 结果仍是 6 次 `timeout`、输出全 0。⇒ 追加命令不是答案，粒度换成"行"也一样挂。
+    * tile filter / BSD 区从 2 MB 放大到 8 MB / 16 MB：仍挂 ⇒ 不是辅助内存不够。
+    * 显式表值 `(0,20) (16,20) (24,20) (20,24) (45,0) (33,0) (20,0)` 等"字节偏移"猜测：**不挂**，但第二行永不解码（row1 恒为 233.4 的掩盖值）⇒ 表里的第二个 u16 被硬件当 SB 增量/行推进量，不是行数据地址。
+    * u32 打包表（`row<<16|col`）：挂；`FILT_TILE_BORDER=1`：挂。
+  - 稳定的判读：**只要硬件真正"进入"第二个 tile 行就会自旋挂死**（无论一条命令还是每行一条命令），只有 1×1 描述符能避开挂死，但那样第二行根本不参与解码。因此问题不在命令粒度，而在第二行数据的取址/格式，或该 ASIC 修订根本不支持 tile rows。
+  - 若要继续，只剩两条路（都有挂死风险，需受控）：(a) 把 tile 表放到单独的 32 B/SB 的 buffer D 里（厂商 `nseg = supercols*superrows*32`），即换掉 scratch 里 4 B/表项的区域；(b) 找一台有完整厂商 UMD 的同型号机器导出 `jmgpu_drv_video.so`，反汇编 `decode_frames` 的 `ctx[0x9cf0]` 分支与 §6 未解码部分（`calc_sur_offset`、buffer C/D 槽位索引、`Vp9AsicAllocateFilterBlockMem`）。
 
 ## 7. 验证标准（当前结果）
 
