@@ -87,7 +87,13 @@ ffmpeg -v error -y -hwaccel vaapi -hwaccel_device /dev/dri/renderD128 \
 
 - tile rows 的帧（`log2_tile_rows>0`，例如 `vp9-640.webm` 的 inter 帧、`-tile-rows 1` 编码的 `tr2/trm`）只要 `TILE_ENABLE=1` 就会挂死 DEC 引擎（第 5 节）；`DEC_TILE_INT_E`、`NUM_TILE_ROWS_8K`(244) 取值、tile 行 8 KiB 对齐、把表项换成流字节偏移等都试过，均无用（要么仍挂，要么只有第一行正确）。
 - 用 1×1 描述符（vendor 在 `ncol==1` 时走的分支）+ `TILE_ENABLE=1` 可以不挂，但**只有第一 tile 行正确**（`trm` 640×256：row0 99.00、row1 12 dB），第二行不参与解码；`NUM_TILE_ROWS` 设为 2、`244` 设 1/2/4 都不改变结果。
-- 结论：本芯片/本寄存器序列下没有找到 tile rows 的正确打法，保持"跳过 + 占位帧"的防护（`MWV207_VP9_TILEROW=1` 可强制放行，仅受控实验用，有挂死风险）。
+- 进一步实验（2026-11-04 下午，`/tmp/trb.webm` = 640×256、上半 235 下半 16、lossless、`-tile-rows 1`，两个 tile 只有 16/20 字节，tile_off=29）：
+  - 1×1 描述符 + `TILE_ENABLE=1`：**不挂**，上半 235 完全正确，下半被填充成 233（"上一行预测/掩盖"），即硬件只解了 tile 0，第二个 tile 行连数据都没读（tile 1 的 20 字节完全没用上）。
+  - 网格表 (10,2),(10,2) + `NUM_TILE_ROWS=2`：**挂死**（6 次超时、全 0），即使两个 tile 只有 36 字节也一样挂 ⇒ 不是数据量/长度问题。
+  - 逐项排除：`NUM_TILE_COLS/ROWS` 与 legacy 字段（用 id 233/234 写 word10 的 shift20/shift15 位）、`NUM_TILE_ROWS_8K` 1/2/4、tile 行按 8 KiB 对齐、表项换成流字节偏移、`FILT_TILE_BORDER`(178, hantro 的 filter_over_tiles)=1、`DEC_TILE_INT_E` 均不改变"只解第一行"或"挂死"的结果。
+  - 观察 `/usr/src/mwv207-1.8.0.uos` 里没有 VP9 解码头文件（只有一个 `jm_dec_tile_mode` 枚举，讲的是图像内存平铺，不是 VP9 tile）；厂商 UMD 在盘上只剩 0 字节 stub，无法反汇编。
+  - 结论（暂定）：本 ASIC 的这条寄存器路径很可能**不支持 VP9 tile rows**（tile columns 正常）。保持"跳过 + 占位帧"的防护（`MWV207_VP9_TILEROW=1` 可强制放行，仅受控实验用，有挂死风险）。
+  - 若要继续，下一批可试的方向（都有挂死风险，需受控）：(a) 按 tile 行追加命令（每行一条，首条 `DEC_E=1`），而不是按 tile 追加；(b) 把 tile 表放到单独的 32 B/SB 的 buffer D 里（厂商 `nseg = supercols*superrows*32`），而不用 scratch 里的 4 B/表项区域；(c) 找一台有完整厂商 UMD 的同型号机器导出 `jmgpu_drv_video.so` 反汇编 `decode_frames` 的 `ctx[0x9cf0]` 分支。
 
 ## 7. 验证标准（当前结果）
 
