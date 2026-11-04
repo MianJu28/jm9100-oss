@@ -101,6 +101,41 @@ ffmpeg -v error -y -hwaccel vaapi -hwaccel_device /dev/dri/renderD128 \
   - 稳定的判读：**只要硬件真正"进入"第二个 tile 行就会自旋挂死**（无论一条命令还是每行一条命令），只有 1×1 描述符能避开挂死，但那样第二行根本不参与解码。因此问题不在命令粒度，而在第二行数据的取址/格式，或该 ASIC 修订根本不支持 tile rows。
   - 若要继续，只剩两条路（都有挂死风险，需受控）：(a) 把 tile 表放到单独的 32 B/SB 的 buffer D 里（厂商 `nseg = supercols*superrows*32`），即换掉 scratch 里 4 B/表项的区域；(b) 找一台有完整厂商 UMD 的同型号机器导出 `jmgpu_drv_video.so`，反汇编 `decode_frames` 的 `ctx[0x9cf0]` 分支与 §6 未解码部分（`calc_sur_offset`、buffer C/D 槽位索引、`Vp9AsicAllocateFilterBlockMem`）。
 
+### 6.3 厂商 UMD 静态逆向结果（2026-11-04 傍晚）
+
+盘上其实有**完整的厂商 UMD**：`/usr/lib/aarch64-linux-gnu/dri/jmgpu_drv_video.so`
+（1315584 B，aarch64，**未 strip**，mwv207-dev 包提供；linglong 缓存里的同名文件是 0 字节
+stub，不要被误导）。反汇编（`objdump -d --no-show-raw-insn`，见 /tmp/vendor.asm）后确认：
+
+- `jmgpu_decoder_vp9_set_tile_register`：tile 表写在 **buffer B（prob/counter BO）内固定偏移
+  0x4270**（= prob 3744 B + counter 13264 B），`TILE_BASE`(1022/1021) 指向
+  `bufferB + ctx[0x10B0+4*slot]`；`TILE_ENABLE`(245) = `(log2_tile_rows ||
+  log2_tile_columns)`；表项为 **（coldelta u16, rowdelta u16）**，行优先，外层行内层列，
+  且 **rowdelta 是每行增量** `((i+1)*sr >> l2r) - (i*sr >> l2r)`（不是 hantro 主线的累加修正）；
+  随后写 `NUM_TILE_COLS=1<<l2c`（241 或 242）与 `NUM_TILE_ROWS=min(1<<l2r, sr)`（243 或 244）。
+  同一函数还写 `DEC_VERT_FILT_BASE`(1049/1047) = bufferC + 0、
+  `DEC_BSD_CTRL_BASE`(1057/1055) = bufferC + 系数/filter 缓冲大小。
+- `check_and_alloc_asic_buffer`：buffer B 大小 `max(0x5040, 需求)`，counter 常量 **13264
+  (0x33D0)**；buffer C = 系数/filter + BSD；buffer D = **supercols*superrows*64** 字节（不是
+  早先报告里推测的 32）；segment map = `max(align4k(w*h), 0x1FB000)`。
+- `set_stream_register`：流起址 = `bo_base + ctx[0x1360] + ctx[0x9CF0]`（两者在本库里都只被读、
+  没有写点 ⇒ 恒 0，即**从帧数据开头**开始），`STRM_START_BIT=(addr&0xf)*8`，
+  `STREAM_LEN=(base-addr)+本帧拷贝字节数`；拷贝时按 316 字节的 slice 结构逐块 memcpy。
+- 本仓库已按上述布局改好（commit `0324b19`：prob 0、counter 0xEA0/0x33D0、tile 表紧跟 counter、
+  行增量公式对齐厂商），单 tile 与多 tile-columns 全量回归仍 13/13 条流 99.00、无超时。
+
+**为什么仍无法得到"真值"对照**：厂商 UMD 需要厂商私有内核字符设备 `/dev/jmgpu` 和私有
+ioctl（`_IOC(_IOC_NONE,0x65,0xd,0)`、`_IOC(_IOC_READ,0x6c,0x8,0x8)` …）。本机跑的是 OSS
+`mwv207` 内核模块，没有 `/dev/jmgpu`；手工建 `/dev/jmgpu -> /dev/dri/renderD128` 后 open 成功但
+所有私有 ioctl 返回 ENOTTY，`vainfo`/`ffmpeg` 初始化失败。厂商 kernel 模块在本机不可加载
+（会与 OSS 模块争抢同一 PCI 设备，且桌面显示依赖它）。⇒ 运行时差对照只能另找一台装厂商
+内核模块的机器。
+
+用厂商布局 + 厂商行增量跑 `trb`（tile rows）**仍然挂死** ⇒ 布局、表值都已对齐，剩下的差异只
+可能在 (i) buffer D 的地址/内容（我方从不分配该缓冲）、(ii) 每槽 1049/1057 指向的 buffer C
+内部相对布局（我方用独立的 2 MB filter 区）、(iii) `decode_pictures` 里 `ctx[0x9D38]`
+（多命令/多图像）分支的触发条件。
+
 ## 7. 验证标准（当前结果）
 
 - `w6`：50/50 帧 Y/U/V 逐位一致（99.00 dB）✅
