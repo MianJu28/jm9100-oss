@@ -49,8 +49,8 @@ void mwv207_vp9_reset_probs(struct mwv207_vp9_slice_header *sh);
 
 #define VP9_PROB_TABLE_SIZE 0xea0u /* sizeof(struct mwv207_vp9_entropy_probs) */
 #define VP9_PROB_OFFSET 0x0u
-#define VP9_COUNTER_OFFSET 0x1000u
-#define VP9_COUNTER_SIZE 0x2000u
+#define VP9_COUNTER_OFFSET 0xea0u
+#define VP9_COUNTER_SIZE 0x33d0u
 #define VP9_STREAM_COPY_SIZE (4u << 20)
 
 #define VP9_FILTER_SIZE (2u << 20)
@@ -265,8 +265,8 @@ vp9_get_state(struct mwv207_video_decoder *decoder, uint32_t width,
      if (ce) ctr_size = (uint32_t)strtoul(ce, NULL, 0); }
    uint32_t need = VP9_COUNTER_OFFSET + ctr_size;
 
-   need = vp9_align4k(need + seg_size * 2);
    need = vp9_align4k(need + tile_size);
+   need = vp9_align4k(need + seg_size * 2);
    need += VP9_FILTER_SIZE + VP9_STREAM_COPY_SIZE;
 
    if (st && (width > st->width || height > st->height)) {
@@ -279,9 +279,11 @@ vp9_get_state(struct mwv207_video_decoder *decoder, uint32_t width,
       st = CALLOC_STRUCT(mwv207_vp9_state);
       if (!st)
          return NULL;
-      st->seg_offset = VP9_COUNTER_OFFSET + ctr_size;
+      /* Vendor layout: prob table at 0, counters right after it, the tile
+       * size table immediately behind the counters. */
+      st->tile_offset = VP9_COUNTER_OFFSET + ctr_size;
+      st->seg_offset = vp9_align4k(st->tile_offset + tile_size);
       st->seg_size = seg_size;
-      st->tile_offset = vp9_align4k(st->seg_offset + seg_size * 2);
       st->filter_offset = vp9_align4k(st->tile_offset + tile_size);
       st->width = width;
       st->height = height;
@@ -497,10 +499,6 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
       }
       for (i = 0; i < nrow; i++) {
          uint32_t r = rinfo[i];
-         if (i == 1)
-            r += rinfo[0];
-         else if (i == 2)
-            r += rinfo[0] + rinfo[1];
          for (j = 0; j < ncol; j++) {
             tile[k++] = cinfo[j];
             tile[k++] = (uint16_t)r;
