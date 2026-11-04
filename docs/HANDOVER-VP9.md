@@ -70,7 +70,8 @@ ffmpeg -v error -y -hwaccel vaapi -hwaccel_device /dev/dri/renderD128 \
 - `vp9-kf.webm`（640×360，l2c=1）：tile 0（x<320）逐位正确，tile 1（x≥320）是噪声，整帧 15.5 dB。
 - 把流指针指到 tile 1 的数据（`tile_off=236`，tile0 size=2823 → 下一 tile 在 3063；`STRM_BASE=3056`、`STRM_START_BIT=56`）并关闭 tile 标志时，tile 1 **能正确解出**（内容与软件右半一致）→ 硬件具备解任意 tile 的能力，问题是“一帧一条命令”时它不去解第二个 tile。
 - 厂商 `decode_frames` 里有 `if (ctx[0x9cf0] == 1) 首条命令` 分支（`DEC_E` 只在首条命令置 1），并且有 `ctx[0x10d0 + 48*idx]` 之类的**每槽/每 tile 状态**，暗示多 tile 需要**按 tile 追加命令**（同一帧多条命令，首条 `DEC_E=1`，后续 `DEC_E=0`），当前驱动每帧只提交一条。
-- 已排除：tile 表项顺序（`(coldelta,rowdelta)` 正确，交换后更差）、表项步长（4 字节）、`NUM_TILE_COLS/ROWS` 取值、`NUM_TILE_ROWS_8K`、`DEC_TILE_INT_E`、legacy `NUM_TILE_COLS_V0/ROWS_V0`、`VERT_FILT/BSD` 基址、`DEC_MODE`、tile 表地址。
+- 已排除：tile 表项顺序（`(coldelta,rowdelta)` 正确，交换后更差）、表项步长（4 字节 / 8 / 16）、`NUM_TILE_COLS/ROWS` 取值（0…3 无差别）、`NUM_TILE_ROWS_8K`（0/1/4/6/10378 全部无差别，疑似该字段在本芯片无效）、`DEC_TILE_INT_E`、legacy `NUM_TILE_COLS_V0/ROWS_V0`、`VERT_FILT/BSD` 基址、`DEC_MODE`、tile 表地址。
+- 也试过（无效）：`STRM_START_OFFSET`(1128) 当 tile 字节偏移用（整帧不再出图）、把 `STREAM_LEN` 设为精确 tile 长度 / tile0 长度 / tile0+前缀长度（tile 0 仍正确、tile 1 仍噪声）、把 tile 负载拷贝到 16 字节对齐的 scratch 流缓冲（单 tile 也失败，说明该实验实现有误或 scratch 不能当流源）。
 
 建议实现：解析每个 tile 的 4 字节大端长度前缀，算出各 tile 的起始字节/长度；为第 1 个 tile 之后的每个 tile 追加一条命令（`STRM_BASE` 对齐到 16 字节、`STRM_START_BIT` 为余数、`STREAM_LEN` 为该 tile 长度+余量、`DEC_E=0`），并在首条命令之后只更新流相关寄存器。需要给 codec 增加“提交额外命令”的能力（现在只有 `dec->decoder->reg_buf` 一份，`end_frame` 只提交一次）。
 
