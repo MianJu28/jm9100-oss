@@ -93,6 +93,11 @@ struct mwv207_vp9_state {
    uint32_t ref_buf_size, ref_luma;
    uint32_t width;
    uint32_t height;
+   /* Tile payload of the current frame: the hardware walks the tiles by
+    * itself once every one of them carries a 4-byte size prefix. */
+   uint32_t tile_n;
+   uint32_t tile_off[16];
+   uint32_t tile_len[16];
 };
 
 void
@@ -407,6 +412,11 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
    }
    tile_len = stream_len - tile_off;
    align_off = tile_off & ~0xfu;
+   if (!sh->log2_tile_columns && !sh->log2_tile_rows) {
+      st->tile_n = 1;
+      st->tile_off[0] = tile_off;
+      st->tile_len[0] = tile_len;
+   }
    if (vp9_trace()) fprintf(stderr, "VP9DBG hdr: len=%u tag=%u part=%u tile_off=%u tile_len=%u\n",
            stream_len, sh->frame_tag_size, sh->offset_to_dct_parts, tile_off, tile_len);
 
@@ -425,14 +435,54 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
       uint32_t l2r = sh->log2_tile_rows & 3u;
       uint32_t ncol = 1u << l2c;
       uint32_t nrow = 1u << l2r;
+      uint32_t n = ncol * nrow;
       uint16_t *tile = (uint16_t *)((uint8_t *)st->scratch_cpu
                                     + st->tile_offset);
       uint16_t cinfo[16], rinfo[16];
       uint32_t i, j, k = 0, acc;
 
+      if (n > 16)
+         n = 16;
+
+      /* VP9 tile payload layout (spec 6.2.5): row-major over the
+       * (ncol x nrow) grid, a 4-byte big-endian size in front of every tile
+       * but the last, the last one taking the remainder of the frame. */
+      if (n > 1) {
+         uint32_t off = tile_off, sz, i2;
+
+         if (off > stream_len) {
+            MWV207_LOG(MWV207_LEVEL_ERROR,
+                       "vp9: tile size table beyond the frame\n");
+            reg_buf->set_reg(reg_buf, JMDEC_DEC_E, 0);
+            return;
+         }
+         /* VP9 interleaves each tile with a 4-byte big-endian size in front
+          * of it (all tiles but the last); the last one is the remainder. */
+         for (i2 = 0; i2 + 1 < n; i2++) {
+            const uint8_t *p = stream + off;
+            if (off + 4 > stream_len)
+               break;
+            sz = ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) |
+                 ((uint32_t)p[2] << 8) | p[3];
+            off += 4;
+            if (sz == 0 || off + sz > stream_len) {
+               MWV207_LOG(MWV207_LEVEL_ERROR,
+                          "vp9: bad tile size %u (tile %u)\n", sz, i2);
+               reg_buf->set_reg(reg_buf, JMDEC_DEC_E, 0);
+               return;
+            }
+            st->tile_off[i2] = off;
+            st->tile_len[i2] = sz;
+            off += sz;
+         }
+         st->tile_off[n - 1] = off;
+         st->tile_len[n - 1] = stream_len - off;
+         st->tile_n = n;
+      }
+
       /* Upstream hantro_g2: per-column / per-row cumulative superblock
        * deltas, table laid out row-major as (coldelta, rowdelta) pairs.
-       * ncol == nrow == 1 degenerates to the (supercols, superrows) form. */
+       * ncol == nrow == 1 degenerates to (supercols, superrows). */
       acc = 0;
       for (i = 0; i < ncol; i++) {
          uint32_t next = (i + 1) * sc / ncol;
@@ -455,6 +505,11 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
             tile[k++] = cinfo[j];
             tile[k++] = (uint16_t)r;
          }
+      }
+      if (n > 1 && vp9_trace()) {
+         for (i = 0; i < n; i++)
+            fprintf(stderr, "VP9DBG tile%u: off=%u len=%u\n",
+                    i, st->tile_off[i], st->tile_len[i]);
       }
    }
    __builtin___clear_cache((char *)st->scratch_cpu,
@@ -735,39 +790,83 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
       reg_buf->set_reg(reg_buf, JMDEC_STREAM_LEN, stream_len);
       reg_buf->set_reg(reg_buf, JMDEC_STRM_BUFFER_LEN, bs_buf->res->size);
    } else {
+      /* Multi-tile frames: the hardware finds the following tiles itself by
+       * reading a 4-byte big-endian size in front of every tile.  The VP9
+       * bitstream only writes that size for all tiles but the last one, so
+       * rebuild the payload in the scratch stream buffer with the prefix in
+       * front of every tile and point the window at that copy. */
+      uint32_t t_off = tile_off, t_len = tile_len;
+      uint32_t a_off, start_bit, space, slen;
+      struct mwv207_video_buffer *win_buf = bs_buf;
+      uint32_t win_base = 0;
+
+      if (st->tile_n > 1 && tile_off < VP9_STREAM_COPY_SIZE) {
+         uint8_t *dst = (uint8_t *)st->scratch_cpu + st->stream_offset;
+         uint32_t i, total;
+
+         memcpy(dst, stream, tile_off);
+         total = tile_off;
+         for (i = 0; i < st->tile_n; i++) {
+            uint32_t ln = st->tile_len[i];
+
+            if (total + 4 + ln > VP9_STREAM_COPY_SIZE) {
+               total = 0;
+               break;
+            }
+            dst[total + 0] = (uint8_t)(ln >> 24);
+            dst[total + 1] = (uint8_t)(ln >> 16);
+            dst[total + 2] = (uint8_t)(ln >> 8);
+            dst[total + 3] = (uint8_t)ln;
+            memcpy(dst + total + 4, stream + st->tile_off[i], ln);
+            total += 4 + ln;
+         }
+         if (total) {
+            __builtin___clear_cache((char *)dst, (char *)dst + total);
+            win_buf = st->scratch;
+            win_base = st->stream_offset;
+            t_off = tile_off;
+            t_len = total - tile_off;
+            if (vp9_trace())
+               fprintf(stderr, "VP9DBG tiles copy: %u bytes, window=%u\n",
+                       total, t_len);
+         }
+      }
+
+      a_off = t_off & ~0xfu;
+      start_bit = (t_off - a_off) * 8;
       {
          const char *sb = getenv("MWV207_VP9_SB");
          const char *so = getenv("MWV207_VP9_SOFF");
-         uint32_t start_bit = (tile_off - align_off) * 8;
-         uint32_t base_off = align_off;
-         if (sb && so) { start_bit = strtoul(sb, NULL, 0); base_off = strtoul(so, NULL, 0); }
-         reg_buf->set_reg(reg_buf, JMDEC_STRM_START_BIT, start_bit);
-         vp9_set_addr(reg_buf, JMDEC_STREAM_BASE_LSB, bs_buf->res->bo, base_off);
-         const char *slen = getenv("MWV207_VP9_SLEN");
-         if (slen) reg_buf->set_reg(reg_buf, JMDEC_STREAM_LEN, strtoul(slen, NULL, 0));
+         if (sb && so) {
+            start_bit = strtoul(sb, NULL, 0);
+            a_off = strtoul(so, NULL, 0);
+         }
       }
+      reg_buf->set_reg(reg_buf, JMDEC_STRM_START_BIT, start_bit);
+      vp9_set_addr(reg_buf, JMDEC_STREAM_BASE_LSB, win_buf->res->bo,
+                   win_base + a_off);
       reg_buf->set_reg(reg_buf, JMDEC_STRM_START_OFFSET, 0);
+
       /* The boolean decoder runs a few bytes ahead of the bit position; the
        * hardware treats STRM_STREAM_LEN as a hard limit, so handing it the
-       * exact tile length makes it abandon the final block of the frame
-       * (the last 8x8 block came out as 0).  Extend the length into the
-       * padding that always follows the bitstream in the buffer. */
+       * exact length makes it abandon the final block of the frame (the last
+       * 8x8 block came out as 0).  Extend the length into the padding that
+       * always follows the bitstream in the buffer. */
+      space = win_buf->res->size - win_base - a_off;
+      slen = t_len;
+      if (slen < space) {
+         uint32_t pad = 64;
+         if (pad > space - slen)
+            pad = space - slen;
+         slen += pad;
+      }
       {
-         uint32_t space = bs_buf->res->size - align_off;
-         uint32_t slen = tile_len;
-         if (slen < space) {
-            uint32_t pad = 64;
-            if (pad > space - slen)
-               pad = space - slen;
-            slen += pad;
-         }
          const char *so_slen = getenv("MWV207_VP9_SLEN");
          if (so_slen)
             slen = strtoul(so_slen, NULL, 0);
-         reg_buf->set_reg(reg_buf, JMDEC_STREAM_LEN, slen);
       }
-      reg_buf->set_reg(reg_buf, JMDEC_STRM_BUFFER_LEN,
-                       bs_buf->res->size - align_off);
+      reg_buf->set_reg(reg_buf, JMDEC_STREAM_LEN, slen);
+      reg_buf->set_reg(reg_buf, JMDEC_STRM_BUFFER_LEN, space);
    }
 
    {
@@ -814,6 +913,7 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
                  "(the decoder would hang); frame skipped\n",
                  width, height, 1u << sh->log2_tile_rows);
       reg_buf->set_reg(reg_buf, JMDEC_DEC_E, 0);
+      st->tile_n = 1;
       st->pending = NULL;
       return;
    }

@@ -1,6 +1,6 @@
 # VP9 硬解（D1）交接文档
 
-2026-11-04 · 状态：**单 tile 码流已与软件逐位一致**；多 tile（tile columns / tile rows）仍有缺陷。
+2026-11-04 · 状态：**单 tile 与多 tile-columns 码流已与软件逐位一致**；tile rows 不支持（会挂死，已防护跳过）。
 
 目标：VP9 Profile0 8bit 硬解输出与软件解码逐位一致后提交。
 
@@ -8,7 +8,9 @@
 
 - 已打通：VA 广播（`vainfo` 显示 `VAProfileVP9Profile0 : VAEntrypointVLD`）、码流头解析、寄存器序列（对照厂商 1.8.0 `jmgpu_drv_video.so` 反汇编 `/tmp/vp9-re.md`）、出图链路（decoder staging → PP → VA 导出）。
 - **单 tile 码流现在逐位一致**：128×128 棋盘/渐变、640×360 彩条、640×360 testsrc2 30 帧（realtime 与 crf20 两种编码）、`w6.webm` 50 帧，全部 Y/U/V PSNR 99.00（即逐位相同），涵盖 4×4/8×8/16×16/32×32 变换、intra 与 inter(P) 帧。
-- 仍未解决：**多 tile 码流**。tile columns 的 640×360（`vp9-kf.webm`）只有第 0 个 tile 正确（tile 1 是噪声）；带 tile rows 的 `vp9-640.webm` 整帧全 0。
+- **多 tile-columns 也已逐位一致**（见第 6 节）：关键是驱动把 tile 负载重新拷进 scratch 流缓冲，并在**每个 tile 前（含最后一个）**补 4 字节大端长度；硬件自己按前缀逐个解 tile，不需要"按 tile 追加命令"。
+  - `tc5`（512×128，2 tiles，lossless）左右两半均 99.00；`tc4`（1024×128，4 tiles）99.00；`tc30`（640×360，2 tiles，30 帧）30/30 帧 99.00；`vp9-kf`（640×360，2 tiles）99.00。
+- 仍不支持：**tile rows**（`log2_tile_rows > 0`）。这类码流会让 DEC 引擎挂死（第 5 节），当前全部跳过并返回占位帧；探索记录见第 6.2 节。
 
 ## 2. 测试环境
 
@@ -69,22 +71,29 @@ ffmpeg -v error -y -hwaccel vaapi -hwaccel_device /dev/dri/renderD128 \
   现在 `mwv207_dec_vp9_set_regs()` 对 `log2_tile_rows != 0` 的帧直接 `DEC_E=0` 跳过（staging 填 16，打 ERROR 日志），
   避免再次把机器挂住；`MWV207_VP9_TILEROW=1` 可强制放行（有挂死风险，仅在受控实验时使用）。
 
-## 6. 下一步：多 tile
+## 6. 多 tile
 
-现象与证据：
+### 6.1 tile columns：已解决（逐位一致）
 
-- `vp9-kf.webm`（640×360，l2c=1）：tile 0（x<320）逐位正确，tile 1（x≥320）是噪声，整帧 15.5 dB。
-- 把流指针指到 tile 1 的数据（`tile_off=236`，tile0 size=2823 → 下一 tile 在 3063；`STRM_BASE=3056`、`STRM_START_BIT=56`）并关闭 tile 标志时，tile 1 **能正确解出**（内容与软件右半一致）→ 硬件具备解任意 tile 的能力，问题是“一帧一条命令”时它不去解第二个 tile。
-- 厂商 `decode_frames` 里有 `if (ctx[0x9cf0] == 1) 首条命令` 分支（`DEC_E` 只在首条命令置 1），并且有 `ctx[0x10d0 + 48*idx]` 之类的**每槽/每 tile 状态**，暗示多 tile 需要**按 tile 追加命令**（同一帧多条命令，首条 `DEC_E=1`，后续 `DEC_E=0`），当前驱动每帧只提交一条。
-- 已排除：tile 表项顺序（`(coldelta,rowdelta)` 正确，交换后更差）、表项步长（4 字节 / 8 / 16）、`NUM_TILE_COLS/ROWS` 取值（0…3 无差别）、`NUM_TILE_ROWS_8K`（0/1/4/6/10378 全部无差别，疑似该字段在本芯片无效）、`DEC_TILE_INT_E`、legacy `NUM_TILE_COLS_V0/ROWS_V0`、`VERT_FILT/BSD` 基址、`DEC_MODE`、tile 表地址。
-- 也试过（无效）：`STRM_START_OFFSET`(1128) 当 tile 字节偏移用（整帧不再出图）、把 `STREAM_LEN` 设为精确 tile 长度 / tile0 长度 / tile0+前缀长度（tile 0 仍正确、tile 1 仍噪声）、把 tile 负载拷贝到 16 字节对齐的 scratch 流缓冲（单 tile 也失败，说明该实验实现有误或 scratch 不能当流源）。
+实现（`mwv207_dec_vp9.c`）：
 
-建议实现：解析每个 tile 的 4 字节大端长度前缀，算出各 tile 的起始字节/长度；为第 1 个 tile 之后的每个 tile 追加一条命令（`STRM_BASE` 对齐到 16 字节、`STRM_START_BIT` 为余数、`STREAM_LEN` 为该 tile 长度+余量、`DEC_E=0`），并在首条命令之后只更新流相关寄存器。需要给 codec 增加“提交额外命令”的能力（现在只有 `dec->decoder->reg_buf` 一份，`end_frame` 只提交一次）。
+1. 按 VP9 规范解析 tile 负载：tile 网格按行优先排列，**除最后一个 tile 外，每个 tile 的数据前都有 4 字节大端长度**（即 `size,data,size,data,…`，不是把 n-1 个长度集中放在前面）。解析必须顺序进行：读长度 → 跳过该 tile 数据 → 读下一个长度；最后一个 tile 取帧剩余字节。早期按 `tile_off + 4*(n-1)` 的"长度表"解释在 n=4 时立即失败（`bad tile size 2142148336`），可作为反面教材。
+2. 把整帧拷进 scratch 的流缓冲（`st->stream_offset`），在**每一个** tile（包括最后一个）前写入 4 字节大端长度；`STREAM_BASE`/`STRM_START_BIT` 指向该副本，`STREAM_LEN = 副本长度 - tile_off + 最少 64 字节余量`。硬件随后自己沿前缀逐个解 tile。
+3. 寄存器：`JMDEC_TILE_ENABLE=1`，`JMDEC_NUM_TILE_COLS=1<<log2_tile_columns`，`JMDEC_NUM_TILE_ROWS=1<<log2_tile_rows`，`JMDEC_DEC_TILE_INT_E=0`；tile 表仍写 `(coldelta,rowdelta)` 超级块增量对（表本身对 columns 不是关键，但保持主线格式）。单 tile 帧不走拷贝路径，行为与之前完全一致。
+
+为什么不是"按 tile 追加命令"：厂商 `decode_frames` 的 `ctx[0x9cf0]` 分支确实暗示多命令，但实测**每 tile 追加命令会直接挂死引擎**（`'av:vp9:df0'` 超时、`irq state 0x00040100`，6 次重试后放弃），且首条 `DEC_E=1`/后续 `DEC_E=0`、`TILE_ENABLE=0`、每命令都 `DEC_E=1` 等变体都挂。真正缺的是"最后一个 tile 也要有长度前缀"，硬件按前缀自走，一条命令即可。
+
+### 6.2 tile rows：不支持，已防护
+
+- tile rows 的帧（`log2_tile_rows>0`，例如 `vp9-640.webm` 的 inter 帧、`-tile-rows 1` 编码的 `tr2/trm`）只要 `TILE_ENABLE=1` 就会挂死 DEC 引擎（第 5 节）；`DEC_TILE_INT_E`、`NUM_TILE_ROWS_8K`(244) 取值、tile 行 8 KiB 对齐、把表项换成流字节偏移等都试过，均无用（要么仍挂，要么只有第一行正确）。
+- 用 1×1 描述符（vendor 在 `ncol==1` 时走的分支）+ `TILE_ENABLE=1` 可以不挂，但**只有第一 tile 行正确**（`trm` 640×256：row0 99.00、row1 12 dB），第二行不参与解码；`NUM_TILE_ROWS` 设为 2、`244` 设 1/2/4 都不改变结果。
+- 结论：本芯片/本寄存器序列下没有找到 tile rows 的正确打法，保持"跳过 + 占位帧"的防护（`MWV207_VP9_TILEROW=1` 可强制放行，仅受控实验用，有挂死风险）。
 
 ## 7. 验证标准（当前结果）
 
 - `w6`：50/50 帧 Y/U/V 逐位一致（99.00 dB）✅
 - 30 帧实拍（单 tile，testsrc2 640×360，realtime 与 crf20）：30/30 帧逐位一致 ✅
 - 单 tile 各类合成码流（4×4/8×8/16×16/32×32 TX、棋盘、渐变、噪声）：逐位一致 ✅
-- 多 tile：❌（见第 6 节；tile rows 已加防护，不会再挂死引擎）
+- 多 tile-columns：`tc5`（2 tiles）99.00、`tc4`（4 tiles）99.00、`tc30`（30 帧 2 tiles）30/30 帧 99.00、`vp9-kf` 99.00 ✅
+- tile rows：❌ 不支持；已防护跳过（不会挂死引擎），占位帧输出（见第 6.2 节）
 - 单 tile 无 `job ... timed out`（`dmesg` 清空后跑解码无内核报错）✅；tile rows 会超时挂死（已防护，见第 5 节）

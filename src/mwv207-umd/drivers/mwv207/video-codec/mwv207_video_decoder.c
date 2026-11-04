@@ -646,7 +646,8 @@ mwv207_video_decoder_end_frame(struct pipe_video_codec *decoder,
    
 
    /* VP9 copies the freshly decoded picture into a reference slot right
-    * below, so the job must have completed. */
+    * below, so the job must have completed before we touch the staging
+    * buffer. */
    if (dec->video_format == MWV207_VIDEO_FORMAT_VP9)
       mwv207_video_cs_submit_wait(&dec->cs, dec->decoder->reg_buf);
    else
