@@ -795,6 +795,29 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
         }
      }
    }
+   /* Frames with more than one tile row are not supported yet.  Handing
+    * them to the ASIC wedges the DEC engine: it never raises its job-done
+    * interrupt, the kernel logs "job from 'av:vp9:dfN' to 'mwv207_dec0',
+    * timed out!" every two seconds and retries the same command buffer, and
+    * because the display is driven by the same GPU the whole desktop stops
+    * refreshing.  Skip the decoder (the PP still converts the cleared
+    * staging buffer) so userspace gets a frame and the GPU stays usable. */
+   if (sh->log2_tile_rows && !getenv("MWV207_VP9_TILEROW")) {
+      struct mwv207_context *gc = mwv207_context(decoder->base.context);
+      if (buf->res && gc) {
+         void *m = gc->ws->bo_map(gc->ws, buf->res->bo);
+         if (m)
+            memset(m, 0x10, vp9_luma_size * 3 / 2);
+      }
+      MWV207_LOG(MWV207_LEVEL_ERROR,
+                 "vp9: %ux%u stream uses %u tile rows, unsupported "
+                 "(the decoder would hang); frame skipped\n",
+                 width, height, 1u << sh->log2_tile_rows);
+      reg_buf->set_reg(reg_buf, JMDEC_DEC_E, 0);
+      st->pending = NULL;
+      return;
+   }
+
    reg_buf->set_reg(reg_buf, JMDEC_DEC_E, 1);
    st->pending = buf;
    st->pending_flags = sh->refresh_frame_flags;

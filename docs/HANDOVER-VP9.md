@@ -62,6 +62,12 @@ ffmpeg -v error -y -hwaccel vaapi -hwaccel_device /dev/dri/renderD128 \
 - `JMDEC_DEC_TILE_INT_E`（16）置 1 会导致整帧全 0，必须 0。
 - 输出 staging 是 **4×4 块平铺、块按光栅序**：`off(px,py) = ((py>>2)*(w>>2) + (px>>2))*16 + (py&3)*4 + (px&3)`（仅调试用）。
 - 寄存器表 `mwv207_video_dec_8170table.h` 存在 word 位域重叠（288 与 294 同属 word 13），不要同时写 288 和 294。
+- **tile rows（`log2_tile_rows > 0`）的码流会挂死 DEC 引擎**（2026-11-04 实测，桌面因此卡死）。内核每 2 s 打印
+  `mwv207: job from 'av:vp9:dfN' to 'mwv207_dec0', timed out!` + `irq state reg: 0x00040100`（DEC_E 一直为 1、DEC_IRQ=0，
+  完成中断永不触发），并反复重试同一条命令缓冲；该 GPU 同时驱动显示，命令队列被堵住后整屏停止刷新。
+  `MWV207_VP9_REGSET="82=0,1128=<非0偏移>,136=..."` 这类把 `STRM_START_OFFSET` 当字节偏移用的非法探针同样会挂死。
+  现在 `mwv207_dec_vp9_set_regs()` 对 `log2_tile_rows != 0` 的帧直接 `DEC_E=0` 跳过（staging 填 16，打 ERROR 日志），
+  避免再次把机器挂住；`MWV207_VP9_TILEROW=1` 可强制放行（有挂死风险，仅在受控实验时使用）。
 
 ## 6. 下一步：多 tile
 
@@ -80,5 +86,5 @@ ffmpeg -v error -y -hwaccel vaapi -hwaccel_device /dev/dri/renderD128 \
 - `w6`：50/50 帧 Y/U/V 逐位一致（99.00 dB）✅
 - 30 帧实拍（单 tile，testsrc2 640×360，realtime 与 crf20）：30/30 帧逐位一致 ✅
 - 单 tile 各类合成码流（4×4/8×8/16×16/32×32 TX、棋盘、渐变、噪声）：逐位一致 ✅
-- 多 tile：❌（见第 6 节）
-- 无 `job ... timed out`（`dmesg` 清空后跑解码无内核报错）✅
+- 多 tile：❌（见第 6 节；tile rows 已加防护，不会再挂死引擎）
+- 单 tile 无 `job ... timed out`（`dmesg` 清空后跑解码无内核报错）✅；tile rows 会超时挂死（已防护，见第 5 节）
