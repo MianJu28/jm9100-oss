@@ -30,6 +30,12 @@
 #   ./switch-mwv207.sh kmd --dry-run install      # 只打印将执行的命令
 #   ./switch-mwv207.sh kmd --root /tmp/fake rehearse   # 假根演练, 零副作用
 #
+#   sudo ./switch-mwv207.sh vendor status         # 看厂商栈 (jmgpu.ko + 厂商 UMD) 状态
+#   sudo ./switch-mwv207.sh vendor install        # 停桌面 → 卸 mwv207 → 装 jmgpu (桌面不自动起)
+#   sudo ./switch-mwv207.sh vendor verify         # 厂商栈下跑 vainfo + 解 tile-rows 码流
+#   sudo ./switch-mwv207.sh vendor rollback       # 回到 OSS 栈并点亮桌面
+#   sudo ./switch-mwv207.sh vendor test           # 后台: 切换→自检→自动回滚 (桌面被杀也不怕)
+#
 #   sudo ./switch-mwv207.sh all install [--force] # 两层一起切, lightdm 只停一次
 #      阶段 1 放置文件(不动桌面) → 阶段 2 停一次 lightdm 换 KMD →
 #      阶段 3 拉起 lightdm 并自检。分开执行 umd install + kmd install
@@ -1430,6 +1436,226 @@ kmd_dryrun() {
 EOF
 }
 
+
+# ============================ 厂商驱动 (vendor) =============================
+# 厂商栈 = 闭源内核模块 jmgpu.ko (DKMS, /lib/modules/$KVER/updates/dkms/) +
+# 厂商用户态 (jmgpu_drv_video.so / jmgpu_dri.so / libdrm_jmgpu)。
+# 与 OSS 栈互斥: 两者抢同一块 PCI 设备, 字符设备也不同 (/dev/jmgpu vs /dev/dri)。
+# 因此切换必须停 lightdm → 卸 mwv207 → 装 jmgpu; 本脚本**不会**自动起桌面 ——
+# 厂商栈只用于对照实验 (寄存器取证 / 验证硬件能力), 桌面仍用 OSS 栈。
+#
+# 安全网: vendor install 会登记一个"待回滚"标记并拉起 detached 看门狗,
+# 若 300 s 内没有人成功 vendor rollback (例如停 lightdm 把调用者的桌面/终端
+# 一起带走了), 看门狗会自动切回 OSS 栈并重新点亮 Xorg。
+VENDOR_KO_REL="updates/dkms/jmgpu.ko"
+VENDOR_DEV="/dev/jmgpu"
+VENDOR_UMD="/usr/lib/aarch64-linux-gnu/dri/jmgpu_drv_video.so"
+OSS_LDCONF="/etc/ld.so.conf.d/00-mwv207-oss.conf"
+VENDOR_FLAG="/run/mwv207-vendor-pending"
+VENDOR_WD_TIMEOUT="${VENDOR_WD_TIMEOUT:-300}"
+
+vendor_ko()     { rp "/lib/modules/$KVER/$VENDOR_KO_REL"; }
+vendor_loaded() { [ -d /sys/module/${R:+}jmgpu ]; }
+vendor_oss_loaded() { [ -d /sys/module/mwv207 ]; }
+
+vendor_status() {
+    local ko; ko=$(vendor_ko)
+    log "==== 厂商栈 (vendor) 状态 ===="
+    printf '  厂商模块      %s%s\n' "$ko" "$([ -f "$ko" ] && echo '' || echo '  [缺失]')"
+    [ -f "$ko" ] && printf '  模块版本      %s\n' "$(modinfo -F version "$ko" 2>/dev/null)"
+    printf '  jmgpu 已加载  %s' "$(vendor_loaded && echo yes || echo no)"
+    vendor_loaded && printf '   refcnt=%s' "$(cat /sys/module/jmgpu/refcnt 2>/dev/null)"
+    printf '\n'
+    printf '  mwv207 已加载 %s' "$(vendor_oss_loaded && echo yes || echo no)"
+    vendor_oss_loaded && printf '   srcversion=%s refcnt=%s' "$(loaded_srcver)" "$(loaded_refcnt)"
+    printf '\n'
+    printf '  %-13s %s\n' "$VENDOR_DEV" "$([ -e "$VENDOR_DEV" ] && echo present || echo absent)"
+    printf '  厂商 VA-API   %s\n' "$([ -f "$VENDOR_UMD" ] && echo "$VENDOR_UMD" || echo missing)"
+    printf '  OSS ldconf    %s\n' "$([ -e "$OSS_LDCONF" ] && echo enabled || echo disabled)"
+    printf '  待回滚标记    %s\n' "$([ -e "$VENDOR_FLAG" ] && echo "yes (看门狗 ${VENDOR_WD_TIMEOUT}s)" || echo no)"
+}
+
+# 只切内核态, 不动 lightdm —— 调用方负责停/起。
+vendor_switch_kmd() {
+    local ko; ko=$(vendor_ko)
+    [ -f "$ko" ] || die "找不到厂商模块 $ko (mwv207-dev / dkms 未安装?)"
+    if vendor_loaded; then
+        warn "jmgpu 已经加载"
+        return 0
+    fi
+    if ! wait_for_dri_free 20; then
+        warn "/dev/dri 仍被占用:"
+        dri_holders
+        if [ "${FORCE_UNLOAD:-0}" = 1 ]; then
+            warn "--force-unload: 终止占用进程"
+            run fuser -k /dev/dri/card0 /dev/dri/renderD128 >/dev/null 2>&1 || true
+            sleep 3
+            wait_for_dri_free 10 || die "仍有占用, 放弃切换"
+        else
+            die "/dev/dri 仍被占用 (先退出相关应用, 或加 --force-unload)"
+        fi
+    fi
+    if vendor_oss_loaded; then
+        fbcon_bind 0
+        wait_for_refcnt_zero 15 || warn "mwv207 refcnt 未归零: $(cat /sys/module/mwv207/refcnt 2>/dev/null)"
+        if ! run modprobe -r mwv207; then
+            fbcon_bind 1
+            die "mwv207 卸载失败"
+        fi
+    fi
+    if ! run modprobe jmgpu; then
+        warn "jmgpu 加载失败 → 恢复 OSS 模块"
+        run modprobe mwv207
+        fbcon_bind 1
+        die "厂商模块加载失败, 已恢复 OSS 模块"
+    fi
+    sleep 1
+    vendor_loaded || warn "加载后仍未见 /sys/module/jmgpu"
+    [ -e "$VENDOR_DEV" ] || warn "$VENDOR_DEV 未出现, 厂商 UMD 会 init 失败"
+    log "  KMD: $(lsmod | awk '/^jmgpu/{print "jmgpu refcnt="$3}')"
+}
+
+vendor_switch_back() {
+    if vendor_loaded; then
+        fbcon_bind 0
+        run modprobe -r jmgpu || warn "jmgpu 卸载失败 (refcnt=$(cat /sys/module/jmgpu/refcnt 2>/dev/null))"
+    fi
+    if ! vendor_oss_loaded; then
+        run modprobe mwv207 || die "mwv207 加载失败"
+    fi
+    sleep 1
+    fbcon_bind 1
+    vendor_oss_loaded && log "  KMD: mwv207 srcversion=$(loaded_srcver)"
+}
+
+# 停止 lightdm + 切厂商栈; 桌面保持停止
+vendor_install() {
+    need_root "vendor install"
+    log "==== 切到厂商栈 ===="
+    stop_display
+    vendor_switch_kmd
+    : > "$VENDOR_FLAG" 2>/dev/null || true
+    vendor_watchdog_spawn
+    vendor_status
+    log "  桌面保持停止。验证: sudo $0 vendor verify; 还原: sudo $0 vendor rollback"
+    log "  若 ${VENDOR_WD_TIMEOUT}s 内没有 rollback, 看门狗会自动还原。"
+}
+
+# detached 看门狗: 到点仍在厂商栈且标记还在 → 自动回滚并点亮桌面。
+vendor_watchdog_spawn() {
+    [ "$DRY_RUN" = 1 ] && { log "  (dry-run) 跳过看门狗"; return 0; }
+    local self; self=$(readlink -f "${BASH_SOURCE[0]}")
+    setsid nohup bash -c "
+        sleep $VENDOR_WD_TIMEOUT
+        [ -e '$VENDOR_FLAG' ] || exit 0
+        echo \"[\$(date '+%F %T')] 看门狗: 到点自动回滚\" >> /var/log/mwv207-switch.log
+        '$self' vendor rollback --watchdog >> /var/log/mwv207-switch.log 2>&1
+    " >/dev/null 2>&1 &
+    log "  已拉起看门狗 (${VENDOR_WD_TIMEOUT}s)"
+}
+
+vendor_rollback() {
+    need_root "vendor rollback"
+    local from_wd=0
+    for a in "$@"; do [ "$a" = "--watchdog" ] && from_wd=1; done
+    rm -f "$VENDOR_FLAG"
+    log "==== 从厂商栈回到 OSS 栈${from_wd:+ (看门狗触发)}$( [ "$from_wd" = 1 ] && echo ' (看门狗触发)' ) ===="
+    vendor_switch_back
+    start_display
+    wait_x_ok || warn "X 未点亮, 请看 /var/log/Xorg.0.log"
+    vendor_status
+    log "  已回到 OSS 栈。"
+}
+
+# 在厂商栈下做一次 VA-API 自检 (vainfo + 解 tile-rows 码流并算平面均值)
+vendor_verify() {
+    if ! vendor_loaded; then
+        warn "当前不在厂商栈 (jmgpu 未加载); 先 sudo $0 vendor install"
+        vendor_status
+        return 1
+    fi
+    log "==== 厂商栈 VA-API 自检 ===="
+    local out=/tmp/vendor_verify.yuv
+    run env LIBVA_DRIVER_NAME=jmgpu vainfo
+    rm -f "$out"
+    run env LIBVA_DRIVER_NAME=jmgpu ffmpeg -v error -y -hwaccel vaapi \
+        -hwaccel_device "$VENDOR_DEV" -hwaccel_output_format vaapi \
+        -i /tmp/trb.webm -vf hwdownload,format=nv12 -pix_fmt yuv420p -f rawvideo "$out"
+    if [ -s "$out" ]; then
+        python3 - "$out" <<'PYEOF'
+import sys
+w,h=640,256
+d=open(sys.argv[1],'rb').read()
+if len(d) < w*h:
+    print('  输出不完整 (%d 字节)' % len(d)); raise SystemExit(1)
+m0=sum(d[:128*w])/(128*w); m1=sum(d[128*w:256*w])/(128*w)
+print('  trb 上半均值 %.1f (期望 235), 下半均值 %.1f (期望 16)' % (m0,m1))
+PYEOF
+    else
+        warn "  没有输出文件"
+    fi
+}
+
+vendor_test() {
+    need_root "vendor test"
+    local self logf ts
+    self=$(readlink -f "${BASH_SOURCE[0]}")
+    ts=$(date +%H%M%S)
+    logf="/home/admin/vendor-test-${ts}.log"
+
+    # 抓寄存器用的 gdb 脚本: 断在厂商 UMD 的 SetDecRegister, 逐条打印 (id, value)。
+    cat > /tmp/vendor-regs.gdb <<'GDBEOF'
+set pagination off
+set confirm off
+set breakpoint pending on
+break SetDecRegister
+commands
+silent
+printf "REG %d %u\n", $w1, $w2
+continue
+end
+run
+GDBEOF
+
+    # 整个厂商阶段放进 detached 脚本: 停 lightdm 会把调用者的终端/桌面一起带走,
+    # 但本脚本(及其看门狗)不受影响, 一定能把 OSS 栈和桌面恢复回来。
+    setsid nohup bash -c "
+        set -x
+        L='$logf'
+        exec >>\"\$L\" 2>&1
+        echo \"=== vendor test 开始 \$(date) ===\"
+        '$self' vendor install
+        if [ -d /sys/module/jmgpu ]; then
+            echo '--- vainfo ---'
+            LIBVA_DRIVER_NAME=jmgpu vainfo
+            echo '--- 抓 tile-columns 码流 (tc5) 的寄存器 ---'
+            rm -f /tmp/vendor_tc5.yuv /tmp/vendor_tc5.reg
+            LIBVA_DRIVER_NAME=jmgpu timeout 60 gdb -q -batch -x /tmp/vendor-regs.gdb --args \
+                ffmpeg -v error -y -hwaccel vaapi -hwaccel_device /dev/jmgpu \
+                -hwaccel_output_format vaapi -i /tmp/tc5.webm \
+                -vf hwdownload,format=nv12 -pix_fmt yuv420p -f rawvideo /tmp/vendor_tc5.yuv \
+                > /tmp/vendor_tc5.reg
+            echo \"tc5 输出: \$(stat -c%s /tmp/vendor_tc5.yuv 2>/dev/null) 字节, 寄存器行数: \$(grep -c ^REG /tmp/vendor_tc5.reg)\"
+            echo '--- 抓 tile-rows 码流 (trb) 的寄存器 ---'
+            rm -f /tmp/vendor_trb.yuv /tmp/vendor_trb.reg
+            LIBVA_DRIVER_NAME=jmgpu timeout 60 gdb -q -batch -x /tmp/vendor-regs.gdb --args \
+                ffmpeg -v error -y -hwaccel vaapi -hwaccel_device /dev/jmgpu \
+                -hwaccel_output_format vaapi -i /tmp/trb.webm \
+                -vf hwdownload,format=nv12 -pix_fmt yuv420p -f rawvideo /tmp/vendor_trb.yuv \
+                > /tmp/vendor_trb.reg
+            echo \"trb 输出: \$(stat -c%s /tmp/vendor_trb.yuv 2>/dev/null) 字节, 寄存器行数: \$(grep -c ^REG /tmp/vendor_trb.reg)\"
+            echo '--- dmesg 尾部 ---'
+            dmesg | tail -20
+        fi
+        echo '--- 回滚 ---'
+        '$self' vendor rollback
+        echo \"=== vendor test 结束 \$(date) ===\"
+    " >/dev/null 2>&1 &
+
+    log "已后台执行 vendor test; 日志: $logf"
+    log "它会停掉 lightdm 约 30-60 s (当前桌面/本页面可能短暂消失), 结束后自动回滚并点亮桌面。"
+}
+
 # ----------------------------- usage ---------------------------------------
 usage() {
     # 打印文件头部的连续注释块 (第 2 行起到第一个非注释行为止)。
@@ -1533,6 +1759,17 @@ kmd_main() {
     esac
 }
 
+vendor_main() {
+    case "${1:-help}" in
+        status)   shift; vendor_status "$@" ;;
+        install)  shift; vendor_install "$@" ;;
+        rollback) shift; vendor_rollback "$@" ;;
+        verify)   shift; vendor_verify "$@" ;;
+        test)     shift; vendor_test "$@" ;;
+        *)        usage ;;
+    esac
+}
+
 # 全局选项可写在任意位置 (层名前后都行): 逐个扫描参数, 收下选项、留下位置参数。
 # 原实现只在开头收一次, 于是 "kmd --dry-run install" 这种更自然的写法会被
 # 当成未知命令打 usage。
@@ -1557,6 +1794,7 @@ main() {
     local cmd="${2:-}"
     case "$layer" in
         umd)  shift 2; umd_main "${cmd:-help}" "$@" ;;
+        vendor) shift 2; vendor_main "${cmd:-help}" "$@" ;;
         kmd)  shift 2; kmd_main "${cmd:-help}" "$@" ;;
         all)  shift 2; all_main "${cmd:-help}" "$@" ;;
         # 不带层名的 status/check/verify 同时跑两层 —— 桌面异常时要一起看
