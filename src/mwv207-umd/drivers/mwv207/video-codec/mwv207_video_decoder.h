@@ -59,6 +59,7 @@ struct mwv207_video_decoder {
    union {
       struct mwv207_h264_picture_desc h264;
       struct mwv207_h265_picture_desc h265;
+      struct mwv207_vp9_picture_desc vp9;
    } picture_desc;
 
    struct mwv207_video_buffer *bs_buffers[MWV207_NUM_BUFFERS];

@@ -141,6 +141,8 @@ struct mwv207_video_dec {
    void *misc_buf;
    struct mwv207_picture_h265 ref_frames_h265[16];
 
+   void *vp9_state;
+
    H264POCContext poc;
 
    struct mwv207_picture_h264 short_ref[32];

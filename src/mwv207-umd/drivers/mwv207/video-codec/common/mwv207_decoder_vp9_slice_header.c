@@ -28,6 +28,7 @@
 #include "mwv207_decoder_vp9_slice_header.h"
 #include "mwv207_vp9hwd_bool.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #define MWV207_OK 0
@@ -40,6 +41,16 @@
 #define MAX_TILE_WIDTH 4096
 #define MIN_TILE_WIDTH_SBS (MIN_TILE_WIDTH >> 6)
 #define MAX_TILE_WIDTH_SBS (MAX_TILE_WIDTH >> 6)
+
+/* Diagnostic traces are off unless MWV207_VP9_DBG is set in the environment. */
+static int
+vp9_dbg_enabled(void)
+{
+   static int enabled = -1;
+   if (enabled < 0)
+      enabled = getenv("MWV207_VP9_DBG") ? 1 : 0;
+   return enabled;
+}
 
 static uint32_t
 check_sync_code(struct mwv207_strm_data *rb)
@@ -1135,6 +1146,9 @@ vp9_decode_uncompressed_header(struct mwv207_vp9_slice_header *slice_header,
 
    STREAM_TRACE("log2_tile_rows", slice_header->log2_tile_rows);
 
+   if (vp9_dbg_enabled()) fprintf(stderr, "VP9DBG hdrbits: before16=%u key=%u intra=%u er=%u\n",
+           rb.strm_buff_read_bits, slice_header->key_frame,
+           slice_header->intra_only, slice_header->error_resilient);
    slice_header->offset_to_dct_parts = tmp = mwv207_sw_get_bits(&rb, 16);
 
    slice_header->frame_tag_size = (rb.strm_buff_read_bits + 7) / 8;
@@ -1294,6 +1308,8 @@ vp9_decode_compressed_header(uint8_t *stream,
       stream -= buf_len;
 
    mwv207_vp9_bool_start(bc, stream, strm_len, buffer, buf_len);
+   if (vp9_dbg_enabled()) fprintf(stderr, "VP9DBG: bool_start err=%u read=%u stream_len=%u buf_len=%u\n",
+           bc->strm_error, bc->read_len, bc->stream_len, bc->buffer_len);
 
    if (slice_header->lossless) {
       slice_header->transform_mode = ONLY_4X4_DEC;
@@ -1344,6 +1360,7 @@ vp9_decode_compressed_header(uint8_t *stream,
    }
 
    tmp = vp9_decode_coeff_update(bc, fc->a.prob_coeffs);
+   if (vp9_dbg_enabled()) fprintf(stderr, "VP9DBG: coeff4 ret=%u err=%u bits=%u\n", tmp, bc->strm_error, bc->read_len);
    if (tmp != MWV207_OK)
       return (tmp);
    if (slice_header->transform_mode > ONLY_4X4_DEC) {
@@ -1498,6 +1515,7 @@ vp9_decode_compressed_header(uint8_t *stream,
       }
 
       tmp = mwv207_vp_decode_mv_update(bc, slice_header);
+      if (vp9_dbg_enabled()) fprintf(stderr, "VP9DBG: mv_update ret=%u err=%u bits=%u\n", tmp, bc->strm_error, bc->read_len);
       if (tmp != MWV207_OK)
          return (tmp);
    }
@@ -1523,10 +1541,112 @@ vp9_decode_compressed_header(uint8_t *stream,
       }
    }
 
-   if (bc->strm_error)
+   /* The bool decoder needs up to 4 bytes of look-ahead past the first
+    * partition; a synchronous over-read at the partition end is normal and
+    * does not corrupt the probabilities decoded above. */
+   if (bc->strm_error && bc->read_len > bc->stream_len + 4) {
+      if (vp9_dbg_enabled()) fprintf(stderr, "VP9DBG: strm_error at end read=%u len=%u\n", bc->read_len, bc->stream_len);
       return (MWV207_NOK);
+   }
 #endif
    
    return MWV207_OK;
 }
 
+
+/* Parse one VP9 frame: uncompressed header, then the compressed header
+ * (probability updates / tile sizes).  `data` points at the frame start
+ * (frame marker), `size` covers the whole frame including tile payload. */
+uint32_t
+mwv207_vp9_parse_frame(struct mwv207_vp9_slice_header *sh,
+                       const uint8_t *data, uint32_t size,
+                       uint32_t fallback_width, uint32_t fallback_height,
+                       struct mwv207_vp9_entropy_probs *saved_ctx)
+{
+   struct mwv207_strm_data rb = {0};
+   struct mwv207_vp_bool_coder bc = {0};
+   uint32_t ret, hdr, part;
+
+   if (!sh || !data || size < 4)
+      return MWV207_NOK;
+
+   rb.strm_buff_start = data;
+   rb.strm_curr_pos = data;
+   rb.bit_pos_in_word = 0;
+   rb.strm_buff_size = size;
+   rb.strm_data_size = size;
+   rb.strm_buff_read_bits = 0;
+   /* VP9 raw streams have no emulation-prevention bytes; telling the reader
+    * that they were already removed keeps it from swallowing 00 00 03
+    * sequences that occur in ordinary VP9 header/payload data. */
+   rb.remove_emul3_byte = 1;
+   rb.is_rb = 0;
+
+   /* Frame context selection: like libvpx, an inter frame starts from the
+    * probabilities saved by an earlier frame (the four frame contexts are
+    * carried across frames); only a key frame, an error-resilient frame or
+    * reset_frame_context == 3 puts them all back to the defaults, and
+    * reset_frame_context == 2 resets the current one.  Without the carried
+    * context the coefficient probabilities desynchronise on every inter
+    * frame and the reconstruction turns into noise. */
+   mwv207_vp9_reset_probs(sh);
+   if (saved_ctx) {
+      for (uint32_t i = 0; i < NUM_FRAME_CONTEXTS; i++)
+         sh->entropy_last[i] = saved_ctx[i];
+   } else {
+      for (uint32_t i = 0; i < NUM_FRAME_CONTEXTS; i++)
+         sh->entropy_last[i] = sh->entropy;
+   }
+
+   if (vp9_dbg_enabled()) fprintf(stderr, "VP9DBG: data=%02x %02x %02x %02x size=%u\n",
+           data[0], data[1], data[2], data[3], size);
+   ret = vp9_decode_uncompressed_header(sh, rb, size);
+   if (vp9_dbg_enabled()) fprintf(stderr, "VP9DBG: hdr ret=%u key=%u show=%u intra=%u er=%u w=%u h=%u bd=%u "
+           "tag=%u part=%u prof=%u\n", ret, sh->key_frame, sh->show_frame,
+           sh->intra_only, sh->error_resilient, sh->width, sh->height,
+           sh->bit_depth, sh->frame_tag_size, sh->offset_to_dct_parts,
+           sh->vp_profile);
+   if (ret)
+      return ret;
+
+   /* Inter frames may size themselves from the reference frames; the
+    * reference bookkeeping lives in the decode session, so fall back to the
+    * session's current picture size when the frame header leaves it unset. */
+   if (sh->width == 0)
+      sh->width = fallback_width;
+   if (sh->height == 0)
+      sh->height = fallback_height;
+
+   hdr = sh->frame_tag_size;
+   part = sh->offset_to_dct_parts;
+   if (hdr >= size || part > size - hdr)
+      return MWV207_NOK;
+
+   /* The bool coder reads up to 4 bytes ahead; give it the whole frame
+    * remainder so the normal look-ahead at the first-partition end does not
+    * raise strm_error.  The compressed header itself ends before the tile
+    * payload, which the caller locates with frame_tag_size + part. */
+   (void)part;
+   if (sh->key_frame || sh->error_resilient || sh->reset_frame_context == 3) {
+      for (uint32_t i = 0; i < NUM_FRAME_CONTEXTS; i++)
+         sh->entropy_last[i] = sh->entropy;
+      if (saved_ctx)
+         for (uint32_t i = 0; i < NUM_FRAME_CONTEXTS; i++)
+            saved_ctx[i] = sh->entropy;
+   } else if (sh->reset_frame_context == 2) {
+      sh->entropy_last[sh->frame_context_idx] = sh->entropy;
+   }
+   ret = vp9_decode_compressed_header((uint8_t *)(data + hdr), size - hdr,
+                                      &bc, (uint8_t *)data, size, sh);
+   if (ret == MWV207_OK && saved_ctx
+       && sh->frame_context_idx < NUM_FRAME_CONTEXTS)
+      saved_ctx[sh->frame_context_idx] = sh->entropy;
+   {
+      uint32_t got = 8 * (bc.read_len > 4 ? bc.read_len - 4 : 0)
+         + (8 - bc.count);
+      if (vp9_dbg_enabled()) fprintf(stderr, "VP9DBG parts: hdr=%u part=%u read_len=%u count=%u "
+              "consumed_bits=%u part_ceil=%u\n",
+              hdr, part, bc.read_len, bc.count, got, (got + 7) / 8);
+   }
+   return ret;
+}

@@ -70,6 +70,7 @@ files_libmwv207 = files(
         'video-codec/mwv207/mwv207_dec_ppu.c',
         'video-codec/mwv207/mwv207_dec_h264.c',
         'video-codec/mwv207/mwv207_dec_hevc.c',
+        'video-codec/mwv207/mwv207_dec_vp9.c',
         'video-codec/common/mwv207_decoder_h264_nal_unit.c',
         'video-codec/common/mwv207_decoder_h264_slice_header.c',
         'video-codec/common/mwv207_decoder_hevc_exp_golomb.c',

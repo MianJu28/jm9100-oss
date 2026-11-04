@@ -46,6 +46,8 @@ void mwv207_video_cs_init(struct mwv207_video_cs *cs, struct mwv207_winsys *ws);
 void mwv207_video_cs_release(struct mwv207_video_cs *cs);
 void mwv207_video_cs_submit(struct mwv207_video_cs *cs,
                            struct mwv207_video_reg_buf *cmdbuf);
+void mwv207_video_cs_submit_wait(struct mwv207_video_cs *cs,
+                                struct mwv207_video_reg_buf *cmdbuf);
 
 #endif
 

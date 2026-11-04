@@ -48,6 +48,7 @@ mwv207_profile_supported(struct pipe_screen *screen,
    case PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH444:
    case PIPE_VIDEO_PROFILE_HEVC_MAIN:
    case PIPE_VIDEO_PROFILE_HEVC_MAIN_10:
+   case PIPE_VIDEO_PROFILE_VP9_PROFILE0:
       return entrypoint != PIPE_VIDEO_ENTRYPOINT_ENCODE;
    default:
       return false;
@@ -135,6 +136,7 @@ mwv207_is_video_format_supported(struct pipe_screen *pscreen,
       case PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH444:
       case PIPE_VIDEO_PROFILE_HEVC_MAIN:
       case PIPE_VIDEO_PROFILE_HEVC_MAIN_10:
+      case PIPE_VIDEO_PROFILE_VP9_PROFILE0:
          break;
       default:
          ret = false;

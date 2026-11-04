@@ -39,6 +39,7 @@
 #include "mwv207_context.h"
 #include "mwv207_screen.h"
 #include "mwv207_surface.h"
+#include "mwv207/mwv207_dec_vp9.h"
 #include <stdint.h>
 #include <time.h>
 
@@ -515,6 +516,86 @@ mwv207_video_decoder_decode_bitstream(struct pipe_video_codec *decoder,
    }
 }
 
+static void
+get_vp9_msg(struct mwv207_video_decoder *dec,
+            struct pipe_vp9_picture_desc *pic)
+{
+   struct mwv207_vp9_picture_desc *vp9 = &dec->picture_desc.vp9;
+   struct mwv207_vp9_picture_desc *d = vp9;
+
+   dec->video_format = MWV207_VIDEO_FORMAT_VP9;
+
+   d->picture_parameter.frame_width = pic->picture_parameter.frame_width;
+   d->picture_parameter.frame_height = pic->picture_parameter.frame_height;
+   d->picture_parameter.pic_fields.subsampling_x = pic->picture_parameter.pic_fields.subsampling_x;
+   d->picture_parameter.pic_fields.subsampling_y = pic->picture_parameter.pic_fields.subsampling_y;
+   d->picture_parameter.pic_fields.frame_type = pic->picture_parameter.pic_fields.frame_type;
+   d->picture_parameter.pic_fields.show_frame = pic->picture_parameter.pic_fields.show_frame;
+   d->picture_parameter.pic_fields.error_resilient_mode = pic->picture_parameter.pic_fields.error_resilient_mode;
+   d->picture_parameter.pic_fields.intra_only = pic->picture_parameter.pic_fields.intra_only;
+   d->picture_parameter.pic_fields.allow_high_precision_mv = pic->picture_parameter.pic_fields.allow_high_precision_mv;
+   d->picture_parameter.pic_fields.mcomp_filter_type = pic->picture_parameter.pic_fields.mcomp_filter_type;
+   d->picture_parameter.pic_fields.frame_parallel_decoding_mode = pic->picture_parameter.pic_fields.frame_parallel_decoding_mode;
+   d->picture_parameter.pic_fields.reset_frame_context = pic->picture_parameter.pic_fields.reset_frame_context;
+   d->picture_parameter.pic_fields.refresh_frame_context = pic->picture_parameter.pic_fields.refresh_frame_context;
+   d->picture_parameter.pic_fields.frame_context_idx = pic->picture_parameter.pic_fields.frame_context_idx;
+   d->picture_parameter.pic_fields.segmentation_enabled = pic->picture_parameter.pic_fields.segmentation_enabled;
+   d->picture_parameter.pic_fields.segmentation_temporal_update = pic->picture_parameter.pic_fields.segmentation_temporal_update;
+   d->picture_parameter.pic_fields.segmentation_update_map = pic->picture_parameter.pic_fields.segmentation_update_map;
+   d->picture_parameter.pic_fields.last_ref_frame = pic->picture_parameter.pic_fields.last_ref_frame;
+   d->picture_parameter.pic_fields.last_ref_frame_sign_bias = pic->picture_parameter.pic_fields.last_ref_frame_sign_bias;
+   d->picture_parameter.pic_fields.golden_ref_frame = pic->picture_parameter.pic_fields.golden_ref_frame;
+   d->picture_parameter.pic_fields.golden_ref_frame_sign_bias = pic->picture_parameter.pic_fields.golden_ref_frame_sign_bias;
+   d->picture_parameter.pic_fields.alt_ref_frame = pic->picture_parameter.pic_fields.alt_ref_frame;
+   d->picture_parameter.pic_fields.alt_ref_frame_sign_bias = pic->picture_parameter.pic_fields.alt_ref_frame_sign_bias;
+   d->picture_parameter.pic_fields.lossless_flag = pic->picture_parameter.pic_fields.lossless_flag;
+
+   d->picture_parameter.filter_level = pic->picture_parameter.filter_level;
+   d->picture_parameter.sharpness_level = pic->picture_parameter.sharpness_level;
+   d->picture_parameter.log2_tile_rows = pic->picture_parameter.log2_tile_rows;
+   d->picture_parameter.log2_tile_columns = pic->picture_parameter.log2_tile_columns;
+   d->picture_parameter.frame_header_length_in_bytes = pic->picture_parameter.frame_header_length_in_bytes;
+   d->picture_parameter.first_partition_size = pic->picture_parameter.first_partition_size;
+
+   memcpy(d->picture_parameter.mb_segment_tree_probs, pic->picture_parameter.mb_segment_tree_probs, 7);
+   memcpy(d->picture_parameter.segment_pred_probs, pic->picture_parameter.segment_pred_probs, 3);
+
+   d->picture_parameter.profile = pic->picture_parameter.profile;
+   d->picture_parameter.bit_depth = pic->picture_parameter.bit_depth;
+   d->picture_parameter.mode_ref_delta_enabled = pic->picture_parameter.mode_ref_delta_enabled;
+   d->picture_parameter.mode_ref_delta_update = pic->picture_parameter.mode_ref_delta_update;
+   d->picture_parameter.base_qindex = pic->picture_parameter.base_qindex;
+   d->picture_parameter.y_dc_delta_q = pic->picture_parameter.y_dc_delta_q;
+   d->picture_parameter.uv_ac_delta_q = pic->picture_parameter.uv_ac_delta_q;
+   d->picture_parameter.uv_dc_delta_q = pic->picture_parameter.uv_dc_delta_q;
+
+   for (int i = 0; i < 16; i++)
+      d->ref[i] = (struct mwv207_video_buffer *)pic->ref[i];
+
+   if (pic->slice_parameter.slice_count) {
+      d->slice_parameter.slice_data_size = pic->slice_parameter.slice_data_size[0];
+      d->slice_parameter.slice_data_offset = pic->slice_parameter.slice_data_offset[0];
+      d->slice_parameter.slice_data_flag = pic->slice_parameter.slice_data_flag[0];
+      for (int i = 0; i < 8; i++) {
+         d->slice_parameter.seg_param[i].segment_flags.segment_reference_enabled =
+            pic->slice_parameter.seg_param[i].segment_flags.segment_reference_enabled;
+         d->slice_parameter.seg_param[i].segment_flags.segment_reference =
+            pic->slice_parameter.seg_param[i].segment_flags.segment_reference;
+         d->slice_parameter.seg_param[i].segment_flags.segment_reference_skipped =
+            pic->slice_parameter.seg_param[i].segment_flags.segment_reference_skipped;
+         d->slice_parameter.seg_param[i].alt_quant_enabled = pic->slice_parameter.seg_param[i].alt_quant_enabled;
+         d->slice_parameter.seg_param[i].alt_quant = pic->slice_parameter.seg_param[i].alt_quant;
+         d->slice_parameter.seg_param[i].alt_lf_enabled = pic->slice_parameter.seg_param[i].alt_lf_enabled;
+         d->slice_parameter.seg_param[i].alt_lf = pic->slice_parameter.seg_param[i].alt_lf;
+         memcpy(d->slice_parameter.seg_param[i].filter_level, pic->slice_parameter.seg_param[i].filter_level, sizeof(d->slice_parameter.seg_param[i].filter_level));
+         d->slice_parameter.seg_param[i].luma_ac_quant_scale = pic->slice_parameter.seg_param[i].luma_ac_quant_scale;
+         d->slice_parameter.seg_param[i].luma_dc_quant_scale = pic->slice_parameter.seg_param[i].luma_dc_quant_scale;
+         d->slice_parameter.seg_param[i].chroma_ac_quant_scale = pic->slice_parameter.seg_param[i].chroma_ac_quant_scale;
+         d->slice_parameter.seg_param[i].chroma_dc_quant_scale = pic->slice_parameter.seg_param[i].chroma_dc_quant_scale;
+      }
+   }
+}
+
 /**
  * end decoding of the current frame
  */
@@ -534,6 +615,10 @@ mwv207_video_decoder_end_frame(struct pipe_video_codec *decoder,
 
    case PIPE_VIDEO_FORMAT_HEVC:
       get_h265_msg(dec, (struct pipe_h265_picture_desc *)picture);
+      break;
+
+   case PIPE_VIDEO_FORMAT_VP9:
+      get_vp9_msg(dec, (struct pipe_vp9_picture_desc *)picture);
       break;
    case PIPE_VIDEO_FORMAT_VC1:
       break;
@@ -560,7 +645,14 @@ mwv207_video_decoder_end_frame(struct pipe_video_codec *decoder,
    //    (struct pipe_h264_picture_desc *)picture;
    
 
-   mwv207_video_cs_submit(&dec->cs, dec->decoder->reg_buf);
+   /* VP9 copies the freshly decoded picture into a reference slot right
+    * below, so the job must have completed. */
+   if (dec->video_format == MWV207_VIDEO_FORMAT_VP9)
+      mwv207_video_cs_submit_wait(&dec->cs, dec->decoder->reg_buf);
+   else
+      mwv207_video_cs_submit(&dec->cs, dec->decoder->reg_buf);
+   mwv207_dec_vp9_submit_done(dec);
+
 
    dec->streams_num = 0;
    memset(dec->streams_len, 0, sizeof(dec->streams_len));

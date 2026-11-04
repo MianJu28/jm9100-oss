@@ -27,6 +27,7 @@
 
 #include "mwv207_dec_h264.h"
 #include "mwv207_dec_hevc.h"
+#include "mwv207_dec_vp9.h"
 #include "mwv207_video_decoder.h"
 #include "util/u_memory.h"
 
@@ -163,6 +164,8 @@ mwv207_video_dec_destroy_buffer(struct mwv207_video_dec *dec)
          dec->misc_buffer = NULL;
          dec->misc_buf = NULL;
       }
+      /* The VP9 state owns the reference-frame slot table and must survive
+       * between frames; it is released in mwv207_video_dec_destroy(). */
    }
 }
 
@@ -170,6 +173,10 @@ void
 mwv207_video_dec_destroy(struct mwv207_video_dec *dec)
 {
    if (dec) {
+      if (dec->vp9_state) {
+         mwv207_dec_vp9_destroy_state(dec->vp9_state);
+         dec->vp9_state = NULL;
+      }
       mwv207_video_dec_destroy_buffer(dec);
       mwv207_video_reg_buf_destroy(dec->reg_buf);
       dec->reg_buf = NULL;
@@ -188,6 +195,8 @@ mwv207_9200_video_dec_picture(struct mwv207_video_decoder *decoder,
       mwv207_dec_h264_set_regs(decoder, target);
    } else if (decoder->video_format == MWV207_VIDEO_FORMAT_HEVC) {
       mwv207_dec_hevc_set_regs(decoder, target);
+   } else if (decoder->video_format == MWV207_VIDEO_FORMAT_VP9) {
+      mwv207_dec_vp9_set_regs(decoder, target);
    }
    reg_buf->bos_sort(reg_buf);
 }
