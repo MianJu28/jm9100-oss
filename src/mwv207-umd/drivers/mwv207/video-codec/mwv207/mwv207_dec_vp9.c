@@ -900,17 +900,18 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
       reg_buf->set_reg(reg_buf, JMDEC_STREAM_LEN, stream_len);
       reg_buf->set_reg(reg_buf, JMDEC_STRM_BUFFER_LEN, bs_buf->res->size);
    } else {
-      /* Multi-tile frames: the hardware finds the following tiles itself by
-       * reading a 4-byte big-endian size in front of every tile.  The VP9
-       * bitstream only writes that size for all tiles but the last one, so
-       * rebuild the payload in the scratch stream buffer with the prefix in
-       * front of every tile and point the window at that copy. */
+      /* Multi-tile frames: the hardware walks the tile list handed over in
+       * the tile table below and reads every tile from the original bitstream,
+       * so no payload rebuild is needed.  MWV207_VP9_COPY=1 re-enables the old
+       * "add a 4-byte size in front of every tile" copy for experiments, which
+       * does not match what the ASIC expects with the 8K tile counters. */
       uint32_t t_off = tile_off, t_len = tile_len;
       uint32_t a_off, start_bit, space, slen;
       struct mwv207_video_buffer *win_buf = bs_buf;
       uint32_t win_base = 0;
 
-      if (st->tile_n > 1 && tile_off < VP9_STREAM_COPY_SIZE && !getenv("MWV207_VP9_NOCOPY")) {
+      if (st->tile_n > 1 && tile_off < VP9_STREAM_COPY_SIZE &&
+          getenv("MWV207_VP9_COPY")) {
          uint8_t *dst = (uint8_t *)st->scratch_cpu + st->stream_offset;
          uint32_t i, total;
 

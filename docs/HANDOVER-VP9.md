@@ -222,7 +222,26 @@ MV 图像实测格式（`MWV207_VP9_MVDUMP` 抓 HW 写出的区域，与 libvpx 
   394/3600 的 MV 差（4×4 分区块 ASIC 只存整块 MV 等），但 ASIC 读写自洽，
   简单运动流的输出仍逐位一致。
 
-### 8.5 剩余问题
+### 8.5 多 tile 无需重拷（2026-11-05 晚）
+
+早先为了迁就 “每 tile 前 4 字节大端长度” 的假设，多 tile 帧会把整个 payload 重打到
+scratch 里再加长度前缀。改用 8K tile 计数寄存器（242/244）后这个重拷**反而是错的**：
+ASIC 按 tile 表逐块回到**原始码流**取数据。现在默认直接指向原始码流（`trb`、`tc5`、
+`kf2c` 等 8 条多 tile 流全部 99.00，不再需要任何环境变量）；旧的拷贝路径保留在
+`MWV207_VP9_COPY=1` 后面仅供实验。
+
+### 8.5.1 固定变换尺寸（fixed tx-mode）流的已知缺陷
+
+- `vpxenc --rt`/`ffmpeg -deadline realtime` 这类**固定 tx-mode**（tx=0..3）码流，
+  只要内容复杂（testsrc2），**关键帧本身**就会在中途（约 SB 3）失步，输出 15 dB 左右；
+  同一编码参数用 `tx=select` 则关键帧逐位一致。
+- 该缺陷与内容相关而非 tx-mode 本身：4x4-only 的平滑渐变（320×180）3/3 帧逐位一致。
+- 已试无效：`TRANSFORM_MODE` 全值扫描、`NONSQUARE_TRANSFORM_E`/`DMH_E` 组合、
+  VA 切分点兜底开关、`STREAM_LEN` 放大。
+- 结论：ASIC 在“固定变换尺寸 + 系数密集”时的熵解码路径与我们喂给它的表/窗口不匹配，
+  尚未定位；真实 webm（select 模式）不受影响。
+
+### 8.5.2 剩余问题
 
 - 复杂内容的**第 2 个 inter 帧**起仍有明显误差（31-47 dB）：MV 图像与 libvpx 语义不完全一致，
   且 ASIC 对时间候选的使用与规范有出入。候选方向：
@@ -235,7 +254,7 @@ MV 图像实测格式（`MWV207_VP9_MVDUMP` 抓 HW 写出的区域，与 libvpx 
 ### 8.6 调试开关（提交前需要清理）
 
 `MWV207_VP9_DBG`（头解析 trace）、`MWV207_VP9_TILEROW=1`（放行 tile rows）、
-`MWV207_VP9_NOCOPY=1`（多 tile 不重拷流）、`MWV207_VP9_CLEAR=1`（每帧清参考槽）、
+`MWV207_VP9_COPY=1`（实验：恢复多 tile 重拷）、`MWV207_VP9_CLEAR=1`（每帧清参考槽）、
 `MWV207_VP9_REGSET='idx=val,...'`（寄存器覆盖）、`MWV207_VP9_REGD=<file>`（寄存器 dump）、
 `MWV207_VP9_CDUMP` / `FCDUMP`（系数/模式概率 dump）、`MWV207_VP9_MVDUMP`（MV 图像 dump）、
 `MWV207_VP9_NOLF`、`MWV207_VP9_TMODE`、`MWV207_VP9_SLEN`/`SLENADD`、`MWV207_VP9_SB`/`SOFF`、
@@ -248,6 +267,6 @@ ninja -C ref/oh-mesa/User_source_code/mesa-24.1.2/build-full \
       src/gallium/targets/va/libmwv207_drv_video.so
 cp ref/oh-mesa/.../build-full/src/gallium/targets/va/libmwv207_drv_video.so \
    /tmp/gd3/mwv207_drv_video.so      # 注意：文件名没有 lib 前缀！
-MWV207_VP9_TILEROW=1 MWV207_VP9_NOCOPY=1 MWV207_VP9_CLEAR=1 \
+MWV207_VP9_TILEROW=1 MWV207_VP9_CLEAR=1 \
 LIBVA_DRIVERS_PATH=/tmp/gd3 LIBVA_DRIVER_NAME=mwv207 ffmpeg ...
 ```
