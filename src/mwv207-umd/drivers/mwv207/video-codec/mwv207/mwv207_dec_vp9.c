@@ -223,8 +223,10 @@ vp9_write_ref_regs(struct mwv207_vp9_state *st,
       /* 1.0 in the hardware's 14-bit fixed point (vendor: (w << 14) / w). */
       reg_buf->set_reg(reg_buf, vp9_ref_hscale_reg[k], 1u << 14);
       reg_buf->set_reg(reg_buf, vp9_ref_vscale_reg[k], 1u << 14);
+      /* ref_frame_sign_bias[] is indexed by REF_FRAME (INTRA, LAST, GOLDEN,
+       * ALTREF); our k is 0..2 for LAST/GOLDEN/ALTREF. */
       reg_buf->set_reg(reg_buf, vp9_ref_sign_bias_reg[k],
-                       sh->ref_frame_sign_bias[k] ? 1 : 0);
+                       sh->ref_frame_sign_bias[k + 1] ? 1 : 0);
       /* The vendor points the per-reference MV store at the same offset in
        * every slot (right behind the picture).  We keep the MVs in a scratch
        * area instead; VP9 never predicts MVs across frames. */
