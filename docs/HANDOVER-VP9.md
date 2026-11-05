@@ -230,16 +230,19 @@ ASIC 按 tile 表逐块回到**原始码流**取数据。现在默认直接指�
 `kf2c` 等 8 条多 tile 流全部 99.00，不再需要任何环境变量）；旧的拷贝路径保留在
 `MWV207_VP9_COPY=1` 后面仅供实验。
 
-### 8.5.1 固定变换尺寸（fixed tx-mode）流的已知缺陷
+### 8.5.1 固定变换尺寸（fixed tx-mode）关键帧失步 —— 已修复
 
-- `vpxenc --rt`/`ffmpeg -deadline realtime` 这类**固定 tx-mode**（tx=0..3）码流，
-  只要内容复杂（testsrc2），**关键帧本身**就会在中途（约 SB 3）失步，输出 15 dB 左右；
-  同一编码参数用 `tx=select` 则关键帧逐位一致。
-- 该缺陷与内容相关而非 tx-mode 本身：4x4-only 的平滑渐变（320×180）3/3 帧逐位一致。
-- 已试无效：`TRANSFORM_MODE` 全值扫描、`NONSQUARE_TRANSFORM_E`/`DMH_E` 组合、
-  VA 切分点兜底开关、`STREAM_LEN` 放大。
-- 结论：ASIC 在“固定变换尺寸 + 系数密集”时的熵解码路径与我们喂给它的表/窗口不匹配，
-  尚未定位；真实 webm（select 模式）不受影响。
+- 现象：`vpxenc --rt`、`ffmpeg -deadline realtime` 或 `VX_TX_MODE=1/2/3` 产出的固定 tx-mode
+  码流，复杂内容（testsrc2）的关键帧会在中途（约 SB 3）失步，输出 ~15 dB；平滑渐变则正常。
+- 根因：**符号计数器缓冲区越界**。厂商布局只给计数器留 13264 B（`0x33d0`），紧跟其后就是我们
+  的 tile 尺寸表；系数密集的帧里熵引擎写的计数超过 13264 B，直接踩坏 tile 表，ASIC 随后按
+  坏表找 tile → 半帧后熵解码失步。select-mode 流因为每帧 tile 表用得少/写得早，之前侥幸没暴露。
+- 修复：`VP9_COUNTER_SIZE` 从 `0x33d0` 放大到 `0x20000`（128 KB），tile 表、段表、滤波区、
+  流拷贝区依次后移。
+- 验证：`ffrt.ivf`（ffmpeg realtime、tx=0）关键帧 99.00；`txm1/txm2/txm3`（8x8/16x16/32x32-only）
+  关键帧与第 1 帧均 99.00；`w6`/`trb` 等原有流不受影响。
+- 仍存在：固定 tx-mode 的**第 2 个 inter 帧**起仍随复杂内容下降（29-48 dB），属于下面 8.5.2
+  的时间 MV 语义问题，与 tx-mode 无关。
 
 ### 8.5.2 MV 图像记录格式（2026-11-05 晚补测）
 

@@ -50,7 +50,11 @@ void mwv207_vp9_reset_probs(struct mwv207_vp9_slice_header *sh);
 #define VP9_PROB_TABLE_SIZE 0xea0u /* sizeof(struct mwv207_vp9_entropy_probs) */
 #define VP9_PROB_OFFSET 0x0u
 #define VP9_COUNTER_OFFSET 0xea0u
-#define VP9_COUNTER_SIZE 0x33d0u
+/* The vendor layout reserves 13264 bytes for the symbol counters, but the
+ * entropy engine overruns that on coefficient-dense frames and tramples the
+ * tile-size table right behind it (fixed transform-size streams then desync
+ * halfway through the frame).  Give it a wide berth instead. */
+#define VP9_COUNTER_SIZE 0x20000u
 #define VP9_STREAM_COPY_SIZE (4u << 20)
 
 #define VP9_FILTER_SIZE (2u << 20)
