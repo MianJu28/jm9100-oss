@@ -1,0 +1,14 @@
+[Unit]
+Description=Vendor KMD probe (one shot, auto reboot back)
+After=local-fs.target
+Before=display-manager.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/vendor-probe.sh
+TimeoutStartSec=900
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
