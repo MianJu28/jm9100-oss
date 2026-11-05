@@ -770,4 +770,6 @@ uint32_t
 mwv207_vp9_parse_frame(struct mwv207_vp9_slice_header *sh,
                        const uint8_t *data, uint32_t size,
                        uint32_t fallback_width, uint32_t fallback_height,
-                       struct mwv207_vp9_entropy_probs *saved_ctx);
+                       struct mwv207_vp9_entropy_probs *saved_ctx,
+                       uint32_t hint_frame_header_size,
+                       uint32_t hint_first_partition_size);

@@ -144,3 +144,110 @@ ioctl（`_IOC(_IOC_NONE,0x65,0xd,0)`、`_IOC(_IOC_READ,0x6c,0x8,0x8)` …）。�
 - 多 tile-columns：`tc5`（2 tiles）99.00、`tc4`（4 tiles）99.00、`tc30`（30 帧 2 tiles）30/30 帧 99.00、`vp9-kf` 99.00 ✅
 - tile rows：❌ 不支持；已防护跳过（不会挂死引擎），占位帧输出（见第 6.2 节）
 - 单 tile 无 `job ... timed out`（`dmesg` 清空后跑解码无内核报错）✅；tile rows 会超时挂死（已防护，见第 5 节）
+## 8. 2026-11-05 进展（未提交工作树）
+
+### 8.1 tile rows：硬件其实支持，关键是“8K 那对”寄存器
+
+第二轮开机期厂商取证（`jmgpu` 内核 + 厂商 UMD，抓 `SetDecRegister`）得到关键差异：
+
+| 寄存器 | 2 tile 列（kf2c） | 2 tile 行（trb） |
+|---|---|---|
+| 242 `NUM_TILE_COLS_8K` | **2** | **1** |
+| 244 `NUM_TILE_ROWS_8K` | **1** | **2** |
+| 1049/1057 `VERT_FILT/BSD` | 非 0 | **0 / 0** |
+| 82 `STRM_START_BIT` | 80 | 72 |
+| 136 `STREAM_LEN` | 17497 | 49 |
+
+厂商**只写 242/244，从不写 241/243**。把驱动的 tile 计数改到 8K 字段后：
+
+- tile rows 的**关键帧**逐位一致（`trb` 640×256 lossless，行 0/1 都正确）；
+- 之前“一进第二 tile 行就挂死”的现象消失；此前挂死是 241/243 落到了别的位域。
+
+结论：`JMDEC_NUM_TILE_COLS_8K`/`NUM_TILE_ROWS_8K` 才是 ASIC 真正读的字段，241/243 不要写。
+tile 行帧的 **inter 帧**仍会随复杂内容漂移，但那是 8.3 的通用 inter 问题，不是 tile 特有。
+
+### 8.2 inter 帧头解析：用 VA 给的切分点兜底
+
+- VP9 的 inter 帧压缩头里**没有** 16-bit 的 first-partition-size 字段，原解析器按关键帧布局读，
+  读到的是 tile 数据，于是 `part=32768/32794` 之类乱值 → `header parse failed`。
+- `mwv207_vp9_parse_frame()` 新增 `hint_frame_header_size` / `hint_first_partition_size` 两个参数，
+  解析完未压缩头后，若 VA 的 `frame_header_length_in_bytes` / `first_partition_size` 合理则直接采用。
+- `setup_frame_size_with_refs()` 在参考尺寸命中时，只在 `pic_param_passed_*` 非 0 时覆盖，
+  否则保留调用方预置的尺寸；解析前先把 `sh->width/height` 置为 VA 给的帧尺寸。
+  否则 tile 行列位（依赖宽高）会少读 2 bit，first partition size 随之错位。
+- 结果：`w6`（inter 帧 16 字节、part=3）等所有流解析正常。
+
+### 8.3 inter 帧漂移的两个真因（已修，仍有残留）
+
+1. **loop filter delta 未跨帧继承**（已修）。VP9 的 `ref_deltas/mode_deltas` 只在 header
+   要求更新时改写，其余帧沿用上一帧（libvpx 存在 `cm->lf` 里）。我方每帧 `memset(sh)`，
+   于是帧 1 起 delta 变成 0，滤波只差边缘十几个像素——正好是“帧 1 差 18 像素”。
+   修法：`st->lf_ref_delta[]`/`lf_mode_delta[]` 持久化，解析前后 memcpy。修后
+   `tr0testsrc`/`tr30` 帧 1 都变成 99.00。
+2. **时间 MV 预测（use_prev_frame_mvs）**（已修，见 8.4）。
+
+修完这两项后（640×360 testsrc2，30 帧，单/多 tile 均同）：
+
+| 流 | 帧 0 | 帧 1 | 帧 2 | 帧 3 | 帧 4 |
+|---|---|---|---|---|---|
+| `tr0testsrc` | 99.00 | 99.00 | 31.42 | 30.34 | 30.11 |
+| `tr30`（2 tile rows） | 99.00 | 99.00 | 47.53 | 40.72 | 38.37 |
+| `sq640`（方块平移） | 99.00 | 99.00 | 99.00 | 99.00 | 99.00 |
+| `trb`（2 tile rows，lossless） | 99.00 | 99.00 | | | |
+
+### 8.4 ASIC 的“上一帧 MV 图像”机制
+
+依据 libvpx `vp9_decodeframe.c:3000`：`use_prev_frame_mvs = !error_resilient &&
+width==last_width && height==last_height && !last_intra_only && last_show_frame &&
+last_frame_type != KEY_FRAME`；`vp9_mvref_common.c:25-77` 用 `prev_frame->mvs`（8×8 网格）当候选。
+
+厂商寄存器语义（静态反汇编 + 开机 trace 交叉验证）：
+
+- 每帧把 MV 写到 `DEC_OUT_DBASE` 指向的独立区域（**不是** Y 平面附近）；
+- 下一帧通过 `REFER0/1/4/5_DBASE` 读回**上一帧**那块区域；
+- `WRITE_MVS_E`(57) 开写、`TEMPOR_MVP_E`(88) 开读；实测**两个都要置 1** 才生效
+  （只开一个时 `sq` 6 帧仍从帧 2 崩）。
+
+实现：`st->mv_offset` 起两块 `mv_size = align4k(w*h*3/2+64)` 双缓冲，`st->mv_cur` 在
+`submit_done()` 里 `vp9_refresh_slots()` 之后翻转；inter 帧写 `WRITE_MVS_E=1` +
+`DIR_MV_BASE`/`DEC_OUT_DBASE` = 当前块，`REFERx_DBASE` = 上一块，`TEMPOR_MVP_E` 按上式算。
+
+MV 图像实测格式（`MWV207_VP9_MVDUMP` 抓 HW 写出的区域，与 libvpx `cm->cur_frame->mvs` 对照）：
+
+- 16 B/记录，**按 64×64 superblock 分组**：`idx = ((sb_y*sw + sb_x) * 64) + iy*8 + ix`
+  （`sw = ceil(w/64)`，ix/iy 是 SB 内 8×8 索引）；
+- 记录：`byte6 = ref0`、`byte7 = ref1`（无第二参考时为 0，libvpx 是 -1）、
+  `offset8: u16be 列`、`offset10: u16be 行`、`offset12..15` 第二组 (列,行)；单位 1/8 像素；
+- 关键帧帧 0 与 libvpx **3600/3600 逐条一致**；帧 1 起有约 90/3600 的 ref 差、
+  394/3600 的 MV 差（4×4 分区块 ASIC 只存整块 MV 等），但 ASIC 读写自洽，
+  简单运动流的输出仍逐位一致。
+
+### 8.5 剩余问题
+
+- 复杂内容的**第 2 个 inter 帧**起仍有明显误差（31-47 dB）：MV 图像与 libvpx 语义不完全一致，
+  且 ASIC 对时间候选的使用与规范有出入。候选方向：
+  (a) 4×4 分区块的 MV 存法（整块 MV vs 子块 MV），(b) `ref_frame` 编码（HW 用 1..3，
+  libvpx 用 0..3/INTRA=0 的差异），(c) `TEMPOR_MVP_E` 是否还依赖 “上一帧也是 inter 且尺寸相同”
+  之外的 `ref_frame_map` 状态，(d) 参考缩放（`REFERx_HOR/VER_SCALE`）在时间候选下的作用。
+- loop filter 细节：`FILTERING_DIS` 与 `FILT_LEVEL` 的交互还没完全摸清
+  （`MWV207_VP9_NOLF=1` 时硬件的输出与 libvpx `VX_NOLF=1` 仍有差距，需再对一次）。
+
+### 8.6 调试开关（提交前需要清理）
+
+`MWV207_VP9_DBG`（头解析 trace）、`MWV207_VP9_TILEROW=1`（放行 tile rows）、
+`MWV207_VP9_NOCOPY=1`（多 tile 不重拷流）、`MWV207_VP9_CLEAR=1`（每帧清参考槽）、
+`MWV207_VP9_REGSET='idx=val,...'`（寄存器覆盖）、`MWV207_VP9_REGD=<file>`（寄存器 dump）、
+`MWV207_VP9_CDUMP` / `FCDUMP`（系数/模式概率 dump）、`MWV207_VP9_MVDUMP`（MV 图像 dump）、
+`MWV207_VP9_NOLF`、`MWV207_VP9_TMODE`、`MWV207_VP9_SLEN`/`SLENADD`、`MWV207_VP9_SB`/`SOFF`、
+`MWV207_VP9_NOREF`、`MWV207_VP9_NOHINT`、`MWV207_VP9_PROBBUMP`、`MWV207_VP9_ZCTR`。
+
+### 8.7 测试配方（重启会清空 /tmp）
+
+```
+ninja -C ref/oh-mesa/User_source_code/mesa-24.1.2/build-full \
+      src/gallium/targets/va/libmwv207_drv_video.so
+cp ref/oh-mesa/.../build-full/src/gallium/targets/va/libmwv207_drv_video.so \
+   /tmp/gd3/mwv207_drv_video.so      # 注意：文件名没有 lib 前缀！
+MWV207_VP9_TILEROW=1 MWV207_VP9_NOCOPY=1 MWV207_VP9_CLEAR=1 \
+LIBVA_DRIVERS_PATH=/tmp/gd3 LIBVA_DRIVER_NAME=mwv207 ffmpeg ...
+```

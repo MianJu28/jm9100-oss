@@ -330,8 +330,17 @@ setup_frame_size_with_refs(struct mwv207_strm_data *rb,
          found = 1;
 
          
-         slice_header->width = slice_header->pic_param_passed_width;
-         slice_header->height = slice_header->pic_param_passed_height;
+         /* Keep the size the caller supplied for inter frames: the
+          * referenced frame's dimensions are what the tile parsing needs,
+          * and pic_param_passed_* is only filled for streams that carry
+          * their own size.  Falling back to 0 here makes the tile-count
+          * fields (which depend on the frame width) be read with the wrong
+          * width and shifts the whole header by a bit or two. */
+         if (slice_header->pic_param_passed_width &&
+             slice_header->pic_param_passed_height) {
+            slice_header->width = slice_header->pic_param_passed_width;
+            slice_header->height = slice_header->pic_param_passed_height;
+         }
 
          STREAM_TRACE("frame_widthRx", slice_header->width);
          STREAM_TRACE("frame_heightRx", slice_header->height);
@@ -1019,13 +1028,13 @@ vp9_decode_uncompressed_header(struct mwv207_vp9_slice_header *slice_header,
          if (setup_frame_size(&rb, slice_header) != MWV207_OK)
             return MWV207_NOK;
       } else {
-
          slice_header->refresh_frame_flags = tmp =
             mwv207_sw_get_bits(&rb, NUM_REF_FRAMES);
          STREAM_TRACE("refresh_frame_flags",
                       slice_header->refresh_frame_flags);
 
          for (i = 0; i < ALLOWED_REFS_PER_FRAME; i++) {
+
             int32_t ref_frame_num, mapped_ref;
             ref_frame_num = tmp = mwv207_sw_get_bits(&rb, NUM_REF_FRAMES_LG2);
             mapped_ref = tmp = slice_header->ref_frame_map[ref_frame_num];
@@ -1561,7 +1570,9 @@ uint32_t
 mwv207_vp9_parse_frame(struct mwv207_vp9_slice_header *sh,
                        const uint8_t *data, uint32_t size,
                        uint32_t fallback_width, uint32_t fallback_height,
-                       struct mwv207_vp9_entropy_probs *saved_ctx)
+                       struct mwv207_vp9_entropy_probs *saved_ctx,
+                       uint32_t hint_frame_header_size,
+                       uint32_t hint_first_partition_size)
 {
    struct mwv207_strm_data rb = {0};
    struct mwv207_vp_bool_coder bc = {0};
@@ -1598,14 +1609,19 @@ mwv207_vp9_parse_frame(struct mwv207_vp9_slice_header *sh,
          sh->entropy_last[i] = sh->entropy;
    }
 
-   if (vp9_dbg_enabled()) fprintf(stderr, "VP9DBG: data=%02x %02x %02x %02x size=%u\n",
-           data[0], data[1], data[2], data[3], size);
+   sh->width = fallback_width;
+   sh->height = fallback_height;
    ret = vp9_decode_uncompressed_header(sh, rb, size);
    if (vp9_dbg_enabled()) fprintf(stderr, "VP9DBG: hdr ret=%u key=%u show=%u intra=%u er=%u w=%u h=%u bd=%u "
-           "tag=%u part=%u prof=%u\n", ret, sh->key_frame, sh->show_frame,
-           sh->intra_only, sh->error_resilient, sh->width, sh->height,
-           sh->bit_depth, sh->frame_tag_size, sh->offset_to_dct_parts,
-           sh->vp_profile);
+           "tag=%u part=%u prof=%u seg=%u lf=%u qp=%u tx=%u fctx=%u ref=%u,%u,%u refresh=0x%x\n", ret,
+           sh->key_frame, sh->show_frame, sh->intra_only, sh->error_resilient,
+           sh->width, sh->height, sh->bit_depth, sh->frame_tag_size,
+           sh->offset_to_dct_parts, sh->vp_profile, sh->segment_enabled,
+           sh->loop_filter_level, sh->qp_yac, sh->transform_mode,
+           sh->frame_context_idx, sh->active_ref_idx[0], sh->active_ref_idx[1],
+           sh->active_ref_idx[2], sh->refresh_frame_flags);
+   if (vp9_dbg_enabled()) fprintf(stderr, "VP9DBG: par=%u rc=%u\n",
+           sh->frame_parallel_decoding, sh->reset_frame_context);
    if (ret)
       return ret;
 
@@ -1616,6 +1632,24 @@ mwv207_vp9_parse_frame(struct mwv207_vp9_slice_header *sh,
       sh->width = fallback_width;
    if (sh->height == 0)
       sh->height = fallback_height;
+
+   /* The VA-API layer hands us the same two sizes the container/codec
+    * already knows; trust them when present.  They are the authoritative
+    * split point between the uncompressed header, the first partition and
+    * the tile payload, and they rescue frames whose uncompressed-header
+    * layout we mis-count by a bit (e.g. inter frames that skip the
+    * reset_frame_context field when error_resilient is set). */
+   if (hint_frame_header_size && hint_first_partition_size &&
+       hint_frame_header_size + hint_first_partition_size <= size) {
+      if (vp9_dbg_enabled() && (sh->frame_tag_size != hint_frame_header_size ||
+                                sh->offset_to_dct_parts !=
+                                   hint_first_partition_size))
+         fprintf(stderr, "VP9DBG: override hdr=%u->%u part=%u->%u\n",
+                 sh->frame_tag_size, hint_frame_header_size,
+                 sh->offset_to_dct_parts, hint_first_partition_size);
+      sh->frame_tag_size = hint_frame_header_size;
+      sh->offset_to_dct_parts = hint_first_partition_size;
+   }
 
    hdr = sh->frame_tag_size;
    part = sh->offset_to_dct_parts;
@@ -1638,6 +1672,66 @@ mwv207_vp9_parse_frame(struct mwv207_vp9_slice_header *sh,
    }
    ret = vp9_decode_compressed_header((uint8_t *)(data + hdr), size - hdr,
                                       &bc, (uint8_t *)data, size, sh);
+   if (ret == MWV207_OK && getenv("MWV207_VP9_FCDUMP")) {
+      FILE *pf = fopen(getenv("MWV207_VP9_FCDUMP"), "ab");
+      if (pf) {
+         uint32_t gi, pi, mi;
+         struct mwv207_vp9_adaptive_entropy_probs *a = &sh->entropy.a;
+         fputc(0xff, pf);
+         for (gi = 0; gi < BLOCK_SIZE_GROUPS; gi++) {
+            for (pi = 0; pi < 8; pi++) fputc(a->sb_ymode_prob[gi][pi], pf);
+            fputc(a->sb_ymode_prob_b[gi][0], pf);
+         }
+         for (pi = 0; pi < NUM_PARTITION_CONTEXTS; pi++)
+            for (mi = 0; mi < 3; mi++)
+               fputc(a->partition_prob[INTER_FRAME][pi][mi], pf);
+         for (pi = 0; pi < INTER_MODE_CONTEXTS_DEC; pi++)
+            for (mi = 0; mi < 3; mi++) fputc(a->inter_mode_prob[pi][mi], pf);
+         for (pi = 0; pi < INTRA_INTER_CONTEXTS; pi++) fputc(a->intra_inter_prob[pi], pf);
+         for (pi = 0; pi < COMP_INTER_CONTEXTS; pi++) fputc(a->comp_inter_prob[pi], pf);
+         for (pi = 0; pi < REF_CONTEXTS_DEC; pi++) {
+            fputc(a->single_ref_prob[pi][0], pf);
+            fputc(a->single_ref_prob[pi][1], pf);
+         }
+         for (pi = 0; pi < REF_CONTEXTS_DEC; pi++) fputc(a->comp_ref_prob[pi], pf);
+         for (pi = 0; pi < 4; pi++) {
+            fputc(a->switchable_interp_prob[pi][0], pf);
+            fputc(a->switchable_interp_prob[pi][1], pf);
+         }
+         for (pi = 0; pi < 3; pi++) fputc(a->mbskip_probs[pi], pf);
+         {
+            uint32_t t, pl, rf, bd, cx, nd, cs = 0, es = 0;
+            uint8_t *tabs[4] = { (uint8_t *)a->prob_coeffs, (uint8_t *)a->prob_coeffs8x8,
+                                 (uint8_t *)a->prob_coeffs16x16, (uint8_t *)a->prob_coeffs32x32 };
+            for (t = 0; t < 4; t++)
+               for (pl = 0; pl < 2; pl++)
+                  for (rf = 0; rf < 2; rf++)
+                     for (bd = 0; bd < 6; bd++)
+                        for (cx = 0; cx < 6; cx++)
+                           for (nd = 0; nd < 4; nd++) {
+                              uint32_t v = tabs[t][(((pl * 2 + rf) * 6 + bd) * 6 + cx) * 4 + nd];
+                              if (nd < 3) cs += v; else es += v;
+                           }
+            if (getenv("MWV207_VP9_CDUMP")) {
+               FILE *cf = fopen(getenv("MWV207_VP9_CDUMP"), "ab");
+               if (cf) {
+                  for (t = 0; t < 4; t++)
+                     for (pl = 0; pl < 2; pl++)
+                        for (rf = 0; rf < 2; rf++)
+                           for (bd = 0; bd < 6; bd++)
+                              for (cx = 0; cx < 6; cx++)
+                                 fwrite(&tabs[t][(((pl * 2 + rf) * 6 + bd) * 6 + cx) * 4], 1, 4, cf);
+                  fclose(cf);
+               }
+            }
+            fprintf(stderr, "VP9FCSUM tx=%u cs=%u es=%u hp=%u interp=%u refmode=%u lossless=%u txm=%u\n",
+                    sh->transform_mode, cs, es, sh->allow_high_precision_mv,
+                    sh->mcomp_filter_type, 0, sh->lossless,
+                    sh->transform_mode);
+         }
+         fclose(pf);
+      }
+   }
    if (ret == MWV207_OK && saved_ctx
        && sh->frame_context_idx < NUM_FRAME_CONTEXTS)
       saved_ctx[sh->frame_context_idx] = sh->entropy;

@@ -82,6 +82,18 @@ struct mwv207_vp9_state {
    uint32_t tile_offset;
    uint32_t filter_offset;
    uint32_t stream_offset;
+   /* Bounce buffer for the hardware's per-block motion vector store. */
+   uint32_t mv_offset;
+   uint32_t mv_size;
+   uint32_t mv_cur;
+   bool prev_was_inter;
+   bool saw_error_resilient;
+   /* The loop filter reference/mode deltas are updated by the header only
+    * when the stream says so; otherwise they carry over from the previous
+    * frame (libvpx keeps them in cm->lf).  The defaults are applied by the
+    * header parser on every intra/key frame. */
+   int32_t lf_ref_delta[MAX_REF_LF_DELTAS];
+   int32_t lf_mode_delta[MAX_MODE_LF_DELTAS];
    /* VP9 reference frame slots: these point at the pipe_video_buffer of the
     * frame that last refreshed this slot.  The VA client keeps decoded
     * frames alive while they are referenced, so no extra reference is
@@ -148,6 +160,12 @@ static const uint32_t vp9_ref_tybase_msb[3] = {
 static const uint32_t vp9_ref_tcbase_lsb[3] = {
    JMDEC_REFER0_TCBASE_LSB, JMDEC_REFER4_TCBASE_LSB, JMDEC_REFER5_TCBASE_LSB,
 };
+static const uint32_t vp9_ref_dbase_lsb[3] = {
+   JMDEC_REFER0_DBASE_LSB, JMDEC_REFER4_DBASE_LSB, JMDEC_REFER5_DBASE_LSB,
+};
+static const uint32_t vp9_ref_dbase_msb[3] = {
+   JMDEC_REFER0_DBASE_MSB, JMDEC_REFER4_DBASE_MSB, JMDEC_REFER5_DBASE_MSB,
+};
 static const uint32_t vp9_ref_tcbase_msb[3] = {
    JMDEC_REFER0_TCBASE_MSB, JMDEC_REFER4_TCBASE_MSB, JMDEC_REFER5_TCBASE_MSB,
 };
@@ -203,6 +221,18 @@ vp9_write_ref_regs(struct mwv207_vp9_state *st,
       reg_buf->set_reg(reg_buf, vp9_ref_vscale_reg[k], 1u << 14);
       reg_buf->set_reg(reg_buf, vp9_ref_sign_bias_reg[k],
                        sh->ref_frame_sign_bias[k] ? 1 : 0);
+      /* The vendor points the per-reference MV store at the same offset in
+       * every slot (right behind the picture).  We keep the MVs in a scratch
+       * area instead; VP9 never predicts MVs across frames. */
+      if (st->scratch && st->scratch->res) {
+         uint32_t prev = st->mv_offset + (st->mv_cur ? 0u : st->mv_size);
+         reg_buf->set_addr_reg_hi(reg_buf, vp9_ref_dbase_msb[k],
+                                  st->scratch->res->bo, prev,
+                                  MWV207_BO_ACC_FLAG_WRITE);
+         reg_buf->set_addr_reg(reg_buf, vp9_ref_dbase_lsb[k],
+                               st->scratch->res->bo, prev,
+                               MWV207_BO_ACC_FLAG_WRITE);
+      }
    }
 }
 
@@ -214,9 +244,12 @@ vp9_refresh_slots(struct mwv207_video_decoder *decoder,
 {
    uint32_t i, need = luma_size * 3 / 2;
 
-   if (vp9_trace()) fprintf(stderr, "VP9REF refresh st=%p flags=0x%x buf=%p\n",
-           (void *)st, refresh_flags, (void *)buf);
+   if (vp9_trace()) fprintf(stderr, "VP9REF refresh st=%p flags=0x%x buf=%p luma=%u posize=%u\n",
+           (void *)st, refresh_flags, (void *)buf, luma_size,
+           buf && buf->res ? (unsigned)buf->res->size : 0u);
    if (!buf || !buf->res || !buf->res->bo)
+      return;
+   if (getenv("MWV207_VP9_NOREF"))
       return;
    if (st->ref_buf_size < need * 16) {
       if (st->ref_store)
@@ -234,8 +267,19 @@ vp9_refresh_slots(struct mwv207_video_decoder *decoder,
          continue;
       src = decoder->ws->bo_map(decoder->ws, buf->res->bo);
       dst = decoder->ws->bo_map(decoder->ws, st->ref_store->res->bo);
-      if (src && dst)
+      if (src && dst) {
          memcpy(dst + (size_t)i * need, src, need);
+         {
+            const char *rd = getenv("MWV207_VP9_REFDUMP");
+            if (rd && i == 0) {
+               FILE *f = fopen(rd, "ab");
+               if (f) {
+                  fwrite(src, 1, st->ref_luma, f);
+                  fclose(f);
+               }
+            }
+         }
+      }
    }
 }
 
@@ -284,11 +328,16 @@ vp9_get_state(struct mwv207_video_decoder *decoder, uint32_t width,
       st->tile_offset = VP9_COUNTER_OFFSET + ctr_size;
       st->seg_offset = vp9_align4k(st->tile_offset + tile_size);
       st->seg_size = seg_size;
-      st->filter_offset = vp9_align4k(st->tile_offset + tile_size);
+      st->filter_offset = vp9_align4k(st->seg_offset + st->seg_size);
       st->width = width;
       st->height = height;
       st->stream_offset = vp9_align4k(st->filter_offset + VP9_FILTER_SIZE);
-      st->scratch_size = st->stream_offset + VP9_STREAM_COPY_SIZE;
+      st->mv_offset = vp9_align4k(st->stream_offset + VP9_STREAM_COPY_SIZE);
+      /* The vendor places the motion vector store right behind the decoded
+       * picture, luma * 3 / 2 bytes later.  We only need somewhere valid for
+       * the hardware to write to, so give it a buffer of that size. */
+      st->mv_size = vp9_align4k(width * height * 3 / 2 + 64);
+      st->scratch_size = st->mv_offset + 2u * st->mv_size;
       st->scratch = mwv207_video_buffer_create_2(
          decoder->base.context, st->scratch_size, PIPE_USAGE_STAGING);
       if (!st->scratch) {
@@ -384,11 +433,25 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
    sh->bit_depth = bit_depth ? bit_depth : 8;
    sh->vp_profile = pic_param->picture_parameter.profile;
 
+   sh->pic_param_passed_width = width;
+   sh->pic_param_passed_height = height;
+   memcpy(sh->mb_ref_lf_delta, st->lf_ref_delta, sizeof(sh->mb_ref_lf_delta));
+   memcpy(sh->mb_mode_lf_delta, st->lf_mode_delta, sizeof(sh->mb_mode_lf_delta));
    if (vp9_trace()) fprintf(stderr, "VP9DBG va: fhdr=%u fpart=%u\n",
            pic_param->picture_parameter.frame_header_length_in_bytes,
            pic_param->picture_parameter.first_partition_size);
-   ret = mwv207_vp9_parse_frame(sh, stream, stream_len,
-                                    width, height, st->saved_ctx);
+   {
+      uint32_t hint_hdr = getenv("MWV207_VP9_NOHINT") ? 0u
+         : pic_param->picture_parameter.frame_header_length_in_bytes;
+      uint32_t hint_part = getenv("MWV207_VP9_NOHINT") ? 0u
+         : pic_param->picture_parameter.first_partition_size;
+      ret = mwv207_vp9_parse_frame(sh, stream, stream_len, width, height,
+                                   st->saved_ctx, hint_hdr, hint_part);
+   }
+   if (!ret) {
+      memcpy(st->lf_ref_delta, sh->mb_ref_lf_delta, sizeof(st->lf_ref_delta));
+      memcpy(st->lf_mode_delta, sh->mb_mode_lf_delta, sizeof(st->lf_mode_delta));
+   }
    if (ret) {
       MWV207_LOG(MWV207_LEVEL_ERROR, "vp9: header parse failed (%d)\n", ret);
       reg_buf->set_reg(reg_buf, JMDEC_DEC_E, 0);
@@ -424,6 +487,17 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
 
    memcpy(st->scratch_cpu + VP9_PROB_OFFSET, &sh->entropy,
           VP9_PROB_TABLE_SIZE);
+   {
+      const char *pb = getenv("MWV207_VP9_PROBBUMP");
+      if (pb) {
+         unsigned bump = strtoul(pb, NULL, 0), q;
+         uint8_t *pp = (uint8_t *)st->scratch_cpu + VP9_PROB_OFFSET;
+         for (q = 0; q < VP9_PROB_TABLE_SIZE; q++)
+            pp[q] = (uint8_t)(pp[q] + bump);
+      }
+   }
+   if (getenv("MWV207_VP9_ZCTR"))
+      memset(st->scratch_cpu + VP9_COUNTER_OFFSET, 0, VP9_COUNTER_SIZE);
    if (vp9_trace()) fprintf(stderr, "VP9DBG scratch first: %02x %02x %02x %02x %02x %02x %02x %02x\n",
            ((uint8_t *)st->scratch_cpu)[0], ((uint8_t *)st->scratch_cpu)[1],
            ((uint8_t *)st->scratch_cpu)[2], ((uint8_t *)st->scratch_cpu)[3],
@@ -553,6 +627,13 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
       }
       vp9_set_addr(reg_buf, JMDEC_DEC_OUT_YBASE_LSB, buf->res->bo, 0);
       vp9_set_addr(reg_buf, JMDEC_DEC_OUT_CBASE_LSB, buf->res->bo, luma_size);
+      /* The motion vectors the entropy engine decodes are written to the
+       * "direct MV" area so that later blocks can use them for spatial MV
+       * prediction; without it every block after the first row predicts
+       * from garbage.  The vendor programs DEC_OUT_DBASE for VP9 too. */
+      vp9_set_addr(reg_buf, JMDEC_DEC_OUT_DBASE_LSB,
+                   st->scratch->res->bo,
+                   st->mv_offset + (st->mv_cur ? st->mv_size : 0u));
       if (getenv("MWV207_VP9_TYBASE")) {
          reg_buf->set_addr_reg_hi(reg_buf, JMDEC_DEC_OUT_TYBASE_MSB, buf->res->bo, 0, MWV207_BO_ACC_FLAG_WRITE);
          reg_buf->set_addr_reg(reg_buf, JMDEC_DEC_OUT_TYBASE_LSB, buf->res->bo, 0, MWV207_BO_ACC_FLAG_WRITE);
@@ -643,6 +724,10 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
                     (sh->key_frame || sh->intra_only) ? 1 : 0);
    { const char *tm=getenv("MWV207_VP9_TMODE");
      reg_buf->set_reg(reg_buf, JMDEC_TRANSFORM_MODE, tm?strtoul(tm,NULL,0):(sh->transform_mode & 0x7)); }
+   if (vp9_trace()) fprintf(stderr, "VP9DBG inter: txmode=%u tm_reg=%u lossless=%d hp=%d interp=%u comp=%u bd=%d\n",
+           sh->transform_mode, sh->transform_mode & 7, sh->lossless,
+           sh->allow_high_precision_mv, sh->mcomp_filter_type,
+           sh->comp_pred_mode, (int)sh->bit_depth);
    reg_buf->set_reg(reg_buf, JMDEC_MCOMP_FILT_TYPE, sh->mcomp_filter_type & 0x7);
    reg_buf->set_reg(reg_buf, JMDEC_HIGH_PREC_MV_E,
                     sh->key_frame ? 0 : (sh->allow_high_precision_mv ? 1 : 0));
@@ -651,7 +736,32 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
    reg_buf->set_reg(reg_buf, JMDEC_COMP_PRED_FIXED_REF, sh->comp_fixed_ref & 0x3);
    reg_buf->set_reg(reg_buf, JMDEC_COMP_PRED_VAR_REF0, sh->comp_var_ref[0] & 0x3);
    reg_buf->set_reg(reg_buf, JMDEC_COMP_PRED_VAR_REF1, sh->comp_var_ref[1] & 0x3);
-   reg_buf->set_reg(reg_buf, JMDEC_WRITE_MVS_E, 0);
+   /* The ASIC stores the motion vectors of every block in the dir_mv area
+    * and reads the neighbours back while decoding the next blocks; without
+    * WRITE_MVS_E the prediction drifts apart towards the bottom of the
+    * frame.  The vendor enables it for inter frames only. */
+   if (!sh->key_frame && !sh->intra_only && st->scratch && st->scratch->res) {
+      reg_buf->set_reg(reg_buf, JMDEC_WRITE_MVS_E, 1);
+      vp9_set_addr(reg_buf, JMDEC_DIR_MV_BASE_LSB, st->scratch->res->bo,
+                   st->mv_offset + (st->mv_cur ? st->mv_size : 0u));
+   } else {
+      reg_buf->set_reg(reg_buf, JMDEC_WRITE_MVS_E, 0);
+   }
+   /* VP9 predicts motion vectors from the previous frame's MV image when the
+    * stream is not error resilient and the previous frame was an inter frame
+    * of the same size (use_prev_frame_mvs).  The ASIC does this when
+    * TEMPOR_MVP_E is set; without it the second half of every P frame
+    * predicts from a zero MV field and drifts. */
+   {
+      bool tempor = !sh->key_frame && !sh->intra_only &&
+                    !sh->error_resilient &&
+                    sh->width == st->width &&
+                    sh->height == st->height &&
+                    st->prev_was_inter;
+      reg_buf->set_reg(reg_buf, JMDEC_TEMPOR_MVP_E, tempor ? 1 : 0);
+      /* This frame becomes the "previous frame" for temporal MV prediction. */
+      st->prev_was_inter = !sh->key_frame && !sh->intra_only && !sh->show_existing_frame;
+   }
    reg_buf->set_reg(reg_buf, JMDEC_DEC_TILE_INT_E, 0);
 
    reg_buf->set_reg(reg_buf, JMDEC_FILT_LEVEL, sh->loop_filter_level & 0x3f);
@@ -751,12 +861,14 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
            sh->log2_tile_columns, sh->log2_tile_rows, sh->transform_mode);
    if (sh->log2_tile_columns || sh->log2_tile_rows) {
       reg_buf->set_reg(reg_buf, JMDEC_TILE_ENABLE, 1);
-      reg_buf->set_reg(reg_buf, JMDEC_NUM_TILE_COLS, 1u << sh->log2_tile_columns);
-      reg_buf->set_reg(reg_buf, JMDEC_NUM_TILE_ROWS, 1u << sh->log2_tile_rows);
+      reg_buf->set_reg(reg_buf, JMDEC_NUM_TILE_COLS_8K,
+                       1u << sh->log2_tile_columns);
+      reg_buf->set_reg(reg_buf, JMDEC_NUM_TILE_ROWS_8K,
+                       1u << sh->log2_tile_rows);
    } else {
       reg_buf->set_reg(reg_buf, JMDEC_TILE_ENABLE, 0);
-      reg_buf->set_reg(reg_buf, JMDEC_NUM_TILE_COLS, 1);
-      reg_buf->set_reg(reg_buf, JMDEC_NUM_TILE_ROWS, 1);
+      reg_buf->set_reg(reg_buf, JMDEC_NUM_TILE_COLS_8K, 1);
+      reg_buf->set_reg(reg_buf, JMDEC_NUM_TILE_ROWS_8K, 1);
    }
 
    if (vp9_trace()) fprintf(stderr, "VP9DBG addr: out_bo=%p stream_bo=%p scratch_bo=%p tile_off=%u len=%u\n",
@@ -798,7 +910,7 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
       struct mwv207_video_buffer *win_buf = bs_buf;
       uint32_t win_base = 0;
 
-      if (st->tile_n > 1 && tile_off < VP9_STREAM_COPY_SIZE) {
+      if (st->tile_n > 1 && tile_off < VP9_STREAM_COPY_SIZE && !getenv("MWV207_VP9_NOCOPY")) {
          uint8_t *dst = (uint8_t *)st->scratch_cpu + st->stream_offset;
          uint32_t i, total;
 
@@ -860,8 +972,11 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
       }
       {
          const char *so_slen = getenv("MWV207_VP9_SLEN");
+         const char *so_add = getenv("MWV207_VP9_SLENADD");
          if (so_slen)
             slen = strtoul(so_slen, NULL, 0);
+         else if (so_add)
+            slen += (uint32_t)strtoul(so_add, NULL, 0);
       }
       reg_buf->set_reg(reg_buf, JMDEC_STREAM_LEN, slen);
       reg_buf->set_reg(reg_buf, JMDEC_STRM_BUFFER_LEN, space);
@@ -875,6 +990,17 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
      if (pp && st->scratch_cpu) {
         FILE *f = fopen(pp, "wb");
         if (f) { fwrite(st->scratch_cpu, 1, st->scratch_size, f); fclose(f); }
+     } }
+   { const char *rd = getenv("MWV207_VP9_REGD");
+     if (rd) {
+        FILE *f = fopen(rd, "a");
+        if (f) {
+           uint32_t i;
+           fprintf(f, "=== FRAME key=%d\n", sh->key_frame);
+           for (i = 0; i < JMDEC_LAST_REG; i++)
+              fprintf(f, "REG %u %u\n", i, reg_buf->get_reg(reg_buf, i));
+           fclose(f);
+        }
      } }
    { const char *rs = getenv("MWV207_VP9_REGSET");
      if (rs) {
@@ -934,6 +1060,19 @@ mwv207_dec_vp9_submit_done(struct mwv207_video_decoder *decoder)
       return;
    vp9_refresh_slots(decoder, st, st->pending_flags, st->pending,
                      st->pending_luma);
+   {
+      const char *mp = getenv("MWV207_VP9_MVDUMP");
+      if (mp && st->scratch_cpu && st->mv_size) {
+         FILE *f = fopen(mp, "ab");
+         if (f) {
+            fwrite((uint8_t *)st->scratch_cpu + st->mv_offset +
+                   (st->mv_cur ? st->mv_size : 0u), 1, st->mv_size, f);
+            fclose(f);
+         }
+      }
+   }
+   /* The frame just decoded is the new source of temporal MV prediction. */
+   st->mv_cur ^= 1u;
    if (st->ref_store && st->ref_store->res) {
       uint8_t *q = decoder->ws->bo_map(decoder->ws, st->ref_store->res->bo);
       if (q) {
