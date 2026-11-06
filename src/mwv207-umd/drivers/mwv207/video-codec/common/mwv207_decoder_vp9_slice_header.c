@@ -784,7 +784,7 @@ mwv207_vp9_init_mv_probs(struct mwv207_vp9_slice_header *x)
           sizeof(struct mwv207_nmv_context));
 }
 
-static void
+void
 mwv207_vp9_reset_probs(struct mwv207_vp9_slice_header *slice_header)
 {
    int32_t i, j, k, l, m;

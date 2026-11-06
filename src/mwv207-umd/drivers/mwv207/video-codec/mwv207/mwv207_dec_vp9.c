@@ -51,7 +51,6 @@
 #define VP9_MAX_TILES (VP9_MAX_TILE_COLS * VP9_MAX_TILE_ROWS)
 
 
-void mwv207_vp9_reset_probs(struct mwv207_vp9_slice_header *sh);
 
 #define VP9_PROB_TABLE_SIZE 0xea0u /* sizeof(struct mwv207_vp9_entropy_probs) */
 #define VP9_PROB_OFFSET 0x0u
@@ -78,6 +77,14 @@ struct mwv207_vp9_state {
    struct mwv207_vp9_slice_header sh;
    /* VP9 carries four coefficient-probability contexts across frames. */
    struct mwv207_vp9_entropy_probs saved_ctx[NUM_FRAME_CONTEXTS];
+   /* Copy of saved_ctx[] taken right before the header parser applies the
+    * frame's probability updates; the adaptation blends the updated table
+    * with this previous one. */
+   struct mwv207_vp9_entropy_probs pre_ctx[NUM_FRAME_CONTEXTS];
+   /* saved_ctx[] holds the VP9 default tables from the first frame on, the
+    * way libvpx initialises its frame contexts at decoder start. */
+   bool ctx_ready;
+   bool prev_frame_key;
    struct mwv207_video_buffer *scratch;
    void *scratch_cpu;
    uint32_t scratch_size;
@@ -434,6 +441,363 @@ vp9_get_state(struct mwv207_video_decoder *decoder, uint32_t width,
    return st;
 }
 
+/* ---------------------------------------------------------------------------
+ * Probability adaptation for frame_parallel_decoding_mode == 0
+ *
+ * When a stream is not coded for frame-parallel decoding and is not error
+ * resilient, VP9 adapts the entropy probabilities of every frame from the
+ * symbol counts collected while decoding it.  The ASIC counts the symbols in
+ * the context counter buffer (same layout as
+ * struct mwv207_vp9_entropy_counts) but keeps its own probability table
+ * untouched, so the adaptation has to happen here and the result has to be
+ * stored in the frame context the next frame will start from.
+ *
+ * The algorithm is the one from libvpx: a probability is moved towards the
+ * per-node estimate n0/(n0+n1), by at most count * max_update_factor /
+ * count_sat (in 1/256 units).
+ * ------------------------------------------------------------------------- */
+
+#define VP9_TREE_SIZE_INTRA_MODE 18
+#define VP9_MODE_MV_COUNT_SAT 20
+static const int8_t vp9_tree_intra_mode[VP9_TREE_SIZE_INTRA_MODE] = {
+   0, 2, -9, 4, -1, 6, 8, 12, -2, 10, -4, -5, -3, 14, -8, 16, -6, -7
+};
+static const int8_t vp9_tree_partition[6] = { -0, 2, -1, 4, -2, -3 };
+static const int8_t vp9_tree_switchable[4] = { -0, 2, -1, -2 };
+static const int8_t vp9_tree_mv_joint[6] = { -0, 2, -1, 4, -2, -3 };
+static const int8_t vp9_tree_mv_class[20] = {
+   -0, 2, -1, 4, 6, 8, -2, -3, 10, 12, -4, -5, -6, 14, 16, 18, -7, -8, -9, -10
+};
+static const int8_t vp9_tree_mv_class0[2] = { -0, -1 };
+static const int8_t vp9_tree_mv_fp[6] = { -0, 2, -1, 4, -2, -3 };
+static const int8_t vp9_tree_tx32[6] = { -0, 2, -1, 4, -2, -3 };
+static const int8_t vp9_tree_tx16[4] = { -0, 2, -1, -2 };
+static const int8_t vp9_tree_tx8[2] = { -0, -1 };
+
+#define VP9_COEF_COUNT_SAT 24
+
+
+static uint8_t
+vp9_prob_from_counts(uint32_t n0, uint32_t n1)
+{
+   uint32_t den = n0 + n1;
+   uint32_t p;
+
+   if (!den)
+      return 128;
+
+   p = (uint32_t)(((uint64_t)n0 * 256u + (den >> 1)) / den);
+   if (p < 1)
+      p = 1;
+   if (p > 255)
+      p = 255;
+   return (uint8_t)p;
+}
+
+static uint8_t
+vp9_weighted_prob(uint8_t pre, uint8_t prob, uint32_t factor)
+{
+   return (uint8_t)((pre * (256u - factor) + prob * factor + 128u) >> 8);
+}
+
+static uint8_t
+vp9_merge_mode_mv(uint8_t pre, uint32_t n0, uint32_t n1)
+{
+   static const uint8_t count_to_factor[VP9_MODE_MV_COUNT_SAT + 1] = {
+      0, 6, 12, 19, 25, 32, 38, 44, 51, 57, 64,
+      70, 76, 83, 89, 96, 102, 108, 115, 121, 128
+   };
+   uint32_t den = n0 + n1, count, factor;
+   uint8_t prob;
+
+   if (!den)
+      return pre;
+
+   count = den > VP9_MODE_MV_COUNT_SAT ? VP9_MODE_MV_COUNT_SAT : den;
+   factor = count_to_factor[count];
+   prob = vp9_prob_from_counts(n0, n1);
+   return vp9_weighted_prob(pre, prob, factor);
+}
+
+static uint8_t
+vp9_merge_coef(uint8_t pre, uint32_t n0, uint32_t n1, uint32_t count_sat,
+               uint32_t max_update_factor)
+{
+   uint32_t den = n0 + n1, count, factor;
+   uint8_t prob;
+
+   if (!den)
+      return pre;
+
+   count = den > count_sat ? count_sat : den;
+   factor = max_update_factor * count / count_sat;
+   prob = vp9_prob_from_counts(n0, n1);
+   return vp9_weighted_prob(pre, prob, factor);
+}
+
+/* Walk one binary coding tree and adapt every internal node.  The leaf index
+ * of `counts` is the symbol value the tree codes. */
+static uint32_t
+vp9_tree_merge(const int8_t *tree, int32_t node, const uint8_t *pre,
+               const uint32_t *counts, uint8_t *probs)
+{
+   int32_t l = tree[node], r = tree[node + 1];
+   uint32_t lc = l <= 0 ? counts[-l] : vp9_tree_merge(tree, l, pre, counts, probs);
+   uint32_t rc = r <= 0 ? counts[-r] : vp9_tree_merge(tree, r, pre, counts, probs);
+
+   probs[node >> 1] = vp9_merge_mode_mv(pre[node >> 1], lc, rc);
+   return lc + rc;
+}
+
+static void
+vp9_adapt_coef_probs(struct mwv207_vp9_adaptive_entropy_probs *fc,
+                     const struct mwv207_vp9_adaptive_entropy_probs *pre,
+                     const struct mwv207_vp9_entropy_counts *ct,
+                     uint32_t count_sat, uint32_t update_factor)
+{
+   uint32_t t, i, j, k, l, m;
+
+   for (t = 0; t < 4; t++) {
+      uint8_t *probs;
+      const uint8_t *pre_probs;
+      const uint32_t *counts;
+      const uint32_t *eobs;
+
+      probs = t == 0 ? &fc->prob_coeffs[0][0][0][0][0]
+                     : t == 1 ? &fc->prob_coeffs8x8[0][0][0][0][0]
+                     : t == 2 ? &fc->prob_coeffs16x16[0][0][0][0][0]
+                              : &fc->prob_coeffs32x32[0][0][0][0][0];
+      pre_probs = t == 0 ? &pre->prob_coeffs[0][0][0][0][0]
+                         : t == 1 ? &pre->prob_coeffs8x8[0][0][0][0][0]
+                         : t == 2 ? &pre->prob_coeffs16x16[0][0][0][0][0]
+                                  : &pre->prob_coeffs32x32[0][0][0][0][0];
+      counts = t == 0 ? &ct->count_coeffs[0][0][0][0][0]
+                      : t == 1 ? &ct->count_coeffs8x8[0][0][0][0][0]
+                      : t == 2 ? &ct->count_coeffs16x16[0][0][0][0][0]
+                               : &ct->count_coeffs32x32[0][0][0][0][0];
+      eobs = &ct->count_eobs[t][0][0][0][0];
+
+      for (i = 0; i < BLOCK_TYPES; i++)
+         for (j = 0; j < REF_TYPES; j++)
+            for (k = 0; k < COEF_BANDS; k++) {
+               uint32_t ctx_count = k == 0 ? 3 : PREV_COEF_CONTEXTS;
+               for (l = 0; l < ctx_count; l++) {
+                  uint32_t idx = (((i * REF_TYPES + j) * COEF_BANDS + k)
+                                  * PREV_COEF_CONTEXTS + l);
+                  uint32_t n0 = counts[idx * 4 + 0];
+                  uint32_t n1 = counts[idx * 4 + 1];
+                  uint32_t n2 = counts[idx * 4 + 2];
+                  uint32_t neob = counts[idx * 4 + 3];
+                  uint32_t etot = eobs[idx];
+                  uint32_t branch[3][2];
+
+                  branch[0][0] = neob;
+                  branch[0][1] = etot > neob ? etot - neob : 0;
+                  branch[1][0] = n0;
+                  branch[1][1] = n1 + n2;
+                  branch[2][0] = n1;
+                  branch[2][1] = n2;
+                  for (m = 0; m < UNCONSTRAINED_NODES; m++)
+                     probs[idx * 4 + m] = vp9_merge_coef(
+                        pre_probs[idx * 4 + m], branch[m][0], branch[m][1],
+                        count_sat, update_factor);
+               }
+            }
+   }
+}
+
+static void
+vp9_adapt_mode_probs(struct mwv207_vp9_adaptive_entropy_probs *fc,
+                     const struct mwv207_vp9_adaptive_entropy_probs *pre,
+                     const struct mwv207_vp9_entropy_counts *ct,
+                     uint32_t tx_mode_select, uint32_t switchable_interp)
+{
+   uint32_t i, j;
+
+   for (i = 0; i < INTRA_INTER_CONTEXTS; i++)
+      fc->intra_inter_prob[i] = vp9_merge_mode_mv(
+         pre->intra_inter_prob[i], ct->intra_inter_count[i][0],
+         ct->intra_inter_count[i][1]);
+
+   for (i = 0; i < COMP_INTER_CONTEXTS; i++)
+      fc->comp_inter_prob[i] = vp9_merge_mode_mv(
+         pre->comp_inter_prob[i], ct->comp_inter_count[i][0],
+         ct->comp_inter_count[i][1]);
+
+   for (i = 0; i < REF_CONTEXTS_DEC; i++)
+      fc->comp_ref_prob[i] = vp9_merge_mode_mv(
+         pre->comp_ref_prob[i], ct->comp_ref_count[i][0],
+         ct->comp_ref_count[i][1]);
+
+   for (i = 0; i < REF_CONTEXTS_DEC; i++)
+      for (j = 0; j < 2; j++)
+         fc->single_ref_prob[i][j] = vp9_merge_mode_mv(
+            pre->single_ref_prob[i][j], ct->single_ref_count[i][j][0],
+            ct->single_ref_count[i][j][1]);
+
+   /* The hardware does not count the four inter modes; it counts the two
+    * branches of each node of the inter mode tree, which is what the
+    * adaptation needs anyway. */
+   for (i = 0; i < INTER_MODE_CONTEXTS_DEC; i++)
+      for (j = 0; j < VP9_INTER_MODES - 1; j++)
+         fc->inter_mode_prob[i][j] = vp9_merge_mode_mv(
+            pre->inter_mode_prob[i][j],
+            ct->inter_mode_counts[i][j][0],
+            ct->inter_mode_counts[i][j][1]);
+
+   for (i = 0; i < BLOCK_SIZE_GROUPS; i++) {
+      uint8_t probs[9];
+      const uint8_t pre_probs[9] = {
+         pre->sb_ymode_prob[i][0], pre->sb_ymode_prob[i][1],
+         pre->sb_ymode_prob[i][2], pre->sb_ymode_prob[i][3],
+         pre->sb_ymode_prob[i][4], pre->sb_ymode_prob[i][5],
+         pre->sb_ymode_prob[i][6], pre->sb_ymode_prob[i][7],
+         pre->sb_ymode_prob_b[i][0]
+      };
+      vp9_tree_merge(vp9_tree_intra_mode, 0, pre_probs,
+                     ct->sb_ymode_counts[i], probs);
+      for (j = 0; j < 8; j++)
+         fc->sb_ymode_prob[i][j] = probs[j];
+      fc->sb_ymode_prob_b[i][0] = probs[8];
+   }
+
+   for (i = 0; i < VP9_INTRA_MODES; i++) {
+      uint8_t probs[9];
+      const uint8_t pre_probs[9] = {
+         pre->uv_mode_prob[i][0], pre->uv_mode_prob[i][1],
+         pre->uv_mode_prob[i][2], pre->uv_mode_prob[i][3],
+         pre->uv_mode_prob[i][4], pre->uv_mode_prob[i][5],
+         pre->uv_mode_prob[i][6], pre->uv_mode_prob[i][7],
+         pre->uv_mode_prob_b[i][0]
+      };
+      vp9_tree_merge(vp9_tree_intra_mode, 0, pre_probs,
+                     ct->uv_mode_counts[i], probs);
+      for (j = 0; j < 8; j++)
+         fc->uv_mode_prob[i][j] = probs[j];
+      fc->uv_mode_prob_b[i][0] = probs[8];
+   }
+
+   for (i = 0; i < NUM_PARTITION_CONTEXTS; i++)
+      vp9_tree_merge(vp9_tree_partition, 0,
+                     pre->partition_prob[INTER_FRAME][i],
+                     ct->partition_counts[i],
+                     fc->partition_prob[INTER_FRAME][i]);
+
+   if (switchable_interp) {
+      for (i = 0; i < VP9_SWITCHABLE_FILTERS + 1; i++)
+         vp9_tree_merge(vp9_tree_switchable, 0,
+                        pre->switchable_interp_prob[i],
+                        ct->switchable_interp_counts[i],
+                        fc->switchable_interp_prob[i]);
+   }
+
+   if (tx_mode_select) {
+      for (i = 0; i < TX_SIZE_CONTEXTS_DEC; i++) {
+         vp9_tree_merge(vp9_tree_tx8, 0, pre->tx8x8_prob[i],
+                        ct->tx8x8_count[i], fc->tx8x8_prob[i]);
+         vp9_tree_merge(vp9_tree_tx16, 0, pre->tx16x16_prob[i],
+                        ct->tx16x16_count[i], fc->tx16x16_prob[i]);
+         vp9_tree_merge(vp9_tree_tx32, 0, pre->tx32x32_prob[i],
+                        ct->tx32x32_count[i], fc->tx32x32_prob[i]);
+      }
+   }
+
+   for (i = 0; i < MBSKIP_CONTEXTS; i++)
+      fc->mbskip_probs[i] = vp9_merge_mode_mv(
+         pre->mbskip_probs[i], ct->mbskip_count[i][0], ct->mbskip_count[i][1]);
+}
+
+static void
+vp9_adapt_mv_probs(struct mwv207_vp9_adaptive_entropy_probs *fc,
+                   const struct mwv207_vp9_adaptive_entropy_probs *pre,
+                   const struct mwv207_vp9_entropy_counts *ct,
+                   uint32_t allow_hp)
+{
+   uint32_t i, j;
+
+   vp9_tree_merge(vp9_tree_mv_joint, 0, pre->nmvc.joints,
+                  ct->nmvcount.joints, fc->nmvc.joints);
+
+   for (i = 0; i < 2; i++) {
+      fc->nmvc.sign[i] = vp9_merge_mode_mv(pre->nmvc.sign[i],
+                                           ct->nmvcount.sign[i][0],
+                                           ct->nmvcount.sign[i][1]);
+      vp9_tree_merge(vp9_tree_mv_class, 0, pre->nmvc.classes[i],
+                     ct->nmvcount.classes[i], fc->nmvc.classes[i]);
+      vp9_tree_merge(vp9_tree_mv_class0, 0, pre->nmvc.class0[i],
+                     ct->nmvcount.class0[i], fc->nmvc.class0[i]);
+
+      for (j = 0; j < MV_OFFSET_BITS; j++)
+         fc->nmvc.bits[i][j] = vp9_merge_mode_mv(
+            pre->nmvc.bits[i][j], ct->nmvcount.bits[i][j][0],
+            ct->nmvcount.bits[i][j][1]);
+
+      for (j = 0; j < CLASS0_SIZE; j++)
+         vp9_tree_merge(vp9_tree_mv_fp, 0, pre->nmvc.class0_fp[i][j],
+                        ct->nmvcount.class0_fp[i][j],
+                        fc->nmvc.class0_fp[i][j]);
+
+      vp9_tree_merge(vp9_tree_mv_fp, 0, pre->nmvc.fp[i],
+                     ct->nmvcount.fp[i], fc->nmvc.fp[i]);
+
+      if (allow_hp) {
+         fc->nmvc.class0_hp[i] = vp9_merge_mode_mv(
+            pre->nmvc.class0_hp[i], ct->nmvcount.class0_hp[i][0],
+            ct->nmvcount.class0_hp[i][1]);
+         fc->nmvc.hp[i] = vp9_merge_mode_mv(
+            pre->nmvc.hp[i], ct->nmvcount.hp[i][0],
+            ct->nmvcount.hp[i][1]);
+      }
+   }
+}
+
+/* Adapt the probabilities of the frame that the decode unit has just
+ * finished; the result becomes the starting point of the next frame that
+ * uses the same frame context. */
+static void
+vp9_adapt_probs(struct mwv207_vp9_state *st, struct mwv207_vp9_slice_header *sh)
+{
+   struct mwv207_vp9_entropy_probs *ctx;
+   const struct mwv207_vp9_entropy_counts *ct;
+   uint32_t count_sat, update_factor;
+   int intra_only;
+
+   if (!sh || sh->error_resilient || sh->frame_parallel_decoding)
+      return;
+   if (sh->frame_context_idx >= NUM_FRAME_CONTEXTS)
+      return;
+
+   intra_only = sh->key_frame || sh->intra_only;
+   ctx = &st->saved_ctx[sh->frame_context_idx];
+   ct = (const struct mwv207_vp9_entropy_counts *)((const uint8_t *)st->scratch_cpu
+                                                   + VP9_COUNTER_OFFSET);
+
+   if (intra_only) {
+      count_sat = VP9_COEF_COUNT_SAT;
+      update_factor = 112;
+   } else if (st->prev_frame_key) {
+      count_sat = VP9_COEF_COUNT_SAT;
+      update_factor = 128;
+   } else {
+      count_sat = VP9_COEF_COUNT_SAT;
+      update_factor = 112;
+   }
+
+   {
+      struct mwv207_vp9_entropy_probs fc = *ctx;
+      const struct mwv207_vp9_entropy_probs *pre = &st->pre_ctx[sh->frame_context_idx];
+
+      vp9_adapt_coef_probs(&fc.a, &pre->a, ct, count_sat, update_factor);
+      if (!intra_only) {
+         vp9_adapt_mode_probs(&fc.a, &pre->a, ct,
+                              sh->transform_mode == 4,
+                              sh->mcomp_filter_type == 4);
+         vp9_adapt_mv_probs(&fc.a, &pre->a, ct, sh->allow_high_precision_mv);
+      }
+      *ctx = fc;
+   }
+}
+
 static void
 vp9_set_addr(struct mwv207_video_reg_buf *reg_buf, uint32_t id_lsb,
              struct mwv207_bo *bo, uint64_t offset)
@@ -518,6 +882,17 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
    sh->pic_param_passed_height = height;
    memcpy(sh->mb_ref_lf_delta, st->lf_ref_delta, sizeof(sh->mb_ref_lf_delta));
    memcpy(sh->mb_mode_lf_delta, st->lf_mode_delta, sizeof(sh->mb_mode_lf_delta));
+   if (!st->ctx_ready) {
+      struct mwv207_vp9_slice_header defaults;
+      uint32_t i;
+
+      memset(&defaults, 0, sizeof(defaults));
+      mwv207_vp9_reset_probs(&defaults);
+      for (i = 0; i < NUM_FRAME_CONTEXTS; i++)
+         st->saved_ctx[i] = defaults.entropy;
+      st->ctx_ready = true;
+   }
+   memcpy(st->pre_ctx, st->saved_ctx, sizeof(st->saved_ctx));
    ret = mwv207_vp9_parse_frame(
       sh, stream, stream_len, width, height, st->saved_ctx,
       pic_param->picture_parameter.frame_header_length_in_bytes,
@@ -946,6 +1321,8 @@ mwv207_dec_vp9_submit_done(struct mwv207_video_decoder *decoder)
    struct mwv207_vp9_state *st = decoder->decoder->vp9_state;
    if (!st || !st->pending)
       return;
+   vp9_adapt_probs(st, &st->sh);
+   st->prev_frame_key = st->sh.key_frame;
    vp9_refresh_slots(decoder, st, st->pending_flags, st->pending,
                      st->pending_luma);
    st->pending = NULL;

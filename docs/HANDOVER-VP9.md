@@ -390,7 +390,7 @@ H.264/HEVC 解码与桌面渲染不受影响。
 | ~~A2~~ | ~~`show_existing_frame` 包未处理~~ | **已解决（2026-11-06）**，见 §10.2 A2 | ~~P1~~ |
 | ~~A4~~ | ~~全范围色彩（`color_range=1`）未传~~ | **实测非缺陷（2026-11-06）**，见 §10.2 A4 | ~~P1~~ |
 | ~~B1~~ | ~~tile 数 > 16 静默截断~~ | **已解决（2026-11-06）**，见 §10.2 B1 | ~~P1~~ |
-| A3 | `frame_parallel_decoding_mode=0` 的概率自适应缺失 | 未实现，现有样片恰好都是 1 | P2 |
+| ~~A3~~ | ~~`frame_parallel_decoding_mode=0` 的概率自适应缺失~~ | **已解决（2026-11-06）**，见 §10.2 A3 | ~~P2~~ |
 | B2 | 中途改分辨率 / 参考尺寸与当前不同 | 未验证 | P2 |
 | A5 | VP9 10bit（Profile 2）、4:2:2/4:4:4、alpha | 未实现、未广播 | P3 |
 | B3 | intra-only（非关键帧） | 未验证 | P3 |
@@ -407,6 +407,7 @@ H.264/HEVC 解码与桌面渲染不受影响。
 | 参考 | LAST / GOLDEN / ALTREF / 时间 MV | §9.1–9.3 |
 | tile | 单 tile / 多 tile-columns / 多 tile-rows / 2×2 混合 | 最多 4 个 tile |
 | 编码器 | ffmpeg(ffmpeg 内建 VP9 编码器与 libvpx-vp9)、vpxenc | realtime 与 good/cpu-used 0–8 |
+| 并行解码 | `frame_parallel_decoding_mode` = 1 与 0 | =0 时由驱动做概率自适应，见 §10.2 A3 |
 | 色彩 | limited range（`color_range=0`） | 全范围见 A4 |
 | 分段 | 开（abs/delta、temporal update、8 段全特性） | `-aq-mode 1/2/3` 全部逐位一致，见 §10.2 A1 |
 | 分辨率 | 128×128 – 1920×1080（最长 120 帧） | 4K 见 B5 |
@@ -500,17 +501,40 @@ H.264/HEVC 解码与桌面渲染不受影响。
 - 验证：1920×1080 `-tile-columns 3 -tile-rows 2`（8×4 = 32 个 tile）与
   3840×2160 `-tile-columns 4 -tile-rows 2`（16×4 = 64 个 tile）均与软件解码
   **逐字节一致**；20 个样片全量回归 `FULL_TEST_FAIL=0`。
-#### A3（P2）frame_parallel_decoding_mode=0 的概率自适应缺失
+#### A3（P2）frame_parallel_decoding_mode=0 的概率自适应 —— 已解决（2026-11-06）
 
-- 规范 + libvpx：`if (!error_resilient && !frame_parallel_decoding_mode)` 时，解码器必须用
-  **本帧符号计数**更新下一帧概率（`vp9/decoder/vp9_decodeframe.c` 末尾
+- 规范：`if (!error_resilient && !frame_parallel_decoding_mode)` 时，解码器必须用**本帧符号
+  计数**把下一帧的概率表更新一次（libvpx 在 `vp9_decodeframe.c` 末尾调
   `vp9_adapt_coef_probs` / `vp9_adapt_mode_probs` / `vp9_adapt_mv_probs`）。
-- 我们的驱动从不读 ASIC 计数区（`VP9_COUNTER_OFFSET 0xea0`；ASIC 确实会写，640×360
-  一帧后该区有 856 个非零 `u32`、总和 11163），也不做 CPU 侧自适应。
-- 现有样片没暴露问题，是因为 libvpx/ffmpeg 产出的流 `frame_parallel_decoding_mode=1`
-  （逐流 dump 确认 `par=1`）。其它编码器（部分硬件编码器、`--frame-parallel=0`）的流会漂移。
-- 实现路径：读计数区 → 按 libvpx 的 `vp9_adapt_*` 算法（或厂商 UMD 的
-  `AdaptProb`/`UpdateCoefProbs`/`Vp9StoreAdaptProbs`）更新 scratch 概率表。
+  `error_resilient=1` 或 `frame_parallel=1` 的流不需要；libvpx / ffmpeg 默认产出
+  `frame_parallel=1`，所以早期样片看不出问题。
+- 硬件行为（本轮实测）：ASIC **只统计、不自适应** —— 用 `PREDUMP`/`PBDUMP` 对比同一帧
+  解码前后的概率表，10 帧逐字节相同；计数区每帧独立（`ZCTR` 清零对输出无影响）。
+- 计数区布局：与 `struct mwv207_vp9_entropy_counts`（`common/mwv207_decoder_commonvp9.h`）
+  完全一致，`sizeof = 13264`。逐字段核对：`partition 1194/42`、`mbskip 894/6`、
+  `tx32+tx16+tx8 = 618`、`y_mode 61 15 28 5 3 0 3 1 3 17` 等与 libvpx `FRAME_COUNTS`
+  **逐槽相同**（前提是 libvpx 侧按它自己的枚举顺序打印）。
+  **唯一例外：`inter_mode_counts[7][3][2]` 存的是 inter 模式树每个节点的两个分支计数**
+  （不是 4 个模式叶子计数），正好是自适应需要的输入，直接逐节点 merge 即可。
+- 实现（`mwv207_dec_vp9.c`，`vp9_adapt_probs()` 及三个 `vp9_adapt_*()`）：
+  * `saved_ctx[NUM_FRAME_CONTEXTS]` 保存每帧结束后的概率表；`pre_ctx[]` 在解析头部前快照，
+    作为 `pre_fc`（libvpx 的 `cm->frame_contexts[ctx]`）。
+  * 首帧必须先用 **VP9 默认概率表**初始化 `saved_ctx`（`mwv207_vp9_reset_probs()`），
+    否则第一次自适应从全 0 开始，第二个 inter 帧必崩。
+  * `update_factor`：intra-only 帧 112；`last_frame_type == KEY_FRAME` 时 128；否则 112；
+    `count_sat` 恒 24。`last_frame_type` 语义 = **上一帧**的类型（libvpx 在
+    `read_uncompressed_header` 开头把 `frame_type` 抄进 `last_frame_type`）。
+  * 树表（intra/partition/inter/switchable/tx/mv）必须按 **libvpx 的枚举编号**写：
+    VP9 的 `DC=0, V=1, H=2, D45=3, D135=4, D117=5, D153=6, D207=7, D63=8, TM=9`
+    （注意 D63/D153 的顺序与厂商 `mwv207_mb_prediction_mode` 枚举不同，本项目的
+    `sb_ymode_counts` 索引与 libvpx 一致，所以树表用 libvpx 编号即可）。
+  * `tx_mode == TX_MODE_SELECT` 时才更新 tx 概率；`switchable` 插值只在
+    `mcomp_filter_type == SWITCHABLE` 时更新；mv `hp` 只在 `allow_high_precision_mv` 时更新。
+  * 结果写回 `saved_ctx[frame_context_idx]`，下一帧 `vp9_get_probs()` 自然取到。
+- 验证：`--frame-parallel=0 --error-resilient=0` 的 640×360/10 帧、带 alt-ref + tile rows、
+  1280×720 三种流 **逐字节一致**；全部 20 个既有样片回归不变。
+- 踩坑记录：ASIC 计数区里 `inter_mode_counts` 是"节点分支计数"；解析器字段
+  `prev_is_key_frame` 从未被维护（改用驱动自己的 `prev_frame_key`）。
 
 #### B2（P2）中途改分辨率 / 参考尺寸与当前不同
 

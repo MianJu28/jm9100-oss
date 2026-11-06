@@ -767,6 +767,9 @@ struct mwv207_vp9_slice_header {
    uint32_t probs_decoded;
 };
 
+void
+mwv207_vp9_reset_probs(struct mwv207_vp9_slice_header *sh);
+
 uint32_t
 mwv207_vp9_parse_frame(struct mwv207_vp9_slice_header *sh,
                        const uint8_t *data, uint32_t size,
