@@ -1,7 +1,8 @@
 # VP9 硬解（D1）交接文档
 
 2026-11-06 · 状态：**VP9 Profile0 8bit 全部样片（单 tile / 多 tile-columns / tile rows / 隐藏
-alt-ref 帧 / 1080p）已与软件解码逐位一致**。修复过程与最终结论见 §8、§9。
+alt-ref 帧 / 1080p）已与软件解码逐位一致**。修复过程与最终结论见 §8、§9；
+**尚未解决的问题、已知限制与后续优先级见 §10（接手先看这一节）。**
 
 目标：VP9 Profile0 8bit 硬解输出与软件解码逐位一致后提交。
 
@@ -13,6 +14,10 @@ alt-ref 帧 / 1080p）已与软件解码逐位一致**。修复过程与最终�
   - `tc5`（512×128，2 tiles，lossless）左右两半均 99.00；`tc4`（1024×128，4 tiles）99.00；`tc30`（640×360，2 tiles，30 帧）30/30 帧 99.00；`vp9-kf`（640×360，2 tiles）99.00。
 - **tile rows 也已逐位一致**（§8.1、§9.3）：关键是写 `NUM_TILE_COLS_8K`(242)/`NUM_TILE_ROWS_8K`(244) 这一对，写 legacy 的 241/243 才会挂死；防护代码已在 ad087f5 中删除。
 - 逐位一致的样片清单（全部 Y/U/V PSNR 99.00）：w6(50 帧)、cb/blkramp/ramp、kf1t、kf2c/tc4/tc5/tc30(2 tile 列)、trb/tr30(2 tile 行)、tr0testsrc(30 帧)、eB/eF/eI、pan(30 帧带 GOLDEN/ALTREF)、tr_na、1080p `hd.webm`。
+- **适用边界（重要）**：以上结论只覆盖 **Profile0 / 8bit 4:2:0 / limited range / 不启用
+  segmentation / 编码器为 libvpx（frame_parallel_decoding_mode=1）** 的码流。
+  一旦开启分段（常见的 AQ 编码）、全范围色彩、10bit、show_existing_frame 包、>16 个 tile
+  等，目前会解错或未验证——完整清单见 **§10**。
 
 ## 2. 测试环境
 
@@ -278,7 +283,11 @@ ASIC 按 tile 表逐块回到**原始码流**取数据。现在默认直接指�
   是残差丢失还是参考选错；(b) 对比 ref=LAST 与 ref=GOLDEN 块在硬件寄存器/系数上下文上
   的差异（`COMP_PRED_*`、`REFERx_VALID`、`single_ref` 概率下标）。
 
-### 8.5.3 剩余问题
+### 8.5.3 剩余问题（历史快照，已被 §10 取代）
+
+> 本节是 2026-11-05 的记录。其中"复杂内容第 2 个 inter 帧起误差"已在 §9.1/§9.2 修完
+> （`ref_frame_map` 清零、dword38 共享）；loop filter 也在全部样片逐位一致后确认无误。
+> **当前仍开放的问题以 §10 为准。**
 
 - 复杂内容的**第 2 个 inter 帧**起仍有明显误差（31-47 dB）：MV 图像与 libvpx 语义不完全一致，
   且 ASIC 对时间候选的使用与规范有出入。候选方向：
@@ -369,3 +378,180 @@ active 参考"后：640×360 30 帧 0.57s（19ms/帧）、1080p 20 帧 1.8s（90
 等价性验证：清理前后的驱动在 17 个码流（14 个 `vp9-assets` 样片、`pan.webm`、
 1080p `hd.webm`、`tr_na.ivf`）上输出逐字节相同；对软件参考的 Y PSNR 全部 99.00；
 H.264/HEVC 解码与桌面渲染不受影响。
+
+## 10. 尚未解决的问题清单（2026-11-06）
+
+本节是接手后要做的全部已知工作。§8.5.3 是历史快照，**以本节为准**。
+排序原则：会不会让用户直接看到错误画面 → 兼容性 → 性能。
+
+| 编号 | 问题 | 现状 | 优先级 |
+|---|---|---|---|
+| A1 | 分段编码（segmentation）不支持 | 实测开 AQ 的流 12-15 dB | **P0** |
+| A2 | `show_existing_frame` 包未处理 | 会走普通解码路径 | P1 |
+| A4 | 全范围色彩（`color_range=1`）未传 | 恒按 limited 处理 | P1 |
+| B1 | tile 数 > 16 静默截断 | 4K 多 tile 会缺内容 | P1 |
+| A3 | `frame_parallel_decoding_mode=0` 的概率自适应缺失 | 未实现，现有样片恰好都是 1 | P2 |
+| B2 | 中途改分辨率 / 参考尺寸与当前不同 | 未验证 | P2 |
+| A5 | VP9 10bit（Profile 2）、4:2:2/4:4:4、alpha | 未实现、未广播 | P3 |
+| B3 | intra-only（非关键帧） | 未验证 | P3 |
+| B4 | 损坏/截断码流鲁棒性 | 未验证 | P3 |
+| B5 | 极小/非 16 对齐尺寸、4K | 未测 | P2 |
+| B6 | 多实例并发 | 未测 | P4 |
+
+### 10.1 已验证范围（边界）
+
+| 维度 | 已验证 | 说明 |
+|---|---|---|
+| Profile | VP9 Profile0（8bit 4:2:0） | `vainfo` 也只广播 Profile0 |
+| 帧类型 | key / inter(P) / 隐藏 alt-ref(show=0) / show=1 | 30 帧长流验证 |
+| 参考 | LAST / GOLDEN / ALTREF / 时间 MV | §9.1–9.3 |
+| tile | 单 tile / 多 tile-columns / 多 tile-rows / 2×2 混合 | 最多 4 个 tile |
+| 编码器 | ffmpeg(ffmpeg 内建 VP9 编码器与 libvpx-vp9)、vpxenc | realtime 与 good/cpu-used 0–8 |
+| 色彩 | limited range（`color_range=0`） | 全范围见 A4 |
+| 分段 | **关闭** | 开 AQ 即错，见 A1 |
+| 分辨率 | 128×128 – 1920×1080（最长 120 帧） | 4K 见 B5 |
+
+验收脚本 `/tmp/full_test.sh`：20 个码流（14 个 `vp9-assets` 样片 + `pan`/`hd`/`m720`/
+`m_er`/`m_noise`/`m_mandel`）逐流 `cmp`，全 `OK`；另跑 1080p60 120 帧长片逐字节一致，
+`dmesg` 无新增 "timed out"。
+
+### 10.2 功能性缺口
+
+#### A1（P0）分段编码 segmentation 不支持
+
+- 现象：任何启用 8 段分段的码流都解错。实测（`/tmp/aq{1,2,3}.webm`，ffmpeg
+  `-aq-mode 1/2/3` —— libvpx 的 AQ 就是靠 segmentation 实现）：
+  `aq1` 30/30 帧错（Y/U/V ≈ 12.85/12.84/12.83 dB）、`aq2` 30/30 帧错（12.21/12.14/12.08）、
+  `aq3` 帧 0 逐位一致、其后 29 帧错（14.93/15.26）。
+- 原因：`set_regs` 恒写 `JMDEC_SEGMENT_E=0`、`JMDEC_SEGMENT_UPD_E=0`
+  （`src/mwv207-umd/drivers/mwv207/video-codec/mwv207/mwv207_dec_vp9.c`），把分段全关掉。
+  解析器其实已经解出 `segment_feature_mode`（abs/delta）与 `segment_feature_data[3][8]`
+  （每段 REFPIC/SKIP/FILT/QUANT 四个特性，见
+  `common/mwv207_decoder_vp9_slice_header.c` 的 `vp9_decode_segment_header()`），只是没
+  程序化到硬件。
+- 硬件侧已有寄存器（`mwv207_video_dec_8170enum.h`）：`SEGMENT_TEMP_UPD_E`、
+  `SEGMENT_UPD_E`、`SEGMENT_E`，以及每段的 `REFPIC_SEG0..7`、`SKIP_SEG0..7`、
+  `FILT_LEVEL_SEG0..7`、`QUANT_SEG0..7`；厂商 UMD 的
+  `jmgpu_decoder_vp9_set_segment_register` 就是写这一组（§6.3）。
+- 难点：
+  1. `QUANT_SEG0`(315) 现在被当作 base_qindex 写死（§5 量化模型）。开分段后
+     abs 模式每段是绝对 qindex、delta 模式是 base+delta，`INIT_QP`(288) 与 294 的位域
+     重叠（§5）要重新梳理。
+  2. ASIC 还有 `SEGMENT_READ_BASE` / `SEGMENT_WRITE_BASE` 两个 scratch 区（驱动已按
+     `2 × align4k(w*h)` 分配），推测是逐块 segment id 的读写缓冲，时序未验证。
+  3. `FILT_LEVEL_SEG*`/`SKIP_SEG*` 与普通 LF/skip 的交互（`segment_feature_mode`
+     abs 时覆盖 base）需要对着 libvpx 的 `vp9/decoder/vp9_detokenize.c`、
+     `vp9_decodeframe.c` 逐项对齐。
+- 影响：真实世界 VP9（YouTube、Chrome 系编码器、绝大多数转码流水线）默认开 AQ，
+  **不解决就无法作为桌面/浏览器解码器使用**。建议作为下一个任务。
+
+#### A2（P1）show_existing_frame 未处理
+
+- `vp9_decode_uncompressed_header()` 解析了 `show_existing_frame` 与
+  `show_existing_frame_index`，但 `set_regs` 只在计算 `prev_was_inter` 时读了一下，
+  **没有改变解码流程**。
+- 后果：这类包（规范上只需把某个参考槽重新显示，负载常常只有 1 字节）会走普通解码
+  路径，`DEC_E=1` 后硬件没有有效码流可解，输出是 clear 值或上一帧，但 VA 时间戳照常推进。
+- 建议：`set_regs` 开头判断 `sh->show_existing_frame`，跳过解码并直接输出
+  `ref_store[show_existing_frame_index]`（或复制上一帧）。需要先造含该类包的样片
+  （vpxenc `--auto-alt-ref=1 --lag-in-frames=N` 通常会产生）。
+
+#### A4（P1）全范围色彩未传下去
+
+- 解析器解出 `sh->color_range`，但 VP9 路径没有传给 PP：
+  `mwv207_dec_pp_params_init()`（`mwv207_video_dec.c`）设置 `enabled/planar/tiled/cr_first/
+  shaper/align`，**不设 `video_range`**；调用处是
+  `mwv207_pp_unit_config ppu_ext_cfg[DEC_MAX_PPU_COUNT] = {0};`
+  ⇒ `video_range` 恒为 0（limited）。而 `mwv207_dec_ppu.c` 只在
+  `ppu_ext_cfg->video_range` 非 0 时做 full-range 转换。
+- 后果：`-color_range pc` 的流（HDR 风格素材、部分剪辑软件导出）会被当 limited 处理，
+  黑/白电平错（16..235 vs 0..255），表现为发灰或过曝。
+- 建议：给 `mwv207_dec_pp_params_init()` 增加 range 参数（或读
+  `dec->dec_param.video_range`），VP9 调用处传 `sh->color_range`；H.264/HEVC 路径同样
+  有这个字段，可一并检查。
+
+#### B1（P1）tile 数 > 16 被静默截断
+
+- `mwv207_dec_vp9.c` 的 tile 表构造：`uint16_t cinfo[16], rinfo[16]; if (n > 16) n = 16;`，
+  且 `st->tile_off[16]` / `st->tile_len[16]`；`n = ncol * nrow`。
+- 4K 常见配置 `-tile-columns 3`（8 列）或 `8 列 × 2 行 = 16` 刚好卡在边界；再高
+  （如 8×4=32）只解前 16 个 tile，其余 tile 不写，画面出现整块旧内容。
+- 建议：上限提到 32（甚至 64），并把截断改成显式拒绝（`DEC_E=0` + 日志），杜绝静默错误。
+
+#### A3（P2）frame_parallel_decoding_mode=0 的概率自适应缺失
+
+- 规范 + libvpx：`if (!error_resilient && !frame_parallel_decoding_mode)` 时，解码器必须用
+  **本帧符号计数**更新下一帧概率（`vp9/decoder/vp9_decodeframe.c` 末尾
+  `vp9_adapt_coef_probs` / `vp9_adapt_mode_probs` / `vp9_adapt_mv_probs`）。
+- 我们的驱动从不读 ASIC 计数区（`VP9_COUNTER_OFFSET 0xea0`；ASIC 确实会写，640×360
+  一帧后该区有 856 个非零 `u32`、总和 11163），也不做 CPU 侧自适应。
+- 现有样片没暴露问题，是因为 libvpx/ffmpeg 产出的流 `frame_parallel_decoding_mode=1`
+  （逐流 dump 确认 `par=1`）。其它编码器（部分硬件编码器、`--frame-parallel=0`）的流会漂移。
+- 实现路径：读计数区 → 按 libvpx 的 `vp9_adapt_*` 算法（或厂商 UMD 的
+  `AdaptProb`/`UpdateCoefProbs`/`Vp9StoreAdaptProbs`）更新 scratch 概率表。
+
+#### B2（P2）中途改分辨率 / 参考尺寸与当前不同
+
+- 参考缩放恒写 `1<<14`（§5），即假定参考与当前同尺寸。VP9 允许参考帧与当前帧尺寸不同
+  （按比例缩放取参考）以及流中途改分辨率（`render_and_frame_size_different`）。
+- `sh->width/height` 每帧刷新、参考 w/h 也按当帧写，所以"改尺寸后续解"大概率能用，但
+  未测；且 scratch 只增不减、staging/参考槽跨尺寸内容的行为未验证。
+- 建议：造"前 15 帧 640×360、后 15 帧 320×180"的流，以及用 `-resize`/`-force_key_frames`
+  切换尺寸的样片。
+
+#### A5（P3）10bit（Profile 2）、4:2:2/4:4:4（Profile 1/3）、alpha
+
+- `vainfo` 只广播 `VAProfileVP9Profile0`（H.264High10/HEVCMain10 有 10bit 路径），
+  所以 10bit VP9 目前根本不会进这个驱动。
+- 要支持 Profile 2 需要：广播 profile、P010 输出（`mwv207_dec_pp_params_init()` 已有 10bit
+  分支且 H.264/HEVC 走通）、解码侧 `BIT_DEPTH_Y/C_MINUS8`(201/202)、反量化/扫描表按
+  bit_depth 重算、`out_cut_8bits` 之外的真 10bit 输出路径。
+- Profile 1（4:2:2）/ Profile 3（4:4:4）需要色彩格式寄存器（chroma 采样、SAS/BSD 表），
+  完全未探索。
+- VP9 alpha（webm alpha）需要第二平面与 alpha 混合寄存器，未做。
+
+#### B3（P3）intra-only（非关键帧）未单独验证
+
+- `IDR_PIC_E` 已按 `key_frame || intra_only` 写，但手头没有"intra_only=1 且非关键帧"的
+  样片（`eI` 全关键帧流）。这类帧多见于 seek/入场，建议补样例（vpxenc 用
+  `--kf-max-dist` + 强制 intra-only 的构造，或直接改 IVF 的 frame_type）。
+  
+#### B4（P3）损坏/截断码流鲁棒性
+
+- 解析失败时统一 `DEC_E=0`、输出保留上一帧，没有与 libvpx 的错误隐藏行为对比，
+  `vaEndPicture` 仍返回成功。播放器/浏览器遇到坏包可能"冻结"而不是黑帧或丢帧。
+
+#### B5（P2）极小尺寸、非 16 对齐、4K
+
+- 最小测过 128×128；VP9 最小 64×64、宽度可为偶数非 16 对齐（如 176×144）。`out_w_y`
+  的 align 逻辑与 PP 的 `DEC_ALIGN_64B` 组合需要单独验证。
+- 4K（3840×2160）没跑过，会同时暴露 B1（tile 上限）、scratch 大小与性能问题。
+
+#### B6（P4）多实例并发
+
+- 每个 `mwv207_video_dec` 有自己的 CS/reg_buf，但 semaphore、job 提交路径的并发行为
+  没测过（两个 VA 上下文同时解 VP9，或一边 VP9 一边 H.264）。
+
+### 10.3 性能/架构（不算错误，但值得做）
+
+- **关键帧 16 槽参考拷贝**：`refresh_frame_flags=0xff` 时 `vp9_refresh_slots()` 会
+  memcpy 16 份 `luma*3/2`（1080p 每份 3.1MB、合计 ≈50MB；staging 内存实测 ~60MB/s
+  ⇒ 按该带宽估算单个关键帧的开销约 0.8s）。1080p60 120 帧整片 11.4s（含 hwdownload 落盘）里，关键帧那
+  几帧明显比 P 帧慢，主要就是这笔拷贝。
+- **单线程 + 同步等待**：`mwv207_video_decoder.c` 用 `mwv207_video_cs_submit_wait()`，
+  1080p ≈90ms/帧；后续可做异步 fence + 多实例流水。
+- **PP 每帧全量重配**：`mwv207_pp_set_regs()` 每帧写 ~40 个寄存器 × PP unit 数，
+  帧间参数不变时可跳过。
+- **MV 图像拷贝**：已从"每帧 16×整幅"优化到"每帧 3×`sbw*sbh*1024`"（§9.4），
+  1080p ≈510KB×3；若以后做 GPU blit 可进一步省。
+
+### 10.4 复现素材与工具（/tmp 重启会清空）
+
+- 验收：`/tmp/full_test.sh`（20 流逐流 `cmp`）。
+- A1 复现：`/tmp/aq{1,2,3}.webm` + `aq*_sw.yuv`（重建命令见 §8.7 的 testsrc2 素材配方，
+  加 `-aq-mode N`）。
+- libvpx 探针：`/tmp/libvpx-src`（1.12.0）+ `/home/admin/vp9-tools/libvpx-probes.py`
+  （`VX_MIDUMP`；编解码需要 `--enable-examples`，`MODE_INFO` 字段是 `sb_type`）。
+- 厂商证据：`/home/admin/vendor-boot.log`（寄存器真值）、`/tmp/jm.asm`（UMD 反汇编）、
+  `/tmp/jmnames.txt`（枚举 id → 名字）。
+- 历史样片：`/home/admin/vp9-assets/`（14 个 webm + `_sw.yuv`）。
