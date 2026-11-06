@@ -1,6 +1,7 @@
 # VP9 硬解（D1）交接文档
 
-2026-11-04 · 状态：**单 tile 与多 tile-columns 码流已与软件逐位一致**；tile rows 不支持（会挂死，已防护跳过）。
+2026-11-06 · 状态：**VP9 Profile0 8bit 全部样片（单 tile / 多 tile-columns / tile rows / 隐藏
+alt-ref 帧 / 1080p）已与软件解码逐位一致**。修复过程与最终结论见 §8、§9。
 
 目标：VP9 Profile0 8bit 硬解输出与软件解码逐位一致后提交。
 
@@ -10,7 +11,8 @@
 - **单 tile 码流现在逐位一致**：128×128 棋盘/渐变、640×360 彩条、640×360 testsrc2 30 帧（realtime 与 crf20 两种编码）、`w6.webm` 50 帧，全部 Y/U/V PSNR 99.00（即逐位相同），涵盖 4×4/8×8/16×16/32×32 变换、intra 与 inter(P) 帧。
 - **多 tile-columns 也已逐位一致**（见第 6 节）：关键是驱动把 tile 负载重新拷进 scratch 流缓冲，并在**每个 tile 前（含最后一个）**补 4 字节大端长度；硬件自己按前缀逐个解 tile，不需要"按 tile 追加命令"。
   - `tc5`（512×128，2 tiles，lossless）左右两半均 99.00；`tc4`（1024×128，4 tiles）99.00；`tc30`（640×360，2 tiles，30 帧）30/30 帧 99.00；`vp9-kf`（640×360，2 tiles）99.00。
-- 仍不支持：**tile rows**（`log2_tile_rows > 0`）。这类码流会让 DEC 引擎挂死（第 5 节），当前全部跳过并返回占位帧；探索记录见第 6.2 节。
+- **tile rows 也已逐位一致**（§8.1、§9.3）：关键是写 `NUM_TILE_COLS_8K`(242)/`NUM_TILE_ROWS_8K`(244) 这一对，写 legacy 的 241/243 才会挂死；防护代码已在 ad087f5 中删除。
+- 逐位一致的样片清单（全部 Y/U/V PSNR 99.00）：w6(50 帧)、cb/blkramp/ramp、kf1t、kf2c/tc4/tc5/tc30(2 tile 列)、trb/tr30(2 tile 行)、tr0testsrc(30 帧)、eB/eF/eI、pan(30 帧带 GOLDEN/ALTREF)、tr_na、1080p `hd.webm`。
 
 ## 2. 测试环境
 
@@ -83,7 +85,7 @@ ffmpeg -v error -y -hwaccel vaapi -hwaccel_device /dev/dri/renderD128 \
 
 为什么不是"按 tile 追加命令"：厂商 `decode_frames` 的 `ctx[0x9cf0]` 分支确实暗示多命令，但实测**每 tile 追加命令会直接挂死引擎**（`'av:vp9:df0'` 超时、`irq state 0x00040100`，6 次重试后放弃），且首条 `DEC_E=1`/后续 `DEC_E=0`、`TILE_ENABLE=0`、每命令都 `DEC_E=1` 等变体都挂。真正缺的是"最后一个 tile 也要有长度前缀"，硬件按前缀自走，一条命令即可。
 
-### 6.2 tile rows：不支持，已防护
+### 6.2 tile rows：已解决（本节记录的是探索过程，结论见 §8.1 与 §9.3）
 
 - tile rows 的帧（`log2_tile_rows>0`，例如 `vp9-640.webm` 的 inter 帧、`-tile-rows 1` 编码的 `tr2/trm`）只要 `TILE_ENABLE=1` 就会挂死 DEC 引擎（第 5 节）；`DEC_TILE_INT_E`、`NUM_TILE_ROWS_8K`(244) 取值、tile 行 8 KiB 对齐、把表项换成流字节偏移等都试过，均无用（要么仍挂，要么只有第一行正确）。
 - 用 1×1 描述符（vendor 在 `ncol==1` 时走的分支）+ `TILE_ENABLE=1` 可以不挂，但**只有第一 tile 行正确**（`trm` 640×256：row0 99.00、row1 12 dB），第二行不参与解码；`NUM_TILE_ROWS` 设为 2、`244` 设 1/2/4 都不改变结果。
@@ -142,7 +144,7 @@ ioctl（`_IOC(_IOC_NONE,0x65,0xd,0)`、`_IOC(_IOC_READ,0x6c,0x8,0x8)` …）。�
 - 30 帧实拍（单 tile，testsrc2 640×360，realtime 与 crf20）：30/30 帧逐位一致 ✅
 - 单 tile 各类合成码流（4×4/8×8/16×16/32×32 TX、棋盘、渐变、噪声）：逐位一致 ✅
 - 多 tile-columns：`tc5`（2 tiles）99.00、`tc4`（4 tiles）99.00、`tc30`（30 帧 2 tiles）30/30 帧 99.00、`vp9-kf` 99.00 ✅
-- tile rows：❌ 不支持；已防护跳过（不会挂死引擎），占位帧输出（见第 6.2 节）
+- tile rows：✅ 2 tile 行逐位一致（`trb` 2 帧、`tr30` 30 帧；不需要任何环境变量，见 §8.1/§9.3）
 - 单 tile 无 `job ... timed out`（`dmesg` 清空后跑解码无内核报错）✅；tile rows 会超时挂死（已防护，见第 5 节）
 ## 8. 2026-11-05 进展（未提交工作树）
 
@@ -305,3 +307,66 @@ cp ref/oh-mesa/.../build-full/src/gallium/targets/va/libmwv207_drv_video.so \
 MWV207_VP9_TILEROW=1 MWV207_VP9_CLEAR=1 \
 LIBVA_DRIVERS_PATH=/tmp/gd3 LIBVA_DRIVER_NAME=mwv207 ffmpeg ...
 ```
+
+## 9. 2026-11-06 收尾：剩余三个根因与最终状态
+
+### 9.1 GOLDEN/ALTREF：`ref_frame_map` 被每帧清零
+
+`set_regs` 开头 `memset(sh, 0, sizeof(*sh))` 会把 `ref_frame_map[]` 一起清成 0，
+于是 `active_ref_idx` 里的 raw 0/1/2 全部映射到 slot 0 —— GOLDEN/ALTREF 块实际拿
+LAST 的内容做预测。修复：memset 之后立刻填恒等映射（我们按 `refresh_frame_flags`
+把每帧写进它自己的槽，槽号即帧号）。
+
+判据：`VP9REFIDX raw=%d mapped=%d` 打印（临时调试）显示 raw=1/2 而 mapped=0。
+修好后 `pan` 从"帧 0-1 逐位一致"变成"帧 0-10 逐位一致"。
+
+### 9.2 ALTREF 预测恒为 clear 值：`REFER_LTERM_E` 与 AREF 缩放共用一个 dword
+
+`REFER_LTERM_E` 与 `AREF_HOR/VER_SCALE` 在 `hw_dec_reg_spec[]` 里映射到**同一个 hw
+dword 38**（LTERM 是整 32 位置位，缩放是 16 位两个字段）。原来的顺序是先写参考寄存器
+（含 AREF 缩放 16384）再写 `REFER_LTERM_E=0`，后者的位域写会把 AREF 缩放清零，导致
+所有 ALTREF 块的预测恒为 clear 值 0x11（画面里表现为一块块 17 的灰色），而 LAST/GOLDEN
+不受影响。
+
+修复：把 `JMDEC_NO_FWD_REF_E` / `JMDEC_REFER_VALID_E` / `JMDEC_REFER_LTERM_E` 三连写
+移到 `vp9_write_ref_regs()` **之前**，让缩放值最后落盘。修好后 `pan` 30/30 帧逐位一致，
+tr30/tc30 的隐藏 alt-ref 帧也正常。
+
+教训：写寄存器前先查 `hw_dec_reg_spec[]` 的 `(hw_dword, width, shift)`，同一 dword 的
+字段互相踩是静默的。
+
+### 9.3 时间 MV 图像：16 字节/8x8 块、按 64x64 超级块排列
+
+- 记录格式（大端）：`[0..5]=0`、`[6]=ref_frame[0]`、`[7]=ref_frame[1]`、
+  `[8..9]=mv[0].col`、`[10..11]=mv[0].row`、`[12..13]=mv[1].col`、`[14..15]=mv[1].row`，
+  都是 1/8 像素的 i16；`ref_frame` 0=INTRA、1=LAST、2=GOLDEN、3=ALTREF。
+- 索引：`((sb_y*sbw + sb_x)*64) + iy*8 + ix`（`sbw = ceil(w/64)`），即每帧只有
+  `sbw*sbh*1024` 字节会被写。
+- VP9 的时间 MV 候选恒为"上一解码帧"的 MV 图像（`cm->prev_frame->mvs`），ASIC 通过
+  **每个参考的 `REFERx_DBASE`** 去读，所以被本帧引用的每个参考槽都必须持有上一帧的
+  MV 图像。实现上不必每帧镜像 16 份：在 `vp9_write_ref_regs()` 里（此时 slot 0 还是
+  上一帧的 MV）给三个 active 参考各拷一份 `sbw*sbh*1024` 字节即可。
+
+### 9.4 性能
+
+scratch 是 STAGING（非缓存）内存，memcpy 只有 ~60MB/s：曾按整幅 `luma*3/2` 每帧镜像
+16 份，640×360 每帧 95ms、1080p 0.7s/帧。改成"只拷 `sbw*sbh*1024` 字节 + 只拷 3 个
+active 参考"后：640×360 30 帧 0.57s（19ms/帧）、1080p 20 帧 1.8s（90ms/帧）。
+
+### 9.5 最终状态与验证
+
+- 提交：`ad087f5`（GOLDEN/ALTREF + 时间 MV + 去掉 tile-row 防护）、`2a2c663`（MV 拷贝按需）。
+- 回归脚本 `/tmp/reg2.sh`（遍历 `/home/admin/vp9-assets/*.webm`）、`/tmp/reg.sh`
+  （w6/kf2c/trb/tr30/tc30/tr0testsrc/pan/tr_na）：全部 `bad=0`。
+- 交叉验证：H.264（libx264 crf23）与 HEVC（libx265 crf28）用同一驱动解码也逐位一致，
+  替换系统驱动是安全的。
+- 1080p 样片 `/tmp/hd.webm`（1920×1080、20 帧、realtime crf33）逐位一致。
+
+### 9.6 仍未清理的调试开关
+
+`MWV207_VP9_DBG`（trace）、`MWV207_VP9_DUMP` / `DUMPS`（staging 转储）、
+`MWV207_VP9_MVDUMP`、`MWV207_VP9_REGSET` / `REGD`、`MWV207_VP9_CLEAR`、
+`MWV207_VP9_SLEN`/`SB`/`SOFF`/`TMODE`/`NOLF`/`PROBBUMP`/`ZCTR`/`NOTY`/`NOHINT`/`NOREF`/
+`CTRSZ`/`SCRZERO`/`EC`/`BD`/`RAWQP`/`ABSQP`/`SWAP`/`TABSWAP`/`HCBS`/`STRIDE`/`SEGFILT`/
+`OUTTILE`/`COPY`/`STREAM_FULL`/`BIGBUF`/`NOPP`/`OUTBD`/`TBASE`/`SLENADD`。
+功能上全部是 env 门控（默认不生效），但代码里仍是历史包袱，后续可整体删除。
