@@ -119,6 +119,7 @@ STAMP="/run/mwv207-oss-switch.stamp"
 
 LDCONF="/etc/ld.so.conf.d/00-mwv207-oss.conf"
 ENVIRONMENT_D="/etc/environment.d/60-mwv207-oss.conf"
+STACK_ENV_VENDOR="/etc/environment.d/90-mwv207-vendor.conf"
 PROFILE_D="/etc/profile.d/60-mwv207-oss.sh"
 SYS_ENVIRONMENT="/etc/environment"
 OPENCL_DIR="/etc/OpenCL/vendors"
@@ -2037,11 +2038,14 @@ stack_stage_boot_args() {
             grub_token_set "modprobe.blacklist=mwv207" 1 || return 1
             grub_token_set "modprobe.blacklist=jmgpu" 0 || return 1
             printf '%s\n' jmgpu > /etc/modules-load.d/zz-mwv207-stack.conf
+            # 厂商 VA 驱动叫 jmgpu（/usr/lib/<arch>/dri/jmgpu_drv_video.so），
+            # 不能靠 libva 猜；写进 environment.d 只影响新登录的会话。
+            printf '%s\n' 'LIBVA_DRIVER_NAME=jmgpu' > "$STACK_ENV_VENDOR"
             ;;
         oss|builtin)
             grub_token_set "modprobe.blacklist=mwv207" 0 || return 1
             grub_token_set "modprobe.blacklist=jmgpu" 1 || return 1
-            rm -f /etc/modules-load.d/zz-mwv207-stack.conf
+            rm -f /etc/modules-load.d/zz-mwv207-stack.conf "$STACK_ENV_VENDOR"
             ;;
     esac
     return 0
