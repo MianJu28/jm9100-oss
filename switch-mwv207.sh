@@ -2004,25 +2004,43 @@ stack_prepare_to() {
 # 实测: 停 lightdm 后 mwv207 的 refcnt 仍卡在 2 (fuser 看不到, 扫 /proc 也杀不掉),
 # modprobe -r 永远 "Module is in use"。用户决定: 不再硬碰硬, 直接重启释放 ——
 # 阶段 1 把"开机要加载哪个模块/哪个用户态"准备好, 然后 reboot, 开机后自检。
+# 开机参数里要同时管住两条黑名单:
+#   OSS/builtin  -> 黑 jmgpu(否则厂商模块可能先抢到卡), 不黑 mwv207
+#   vendor       -> 黑 mwv207, 不黑 jmgpu, 并让 jmgpu 随 systemd-modules-load 自启
+grub_token_set() {   # $1=token $2=1 加入 / 0 移除
+    local tok="$1" want="$2"
+    cp -a /etc/default/grub /etc/default/grub.bak-stack-vendor 2>/dev/null || true
+    python3 - "$tok" "$want" <<'PY'
+import re, sys
+tok, want = sys.argv[1], sys.argv[2] == '1'
+path = '/etc/default/grub'
+s = open(path, encoding='utf-8').read()
+m = re.search(r'^GRUB_CMDLINE_LINUX_DEFAULT="([^"]*)"', s, re.M)
+if not m:
+    sys.exit(1)
+tokens = [t for t in m.group(1).split() if t != tok]
+if want:
+    tokens.insert(0, tok)
+s = s[:m.start(1)] + ' '.join(tokens) + s[m.end(1):]
+open(path, 'w', encoding='utf-8').write(s)
+PY
+    [ $? = 0 ] || { warn "  改写 /etc/default/grub 失败"; return 1; }
+    update-grub >/dev/null 2>&1 || warn "  update-grub 失败"
+    if [ "$want" = 1 ]; then log "  开机参数: 已加入 $tok"; else log "  开机参数: 已移除 $tok"; fi
+    return 0
+}
+
 stack_stage_boot_args() {
-    local target="$1" g=/etc/default/grub line="modprobe.blacklist=mwv207"
+    local target="$1"
     case "$target" in
         vendor)
-            if ! grep -q "$line" "$g" 2>/dev/null; then
-                cp -a "$g" "$g.bak-stack-vendor"
-                sed -i "s|^GRUB_CMDLINE_LINUX_DEFAULT=\"|GRUB_CMDLINE_LINUX_DEFAULT=\"$line |" "$g"
-                update-grub >/dev/null 2>&1 || warn "  update-grub 失败"
-                log "  开机参数: 已加入 $line (原文件备份 $g.bak-stack-vendor)"
-            fi
+            grub_token_set "modprobe.blacklist=mwv207" 1 || return 1
+            grub_token_set "modprobe.blacklist=jmgpu" 0 || return 1
             printf '%s\n' jmgpu > /etc/modules-load.d/zz-mwv207-stack.conf
             ;;
         oss|builtin)
-            if grep -q "$line" "$g" 2>/dev/null; then
-                cp -a "$g" "$g.bak-stack-vendor"
-                sed -i "s|$line ||" "$g"
-                update-grub >/dev/null 2>&1 || warn "  update-grub 失败"
-                log "  开机参数: 已移除 $line"
-            fi
+            grub_token_set "modprobe.blacklist=mwv207" 0 || return 1
+            grub_token_set "modprobe.blacklist=jmgpu" 1 || return 1
             rm -f /etc/modules-load.d/zz-mwv207-stack.conf
             ;;
     esac
@@ -2067,6 +2085,15 @@ stack_postboot() {
     log "==== [postboot] 开机自检: 目标 $target ===="
     sleep 3
     cur=$(stack_kmd_state 2>/dev/null); umd=$(stack_umd_state 2>/dev/null)
+    if [ "$cur" = none ]; then
+        warn "  开机后没有任何 GPU 模块加载, 尝试兜底 modprobe 一次"
+        case "$target" in
+            vendor) modprobe jmgpu 2>>"$STACK_LOG" || true ;;
+            *)      modprobe mwv207 2>>"$STACK_LOG" || true ;;
+        esac
+        sleep 2
+        cur=$(stack_kmd_state 2>/dev/null); umd=$(stack_umd_state 2>/dev/null)
+    fi
     res=failed
     if [ "$cur" = "$target" ]; then
         case "$target" in
@@ -2206,6 +2233,7 @@ stack_main() {
         status)  shift; stack_status "$@" ;;
         apply)   shift; stack_apply_stage "$@" ;;
         postboot) shift; stack_postboot ;;
+        bootargs) shift; need_root "stack bootargs"; stack_stage_boot_args "${1:-}" ;;
         prepare) shift; need_root "stack prepare"; stack_prepare_to "$@" ;;
         builtin|oss|vendor) stack_switch_to "$1" ;;
         menu)    shift; stack_menu "$@" ;;
