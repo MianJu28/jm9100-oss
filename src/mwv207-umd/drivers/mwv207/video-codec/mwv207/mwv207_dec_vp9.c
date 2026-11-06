@@ -125,7 +125,7 @@ struct mwv207_vp9_state {
    struct mwv207_video_buffer *ref_store;
    struct mwv207_video_buffer *pending;
    uint32_t pending_flags, pending_luma;
-   uint32_t ref_buf_size, ref_luma;
+   uint32_t ref_buf_size, ref_luma, ref_frame_bytes;
    uint32_t width;
    uint32_t height;
    /* Tile payload of the current frame: the hardware walks the tiles by
@@ -263,7 +263,7 @@ static void
 vp9_write_ref_regs(struct mwv207_vp9_state *st,
                    struct mwv207_video_reg_buf *reg_buf,
                    struct mwv207_vp9_slice_header *sh, uint32_t luma_size,
-                   uint32_t y_stride)
+                   uint32_t frame_bytes, uint32_t y_stride)
 {
    uint32_t k;
 
@@ -274,7 +274,7 @@ vp9_write_ref_regs(struct mwv207_vp9_state *st,
    for (k = 0; k < 3; k++) {
       uint32_t slot = sh->active_ref_idx[k];
       struct mwv207_bo *bo;
-      uint64_t off = (uint64_t)slot * (luma_size * 3 / 2);
+      uint64_t off = (uint64_t)slot * frame_bytes;
 
       if (slot >= 16)
          continue;
@@ -333,9 +333,10 @@ vp9_write_ref_regs(struct mwv207_vp9_state *st,
 static void
 vp9_refresh_slots(struct mwv207_video_decoder *decoder,
                   struct mwv207_vp9_state *st, uint32_t refresh_flags,
-                  struct mwv207_video_buffer *buf, uint32_t luma_size)
+                  struct mwv207_video_buffer *buf, uint32_t frame_bytes,
+                  uint32_t luma_size)
 {
-   uint32_t i, need = luma_size * 3 / 2;
+   uint32_t i, need = frame_bytes;
 
    if (!buf || !buf->res || !buf->res->bo)
       return;
@@ -346,6 +347,7 @@ vp9_refresh_slots(struct mwv207_video_decoder *decoder,
          decoder->base.context, need * 16, PIPE_USAGE_STAGING);
       st->ref_buf_size = st->ref_store ? need * 16 : 0;
       st->ref_luma = luma_size;
+      st->ref_frame_bytes = frame_bytes;
    }
    if (!st->ref_store || !st->ref_store->res)
       return;
@@ -1028,10 +1030,21 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
                               * dec->dec_param.bit_depth,
                               ALIGN(dec->dec_param.w_align) * 8) / 8;
       /* The tiled NV12 layout stores groups of four luma rows per stride,
-       * so one luma plane is stride * (height / 4) bytes. */
-      uint32_t luma_size = out_w_y * (height / 4);
+       * so one luma plane is stride * ceil(height / 4) bytes; the chroma
+       * planes use half that stride and ceil(height / 8) rows.  Sizes must
+       * be rounded up, otherwise e.g. 640x358 loses the padding rows and the
+       * chroma planes overlap the luma tail. */
+      uint32_t chroma_rows = (height + 6) / 8;
+      /* The decode unit always pads the luma plane to twice the number of
+       * chroma row groups (i.e. to a multiple of eight lines), so derive the
+       * luma size from the chroma rows instead of from height / 4. */
+      uint32_t luma_rows = 2 * chroma_rows;
+      uint32_t luma_size = out_w_y * luma_rows;
+      uint32_t chroma_size = (out_w_y / 2) * chroma_rows;
+      uint32_t frame_bytes = luma_size + 2 * chroma_size;
       vp9_luma_size = luma_size;
-      uint32_t buff_size = NEXT_MULTIPLE(luma_size * 3 / 2, 16);
+      st->ref_frame_bytes = frame_bytes;
+      uint32_t buff_size = NEXT_MULTIPLE(frame_bytes, 16);
 
       buf->mwv207_offset_info.luma_size = luma_size;
       if (!buf->res)
@@ -1049,7 +1062,7 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
       if (sh->show_existing_frame) {
          uint32_t idx = sh->show_existing_frame_index & 7u;
          uint32_t slot = (uint32_t)sh->ref_frame_map[idx];
-         uint32_t need = luma_size * 3 / 2;
+         uint32_t need = frame_bytes;
 
          if (st->ref_store && st->ref_store->res && slot < 16 &&
              st->ref_luma == luma_size) {
@@ -1205,7 +1218,7 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
    reg_buf->set_reg(reg_buf, JMDEC_NO_FWD_REF_E, 0);
    reg_buf->set_reg(reg_buf, JMDEC_REFER_VALID_E, 1);
    reg_buf->set_reg(reg_buf, JMDEC_REFER_LTERM_E, 0);
-   vp9_write_ref_regs(st, reg_buf, sh, vp9_luma_size, out_w_y);
+   vp9_write_ref_regs(st, reg_buf, sh, vp9_luma_size, st->ref_frame_bytes, out_w_y);
 
    vp9_set_addr(reg_buf, JMDEC_PROB_TAB_BASE_LSB, st->scratch->res->bo,
                 VP9_PROB_OFFSET);
@@ -1324,7 +1337,7 @@ mwv207_dec_vp9_submit_done(struct mwv207_video_decoder *decoder)
    vp9_adapt_probs(st, &st->sh);
    st->prev_frame_key = st->sh.key_frame;
    vp9_refresh_slots(decoder, st, st->pending_flags, st->pending,
-                     st->pending_luma);
+                     st->ref_frame_bytes, st->pending_luma);
    st->pending = NULL;
 }
 
