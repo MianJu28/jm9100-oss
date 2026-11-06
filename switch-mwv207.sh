@@ -1188,6 +1188,43 @@ wait_for_refcnt_zero() {
     return 1
 }
 
+# 扫描所有持有 DRM/FB 设备文件的进程（fuser 有时看不到，例如 fd 在别的挂载
+# 命名空间或 /dev/fb0 上；实测停 lightdm 后 refcnt 仍卡在 2 就是这种情况）。
+drm_fd_pids() {
+    local f t pid me
+    me=$$
+    for f in /proc/[0-9]*/fd/*; do
+        t=$(readlink "$f" 2>/dev/null) || continue
+        case "$t" in
+            /dev/dri/*|/dev/fb[0-9]*) ;;
+            *) continue ;;
+        esac
+        pid=$(printf '%s' "${f#/proc/}" | cut -d/ -f1)
+        [ "$pid" = "$me" ] && continue
+        [ "$pid" = 1 ] && continue
+        printf '%s\n' "$pid"
+    done | sort -u
+}
+
+# 强制把 mwv207/jmgpu 的引用降到 0：停完 lightdm 仍被桌面应用/残留 X 持有时使用。
+# $1=模块名 $2=最长等待秒数
+force_release_drm() {
+    local mod="${1:-mwv207}" max="${2:-45}" waited=0 rc p pid
+    while :; do
+        rc=$(cat "/sys/module/$mod/refcnt" 2>/dev/null || echo 0)
+        [ "$rc" = 0 ] && return 0
+        [ "$waited" -ge "$max" ] && { warn "  $mod refcnt 仍为 $rc（等待 ${max}s 超时）"; return 1; }
+        pkill -TERM -x Xorg 2>/dev/null || true
+        fuser -k /dev/dri/card0 /dev/dri/renderD128 /dev/fb0 >/dev/null 2>&1 || true
+        for pid in $(drm_fd_pids); do
+            kill -TERM "$pid" 2>/dev/null || true
+            p=$(ps -o args= -p "$pid" 2>/dev/null | cut -c1-40)
+            log "  释放设备: pid=$pid $p"
+        done
+        sleep 2; waited=$((waited + 2))
+    done
+}
+
 # 纯换模块：**不管显示管理器**（调用方负责停/起）。
 # 拆出来的原因：全栈切换要"停一次 lightdm、中间换模块、再由 umd 统一拉起"，
 # 若用 kmd_swap_module 则会多一轮 start_display。
@@ -1214,16 +1251,26 @@ kmd_reload_module() {
         fi
     fi
 
-        # 即使 /dev/dri 已无人占用, 模块引用也不会归零 —— 内核 VT 控制台 (fbcon)
+    # 即使 /dev/dri 已无人占用, 模块引用也不会归零 —— 内核 VT 控制台 (fbcon)
     # 绑在 GPU 的 DRM framebuffer 上, 常驻 1 个引用。必须先解绑。
     fbcon_bind 0
-    if ! wait_for_refcnt_zero 15; then
-        warn "  模块引用仍未归零 (refcnt=$(cat /sys/module/mwv207/refcnt 2>/dev/null)); 仍尝试 rmmod"
+    if ! wait_for_refcnt_zero 10; then
+        warn "  模块引用仍未归零 (refcnt=$(cat /sys/module/mwv207/refcnt 2>/dev/null)); 强制释放残留占用者"
+        if ! force_release_drm mwv207 45; then
+            warn "  仍无法释放 mwv207 引用，仍尝试 rmmod"
+        fi
     fi
 
     log "  卸载旧模块并加载新模块"
-    if ! run modprobe -r mwv207; then
-        warn "  modprobe -r 失败（refcnt=$(cat /sys/module/mwv207/refcnt 2>/dev/null)）"
+    local attempt=0
+    while [ "$attempt" -lt 3 ]; do
+        attempt=$((attempt + 1))
+        run modprobe -r mwv207 && break
+        warn "  modprobe -r 失败(${attempt}/3)（refcnt=$(cat /sys/module/mwv207/refcnt 2>/dev/null)）"
+        force_release_drm mwv207 15 || true
+        sleep 2
+    done
+    if [ -d /sys/module/mwv207 ]; then
         fbcon_bind 1
         return 1
     fi
@@ -1515,8 +1562,19 @@ vendor_switch_kmd() {
     fi
     if vendor_oss_loaded; then
         fbcon_bind 0
-        wait_for_refcnt_zero 15 || warn "mwv207 refcnt 未归零: $(cat /sys/module/mwv207/refcnt 2>/dev/null)"
-        if ! run modprobe -r mwv207; then
+        if ! wait_for_refcnt_zero 10; then
+            warn "mwv207 refcnt 未归零: $(cat /sys/module/mwv207/refcnt 2>/dev/null), 强制释放残留占用者"
+            force_release_drm mwv207 45 || warn "  仍无法释放 mwv207 引用"
+        fi
+        local attempt=0
+        while [ "$attempt" -lt 3 ]; do
+            attempt=$((attempt + 1))
+            run modprobe -r mwv207 && break
+            warn "  modprobe -r 失败(${attempt}/3)（refcnt=$(cat /sys/module/mwv207/refcnt 2>/dev/null)）"
+            force_release_drm mwv207 15 || true
+            sleep 2
+        done
+        if [ -d /sys/module/mwv207 ]; then
             fbcon_bind 1
             die "mwv207 卸载失败"
         fi
