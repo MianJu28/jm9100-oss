@@ -6,11 +6,24 @@
 # (内核态, 483 行) 合并而来。两者操作的对象完全不同, 合并的动机是"一个入口、
 # 一次看全": 判断桌面为什么是软件渲染时, 需要同时看用户态栈和 KMD 身份。
 #
+# 三种"整套驱动"状态 (推荐入口, 内核态与用户态一起切):
+#   builtin  内核内建 mwv207.ko        + 开源用户态载荷
+#   oss      自建修复 mwv207.ko (DKMS) + 开源用户态载荷 (VP9 硬解带全部修复)
+#   vendor   厂商 jmgpu.ko             + 厂商 UMD (jmgpu_drv_video.so / EGL / OpenCL)
+#
 # 分层(操作互不干扰, 可单独切换):
 #   用户态 (umd)  Mesa/GL/EGL/VA-API/VDPAU/OpenCL —— 载荷目录 + ldconfig + 软链
 #   内核态 (kmd)  mwv207.ko —— 内核内建版 vs 自建带修复版, 靠 srcversion 区分
 #
 # 用法:
+#   sudo ./switch-mwv207.sh stack status          # 三态检测: 当前是 builtin/oss/vendor 哪个
+#   sudo ./switch-mwv207.sh stack oss             # 切到开源修复驱动 (自建 KMD + 开源 UMD)
+#   sudo ./switch-mwv207.sh stack builtin         # 切到内核内建驱动 (内建 KMD + 开源 UMD)
+#   sudo ./switch-mwv207.sh stack vendor          # 切到厂商驱动 (jmgpu + 厂商 UMD, 桌面保持停止)
+#   sudo ./switch-mwv207.sh stack menu            # 交互选择
+#     切换失败(含桌面未点亮/自检不过)一律自动回滚到 oss(自建修复版)并点亮桌面;
+#     切 vendor 会拉起看门狗, 300s 内不确认就自动回滚。
+#
 #   sudo ./switch-mwv207.sh status                # 同时看用户态 + 内核态
 #   sudo ./switch-mwv207.sh check                 # 两层一起预检
 #   sudo ./switch-mwv207.sh verify                # 两层一起自检
@@ -44,6 +57,7 @@
 # 全局选项 (可写在任意位置):
 #   --root <dir>    把"系统"搬到假根下 (供 kmd rehearse 演练)
 #   --dry-run       特权命令只打印不执行
+#   --delay <n>     stack 阶段 2(停/起 lightdm)延迟 n 秒执行, 默认 3
 #   --force-unload  kmd 热切换时, 强制终止仍持有 /dev/dri 的进程
 #                   (停 lightdm 只带走 Xorg; Electron/Chromium 系应用的 GPU
 #                    进程由 systemd --user 托管, 默认不会被会话结束杀掉)
@@ -1107,6 +1121,10 @@ kmd_place_module() {
     refresh_initramfs
 
     local installed; installed=$(ko_srcver "$dk")
+    # 记录自建版 srcversion: 即使 updates 里的 .ko 被删(切 builtin 阶段中途中断),
+    # 只要模块还在内存里, 状态检测仍能认出它是自建版而不是"未知"。
+    mkdir -p "$(ko_state)"
+    printf '%s\n' "$installed" > "$(ko_state)/oss-srcversion" 2>/dev/null || true
     log "  已放置: $dk (srcversion $installed)"
     KMD_PLACED_SRCVER="$installed"
     [ -n "$installed" ] || die "放置后读不到 srcversion: $dk"
@@ -1175,7 +1193,7 @@ wait_for_refcnt_zero() {
 # 若用 kmd_swap_module 则会多一轮 start_display。
 kmd_reload_module() {
     local dk="$(ko_dkms)"
-    local installed="${KMD_PLACED_SRCVER:-$(ko_srcver "$dk")}"
+    local installed="${KMD_EXPECT_SRCVER:-${KMD_PLACED_SRCVER:-$(ko_srcver "$dk")}}"
 
     # 先等 X 侧释放；再不行就把占用者点出来，而不是丢一句 modprobe 的报错。
     if ! wait_for_dri_free 20; then
@@ -1216,7 +1234,7 @@ kmd_reload_module() {
     sleep 1
     fbcon_bind 1
     local lv; lv=$(loaded_srcver)
-    if [ "$lv" != "$installed" ]; then
+    if [ -n "$installed" ] && [ "$lv" != "$installed" ]; then
         warn "  加载后 srcversion=$lv，期望 $installed"
         return 1
     fi
@@ -1676,6 +1694,357 @@ umd_main() {
     esac
 }
 
+# --------------------- 三态"整套驱动"切换 (stack) -------------------------
+# 把"内核态 + 用户态"当成一个整体来切, 三种状态:
+#   builtin  内核内建 mwv207.ko        + 开源用户态载荷 (Mesa 24.1.2 oss)
+#   oss      自建修复 mwv207.ko (DKMS) + 开源用户态载荷 (同上, VA-API 带 VP9 修复)
+#   vendor   厂商 jmgpu.ko             + 厂商 UMD (jmgpu_drv_video.so / EGL / OpenCL)
+# 切换永远双层同切; 任一步失败或桌面未点亮 → 自动回滚到 oss(自建修复版)。
+STACK_FLAG="/run/mwv207-stack-pending"
+STACK_WD_TIMEOUT="${STACK_WD_TIMEOUT:-300}"
+
+stack_kmd_state() {
+    if [ -d /sys/module/jmgpu ]; then echo vendor; return; fi
+    [ -d /sys/module/mwv207 ] || { echo none; return; }
+    local lv dk it
+    lv=$(loaded_srcver)
+    dk=$(ko_srcver "$(ko_dkms)" 2>/dev/null) || dk=""
+    [ -n "$dk" ] || dk=$(cat "$(ko_state)/oss-srcversion" 2>/dev/null) || dk=""
+    it=$(ko_srcver "$(ko_in_tree)" 2>/dev/null) || it=""
+    if [ -n "$dk" ] && [ "$lv" = "$dk" ]; then echo oss
+    elif [ -n "$it" ] && [ "$lv" = "$it" ]; then echo builtin
+    else echo unknown; fi
+}
+
+stack_umd_state() {
+    case "$(umd_active_stack)" in
+        oss-*)            echo oss ;;
+        vendor-umd*)      echo vendor ;;
+        system-restored*) echo system ;;
+        *)
+            if [ -f "$LDCONF" ] && [ -e "$VA_LINK" ]; then echo oss; else echo system; fi
+            ;;
+    esac
+}
+
+# 综合状态: 只有两层都落在同一状态才算该状态, 其余一律 mixed(混合态)。
+stack_detect() {
+    local k u
+    k=$(stack_kmd_state); u=$(stack_umd_state)
+    case "$k" in
+        vendor)  echo vendor; return ;;
+        none)    echo none;   return ;;
+    esac
+    if [ "$u" = oss ]; then
+        [ "$k" = oss ] && { echo oss; return; }
+        [ "$k" = builtin ] && { echo builtin; return; }
+    fi
+    echo mixed
+}
+
+stack_label() {
+    case "$1" in
+        builtin) echo "内核内建驱动" ;;
+        oss)     echo "开源修复驱动" ;;
+        vendor)  echo "厂商驱动" ;;
+        mixed)   echo "混合态(两层不一致)" ;;
+        none)    echo "无驱动" ;;
+        *)       echo "$1" ;;
+    esac
+}
+
+stack_status() {
+    local k u all; k=$(stack_kmd_state); u=$(stack_umd_state); all=$(stack_detect)
+    log "==== 驱动状态: $(stack_label "$all")  [$all] ===="
+    printf '  内核态        %s\n' "$k"
+    case "$k" in
+        vendor)
+            printf '    jmgpu       已加载 refcnt=%s  %s\n' \
+                "$(cat /sys/module/jmgpu/refcnt 2>/dev/null)" "$VENDOR_DEV"
+            ;;
+        oss|builtin)
+            printf '    mwv207      已加载 srcversion=%s refcnt=%s\n' "$(loaded_srcver)" "$(loaded_refcnt)"
+            printf '    内建 .ko     %s\n' "$(ko_srcver "$(ko_in_tree)" 2>/dev/null || echo '[缺失]')"
+            printf '    自建 .ko     %s\n' "$(ko_srcver "$(ko_dkms)" 2>/dev/null || echo '[未放置]')"
+            ;;
+        *)
+            printf '    mwv207      %s\n' "$([ -d /sys/module/mwv207 ] && echo 已加载 || echo 未加载)"
+            ;;
+    esac
+    printf '  用户态        %s\n' "$u"
+    printf '    栈记录       %s\n' "$(umd_active_stack)"
+    printf '    ld.so.conf   %s\n' "$([ -f "$LDCONF" ] && echo enabled || echo disabled)"
+    printf '    VA 软链      %s\n' "$([ -e "$VA_LINK" ] && echo "$VA_LINK" || echo absent)"
+    for p in "$EGL_ICD_DIR"/*.json; do
+        [ -f "$p" ] || continue
+        printf '    EGL ICD      %s -> %s\n' "$(basename "$p")" \
+            "$(grep -m1 library_path "$p" 2>/dev/null | sed 's/.*: *"//; s/".*//')"
+    done
+    printf '  厂商组件      jmgpu.ko %s   /dev/jmgpu %s\n' \
+        "$([ -f "$(vendor_ko)" ] && echo present || echo missing)" \
+        "$([ -e "$VENDOR_DEV" ] && echo present || echo absent)"
+    printf '  待回滚标记    %s\n' "$([ -e "$STACK_FLAG" ] && echo "yes (看门狗 ${STACK_WD_TIMEOUT}s)" || echo no)"
+    if [ "$all" = mixed ]; then
+        printf '  提示          内核态与用户态不一致; 执行 "sudo %s stack oss" 可统一到自建修复态\n' "$0"
+    fi
+}
+
+# ---- 用户态: 开源载荷 ----------------------------------------------------
+stack_ensure_oss_umd() {
+    local need=0
+    [ -f "$LDCONF" ] || need=1
+    [ -e "$DRI_LINK" ] || need=1
+    [ -e "$VA_LINK" ] || need=1
+    [ -e "$VDPAU_LINK" ] || need=1
+    case "$(umd_active_stack)" in oss-*) ;; *) need=1 ;; esac
+    if [ "$need" = 0 ]; then
+        log "  用户态: 开源载荷已就位 ($(umd_active_stack))"
+        return 0
+    fi
+    log "  用户态: 部署开源载荷"
+    umd_deploy_files 1 >/dev/null || return 1
+    rm -f "$LDCONF.vendor-off" "$DRI_LINK.vendor-off" "$VA_LINK.vendor-off" \
+          "$VDPAU_LINK.vendor-off" "$VDPAU_LINK.0.vendor-off" 2>/dev/null || true
+    log "  用户态: 已切到 oss-${UMD_DEPLOYED_VER:-?}"
+}
+
+# ---- 用户态: 厂商 --------------------------------------------------------
+stack_disable_oss_umd() {
+    log "  用户态: 停用开源载荷 (ldconf / 软链 / EGL ICD / OpenCL ICD)"
+    [ -f "$LDCONF" ] && mv -f "$LDCONF" "$LDCONF.vendor-off"
+    if [ -f "$VENDOR_EGL_ICD_ORIG" ]; then
+        cp -a "$VENDOR_EGL_ICD_ORIG" "$VENDOR_EGL_ICD_JSON" \
+            || warn "  恢复厂商 EGL ICD 失败"
+    fi
+    local l
+    for l in "$DRI_LINK" "$VA_LINK" "$VDPAU_LINK" "$VDPAU_LINK.0"; do
+        if [ -e "$l" ] || [ -L "$l" ]; then mv -f "$l" "$l.vendor-off" 2>/dev/null || true; fi
+    done
+    if [ -f "$OPENCL_ICD_DISABLED" ] && [ ! -e "$OPENCL_DIR/jmgpu.icd" ]; then
+        mv -f "$OPENCL_ICD_DISABLED" "$OPENCL_DIR/jmgpu.icd" || true
+    fi
+    rm -f "$OPENCL_ICD"
+    ldconfig 2>/dev/null || warn "  ldconfig 失败"
+    echo "vendor-umd $(date '+%F %T')" > "$STATE_FILE"
+}
+
+# ---- 内核态 --------------------------------------------------------------
+stack_ensure_dkms_module() {
+    if [ -f "$(ko_dkms)" ]; then return 0; fi
+    log "  内核态: 自建模块缺失, 构建并放置到 $(ko_dkms)"
+    kmd_place_module >/dev/null || return 1
+}
+
+stack_kmd_oss() {
+    stack_ensure_dkms_module || return 1
+    run depmod -a "$KVER" || return 1
+    KMD_EXPECT_SRCVER=$(ko_srcver "$(ko_dkms)")
+    [ -n "$KMD_EXPECT_SRCVER" ] || { warn "  读不到自建模块 srcversion"; return 1; }
+    kmd_reload_module
+}
+
+stack_kmd_builtin() {
+    local dk; dk=$(ko_dkms)
+    [ -f "$dk" ] && run rm -f "$dk"
+    run depmod -a "$KVER" || return 1
+    refresh_initramfs
+    KMD_EXPECT_SRCVER=$(ko_srcver "$(ko_in_tree)")
+    [ -n "$KMD_EXPECT_SRCVER" ] || { warn "  读不到内建模块 srcversion"; return 1; }
+    kmd_reload_module
+}
+
+# ---- 回滚: 任何失败都回到 oss(自建修复) ----------------------------------
+stack_rollback_to_oss() {
+    log "==== 自动回滚到开源修复驱动 (oss) ===="
+    if vendor_loaded; then
+        fbcon_bind 0
+        run modprobe -r jmgpu || warn "  jmgpu 卸载失败 (refcnt=$(cat /sys/module/jmgpu/refcnt 2>/dev/null))"
+        sleep 1
+    fi
+    if ! stack_kmd_oss; then
+        warn "  自建模块加载失败, 退回内建模块"
+        stack_kmd_builtin || warn "  内建模块也未能加载"
+    fi
+    fbcon_bind 1
+    stack_ensure_oss_umd || warn "  开源载荷恢复失败"
+    start_display || warn "  lightdm 启动失败"
+    wait_x_ok || warn "  桌面未点亮, 请查看 /var/log/Xorg.0.log"
+    log "  回滚结束: 驱动状态=$(stack_detect)"
+}
+
+# ---- 厂商栈下的最小可用性检查 -------------------------------------------
+stack_vendor_check() {
+    [ -e "$VENDOR_DEV" ] || { warn "  $VENDOR_DEV 未出现"; return 1; }
+    if command -v vainfo >/dev/null 2>&1; then
+        if ! timeout 20 env LIBVA_DRIVER_NAME=jmgpu vainfo 2>/dev/null | grep -q VAProfileVP9; then
+            warn "  厂商 VA-API 没报出 VP9 profile"
+            return 1
+        fi
+    fi
+    return 0
+}
+
+# ---- 两阶段切换: 先只放文件, 破坏性动作(detached)放到最后 ---------------
+# 为什么必须分两段 + detached: 本机图形会话本身就跑在 lightdm 下的 X 里,
+# 停 lightdm 会立刻杀掉调用者(终端/对话窗口)。所以:
+#   阶段 1 (前台): 只做文件级动作 —— UMD 载荷、KMD 模块、depmod、initramfs,
+#                  全程不碰桌面; 失败就退出, 桌面毫发无损。
+#   阶段 2 (detached): 停 lightdm → rmmod/modprobe → 起 lightdm → 自检,
+#                  失败自动回滚到 oss, 结果写 /run/mwv207-stack-result。
+STACK_PLAN="/run/mwv207-stack-plan"
+STACK_STATE_RESULT="/run/mwv207-stack-result"
+STACK_LOG="/var/log/mwv207-stack.log"
+
+stack_prepare_to() {
+    local target="$1" ok=1
+    case "$target" in
+        oss)
+            stack_ensure_oss_umd || ok=0
+            [ $ok = 1 ] && { stack_ensure_dkms_module || ok=0; }
+            [ $ok = 1 ] && { run depmod -a "$KVER" || ok=0; }
+            ;;
+        builtin)
+            stack_ensure_oss_umd || ok=0
+            if [ $ok = 1 ]; then
+                [ -f "$(ko_dkms)" ] && run rm -f "$(ko_dkms)"
+                run depmod -a "$KVER" || ok=0
+            fi
+            [ $ok = 1 ] && refresh_initramfs
+            ;;
+        vendor)
+            stack_disable_oss_umd || ok=0
+            [ $ok = 1 ] && [ -f "$(vendor_ko)" ] || ok=0
+            ;;
+    esac
+    if [ $ok = 0 ]; then
+        warn "  阶段 1(文件层)失败, 未触碰桌面; 当前状态保持 $(stack_detect)"
+        return 1
+    fi
+    echo "$target $(date '+%F %T')" > "$STACK_PLAN" 2>/dev/null || true
+    log "  阶段 1 完成: 文件层已就绪 ($target), 桌面未受影响"
+    return 0
+}
+
+# 阶段 2: 由 setsid 后台执行, 不依赖调用者终端是否还存在。
+stack_apply_stage() {
+    local target="${1:-}" rc=0
+    [ -n "$target" ] || { echo "apply 需要目标(builtin|oss|vendor)" >&2; return 2; }
+    [ "$(id -u)" = 0 ] || { echo "apply 阶段需要 root" >&2; return 2; }
+
+    log "==== [detached] 应用阶段: $target ===="
+    # 退栈时先撤销"待回滚"标记，避免厂商栈看门狗在回滚完成后又触发一次
+    [ "$target" != vendor ] && rm -f "$STACK_FLAG" 2>/dev/null
+    stop_display
+    case "$target" in
+        oss)     KMD_EXPECT_SRCVER=$(ko_srcver "$(ko_dkms)");     kmd_reload_module || rc=1 ;;
+        builtin) KMD_EXPECT_SRCVER=$(ko_srcver "$(ko_in_tree)");  kmd_reload_module || rc=1 ;;
+        vendor)
+            vendor_switch_kmd || rc=1
+            if [ $rc = 0 ]; then sleep 1; stack_vendor_check || rc=1; fi
+            ;;
+    esac
+
+    if [ $rc = 0 ] && [ "$target" = vendor ]; then
+        echo "vendor-pending $(date '+%F %T')" > "$STACK_FLAG" 2>/dev/null || true
+        local self; self=$(readlink -f "${BASH_SOURCE[0]}")
+        setsid nohup bash -c "
+            sleep $STACK_WD_TIMEOUT
+            [ -e '$STACK_FLAG' ] || exit 0
+            echo \"[\$(date '+%F %T')] stack 看门狗: 到点自动回滚到 oss\" >> '$STACK_LOG'
+            '$self' stack apply oss --from-watchdog >> '$STACK_LOG' 2>&1
+        " >/dev/null 2>&1 &
+        log "  厂商栈已就位; 桌面保持停止; 看门狗 ${STACK_WD_TIMEOUT}s 后自动回滚到 oss"
+        log "  自检: sudo $0 vendor verify    退栈: sudo $0 stack oss"
+        echo "ok $(date '+%F %T') target=vendor" > "$STACK_STATE_RESULT"
+        stack_status
+        return 0
+    fi
+
+    if [ $rc = 0 ]; then
+        start_display || rc=1
+        [ $rc = 0 ] && { wait_x_ok || rc=1; }
+        [ $rc = 0 ] && { umd_verify || rc=1; }
+        [ $rc = 0 ] && { kmd_verify || rc=1; }
+    fi
+
+    if [ $rc != 0 ]; then
+        warn "  应用阶段失败 → 自动回滚到开源修复驱动 (oss)"
+        stack_rollback_to_oss
+        echo "failed $(date '+%F %T') target=$target" > "$STACK_STATE_RESULT"
+        return 1
+    fi
+    rm -f "$STACK_FLAG" 2>/dev/null || true
+    echo "ok $(date '+%F %T') target=$target" > "$STACK_STATE_RESULT"
+    log "==== [detached] 切换完成: $(stack_detect) ===="
+    stack_status
+    return 0
+}
+
+stack_switch_to() {
+    local target="$1"
+    need_root "stack $target"
+    local cur; cur=$(stack_detect)
+    log "==== 驱动切换: $(stack_label "$cur") → $(stack_label "$target") ===="
+
+    if [ "$DRY_RUN" = 1 ]; then
+        log "[dry-run] 阶段 1 前台: 切用户态($target) + 放 KMD 模块文件 (不动桌面)"
+        log "[dry-run] 阶段 2 detached: 停 lightdm → rmmod/modprobe → 起 lightdm → 自检 (失败回滚 oss)"
+        return 0
+    fi
+    if [ "$cur" = "$target" ]; then
+        log "  已经是目标状态, 无需切换"
+        stack_status
+        return 0
+    fi
+
+    # 阶段 1: 文件层 —— 失败时桌面仍在, 直接退出, 绝不进入破坏性阶段。
+    stack_prepare_to "$target" || die "阶段 1 失败: 未停桌面, 系统保持原状 ($(stack_detect))"
+
+    # 阶段 2: detached —— 停/起 lightdm 会断开图形会话, 故与调用终端完全脱钩。
+    local self; self=$(readlink -f "${BASH_SOURCE[0]}")
+    local delay="${STACK_DELAY:-3}"
+    rm -f "$STACK_STATE_RESULT" 2>/dev/null || true
+    setsid nohup bash -c "
+        sleep $delay
+        exec >> '$STACK_LOG' 2>&1
+        echo \"=== \$(date '+%F %T') stack apply $target (delay ${delay}s) ===\"
+        '$self' stack apply '$target'
+    " >/dev/null 2>&1 &
+
+    log "  阶段 2 已转入后台, ${delay}s 后执行 (会短暂停止 lightdm, 图形会话将中断一次)"
+    log "  日志: $STACK_LOG"
+    log "  结果: $STACK_STATE_RESULT"
+    log "  稍后查看: sudo $0 stack status  ($(stack_label "$target") 失败会自动回滚到 oss)"
+    return 0
+}
+
+stack_main() {
+    case "${1:-status}" in
+        status)  shift; stack_status "$@" ;;
+        apply)   shift; stack_apply_stage "$@" ;;
+        prepare) shift; need_root "stack prepare"; stack_prepare_to "$@" ;;
+        builtin|oss|vendor) stack_switch_to "$1" ;;
+        menu)    shift; stack_menu "$@" ;;
+        *)       usage ;;
+    esac
+}
+
+# 交互式选择 (无参数时) —— 仅当 stdin 是终端才用, 否则直接打印状态。
+stack_menu() {
+    if [ ! -t 0 ]; then stack_status; return 0; fi
+    echo "选择驱动状态:"
+    echo "  1) 内核内建驱动 (builtin)"
+    echo "  2) 厂商驱动     (vendor)"
+    echo "  3) 开源修复驱动 (oss)"
+    echo "  q) 退出"
+    local c; read -r -p "输入 1/2/3: " c
+    case "$c" in
+        1) stack_switch_to builtin ;;
+        2) stack_switch_to vendor ;;
+        3) stack_switch_to oss ;;
+        *) return 0 ;;
+    esac
+}
 # ----------------------------- 全栈切换 ------------------------------------
 # 一次命令把用户态 + 内核态都切过去, **lightdm 只停一次**。
 # 顺序是刻意安排的:
@@ -1781,6 +2150,8 @@ main() {
             --root=*)  R="${1#*=}"; shift ;;
             --dry-run) DRY_RUN=1; shift ;;
             --force-unload) FORCE_UNLOAD=1; shift ;;
+            --delay)   STACK_DELAY="$2"; shift 2 ;;
+            --delay=*) STACK_DELAY="${1#*=}"; shift ;;
             --)        shift; while [ $# -gt 0 ]; do pos+=("$1"); shift; done ;;
             *)         pos+=("$1"); shift ;;
         esac
@@ -1794,6 +2165,7 @@ main() {
     local cmd="${2:-}"
     case "$layer" in
         umd)  shift 2; umd_main "${cmd:-help}" "$@" ;;
+        stack) shift 2; stack_main "${cmd:-status}" "$@" ;;
         vendor) shift 2; vendor_main "${cmd:-help}" "$@" ;;
         kmd)  shift 2; kmd_main "${cmd:-help}" "$@" ;;
         all)  shift 2; all_main "${cmd:-help}" "$@" ;;

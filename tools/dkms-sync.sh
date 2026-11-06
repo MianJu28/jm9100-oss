@@ -75,6 +75,11 @@ dkms install -m "$pkg" -v "$ver" --force
 depmod -a
 
 ko="$(modinfo -n mwv207 2>/dev/null || true)"
+if [ -n "$ko" ]; then
+   # 供 switch-mwv207.sh 的 stack 状态检测使用：updates 里的 .ko 被删掉时靠它认版本
+   mkdir -p /var/lib/mwv207-oss
+   modinfo -F srcversion "$ko" > /var/lib/mwv207-oss/oss-srcversion 2>/dev/null || true
+fi
 echo "== 完成"
 echo "   模块路径: ${ko:-<modinfo 失败>}"
 if [ -n "$ko" ]; then

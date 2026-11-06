@@ -155,6 +155,30 @@ C-2 16 位采样编码（硬件边界）、D7 Vulkan（官方闭源也没有）�
   * 厂商那条 DKMS 包（`mwv207/1.8.0.uos`）构建出来的是 `jmgpu.ko`，不会覆盖我们的
     模块；`jmgpu` 仍由内核命令行 `modprobe.blacklist=jmgpu` 拦住。
 - 上游枚举陷阱：`p_format.h` 只在 `ref/mesa-22.3.7/...`（`find` 要 `-L`）。
+- **三态"整套驱动"切换**（2026-11-06 新增 `stack` 子命令）：把内核态(KMD)与用户态(UMD)
+  当成一个整体，只有三种合法状态：
+
+  | 状态 | 内核态 | 用户态 |
+  |---|---|---|
+  | `builtin` | 内核内建 `mwv207.ko` | 开源载荷（Mesa 24.1.2 oss） |
+  | `oss` | 自建修复 `mwv207.ko`（DKMS） | 开源载荷（VA-API 带全部 VP9 修复） |
+  | `vendor` | 厂商 `jmgpu.ko` | 厂商 UMD/EGL/OpenCL |
+
+  `sudo ./switch-mwv207.sh stack status|builtin|oss|vendor|menu`；任一步失败（含桌面未点亮、
+  自检不过）自动回滚到 `oss` 并点亮桌面；切 `vendor` 会拉看门狗，超时自动回滚。
+  状态检测靠 `srcversion` 三方比对（已加载 / 内建 .ko / 自建 .ko），自建版 srcversion
+  另存 `/var/lib/mwv207-oss/oss-srcversion`，因此 updates 里的 .ko 被删掉时仍能认出来。
+
+- **停 lightdm 必须放到流程最后、且与调用终端脱钩**（2026-11-06 踩坑）：本机图形会话本身
+  就跑在 lightdm 下的 X 里，脚本一停 lightdm，调用它的终端/对话窗口立即被杀，切换只做
+  到一半。`stack` 因此拆成两段：
+  1. **阶段 1（前台）**：只做文件级动作（UMD 载荷、KMD 模块放置、depmod、initramfs），
+     全程不碰桌面；失败直接退出，桌面毫发无损。
+  2. **阶段 2（detached）**：`setsid nohup` 起后台进程，`sleep ${STACK_DELAY:-3}` 后
+     停 lightdm → rmmod/modprobe → 起 lightdm → 自检；日志 `/var/log/mwv207-stack.log`，
+     结果 `/run/mwv207-stack-result`（`ok|failed target=...`）。
+  可选 `--delay <秒>` 或 `STACK_DELAY=N` 让阶段 2 更晚启动（把最后的确认/说明先输出完）。
+
 - **切换脚本的 Xorg 日志要按实际显示号解析**（2026-11-03 修）：display 不一定是
   `:0`——`:0` 的 Xorg 崩溃后 lightdm 会起在 `:1`，日志写到 `Xorg.1.log`。原先写死
   `/var/log/Xorg.0.log`，install 等不到新日志 → 误判"软件渲染"→ 自动回滚 + 黑屏。
