@@ -389,7 +389,7 @@ H.264/HEVC 解码与桌面渲染不受影响。
 | ~~A1~~ | ~~分段编码（segmentation）不支持~~ | **已解决（2026-11-06）**，见 §10.2 A1 | ~~P0~~ |
 | ~~A2~~ | ~~`show_existing_frame` 包未处理~~ | **已解决（2026-11-06）**，见 §10.2 A2 | ~~P1~~ |
 | ~~A4~~ | ~~全范围色彩（`color_range=1`）未传~~ | **实测非缺陷（2026-11-06）**，见 §10.2 A4 | ~~P1~~ |
-| B1 | tile 数 > 16 静默截断 | 4K 多 tile 会缺内容 | P1 |
+| ~~B1~~ | ~~tile 数 > 16 静默截断~~ | **已解决（2026-11-06）**，见 §10.2 B1 | ~~P1~~ |
 | A3 | `frame_parallel_decoding_mode=0` 的概率自适应缺失 | 未实现，现有样片恰好都是 1 | P2 |
 | B2 | 中途改分辨率 / 参考尺寸与当前不同 | 未验证 | P2 |
 | A5 | VP9 10bit（Profile 2）、4:2:2/4:4:4、alpha | 未实现、未广播 | P3 |
@@ -484,14 +484,22 @@ H.264/HEVC 解码与桌面渲染不受影响。
   limited 输出时自己转。`sh->color_range` 因此不必传给 PP。
 - 测试素材：`/tmp/pc1.ivf`（单关键帧 pc 流，`ffmpeg -c copy -f ivf` 提取）。
 
-#### B1（P1）tile 数 > 16 被静默截断
+#### B1（P1）tile 数 > 16 被静默截断 —— 已解决（2026-11-06）
 
-- `mwv207_dec_vp9.c` 的 tile 表构造：`uint16_t cinfo[16], rinfo[16]; if (n > 16) n = 16;`，
-  且 `st->tile_off[16]` / `st->tile_len[16]`；`n = ncol * nrow`。
-- 4K 常见配置 `-tile-columns 3`（8 列）或 `8 列 × 2 行 = 16` 刚好卡在边界；再高
-  （如 8×4=32）只解前 16 个 tile，其余 tile 不写，画面出现整块旧内容。
-- 建议：上限提到 32（甚至 64），并把截断改成显式拒绝（`DEC_E=0` + 日志），杜绝静默错误。
-
+- 原状：`mwv207_dec_vp9.c` 里 `uint16_t cinfo[16], rinfo[16]` + `if (n > 16) n = 16;`，
+  且 `st->tile_off[16]` / `st->tile_len[16]`；tile 数 `n = 2^log2_cols * 2^log2_rows`。
+  8 列 × 4 行（32 个 tile，1080p/4K 常见配置）只解前 16 个，其余块是旧内容。
+- 修复：
+  * 新增 `VP9_MAX_TILE_COLS 64` / `VP9_MAX_TILE_ROWS 4` / `VP9_MAX_TILES 256`
+    （VP9 规范上限：log2_tile_cols ≤ 6、log2_tile_rows ≤ 2）。
+  * `tile_off/tile_len` 改为 `VP9_MAX_TILES`；`cinfo[VP9_MAX_TILE_COLS]`、
+    `rinfo[VP9_MAX_TILE_ROWS]`。
+  * 去掉 `n > 16` 的静默截断，改为校验 `log2_tile_columns > 6 || log2_tile_rows > 2`
+    时打印 `vp9: invalid tile grid` 并 `DEC_E=0`（宁可报错也不静默出错）。
+  * 同时去掉 `l2c/l2r` 的 `& 3u` 掩码（那会把 >8 列截断成 8 列）。
+- 验证：1920×1080 `-tile-columns 3 -tile-rows 2`（8×4 = 32 个 tile）与
+  3840×2160 `-tile-columns 4 -tile-rows 2`（16×4 = 64 个 tile）均与软件解码
+  **逐字节一致**；20 个样片全量回归 `FULL_TEST_FAIL=0`。
 #### A3（P2）frame_parallel_decoding_mode=0 的概率自适应缺失
 
 - 规范 + libvpx：`if (!error_resilient && !frame_parallel_decoding_mode)` 时，解码器必须用

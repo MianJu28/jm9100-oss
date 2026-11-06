@@ -45,6 +45,12 @@
 #include "mwv207_utils.h"
 #include "mwv207_context.h"
 
+/* VP9 allows up to 64 tile columns (log2 6) and 4 tile rows (log2 2). */
+#define VP9_MAX_TILE_COLS 64u
+#define VP9_MAX_TILE_ROWS 4u
+#define VP9_MAX_TILES (VP9_MAX_TILE_COLS * VP9_MAX_TILE_ROWS)
+
+
 void mwv207_vp9_reset_probs(struct mwv207_vp9_slice_header *sh);
 
 #define VP9_PROB_TABLE_SIZE 0xea0u /* sizeof(struct mwv207_vp9_entropy_probs) */
@@ -118,8 +124,9 @@ struct mwv207_vp9_state {
    /* Tile payload of the current frame: the hardware walks the tiles by
     * itself once every one of them carries a 4-byte size prefix. */
    uint32_t tile_n;
-   uint32_t tile_off[16];
-   uint32_t tile_len[16];
+   /* VP9 allows up to 64 tile columns (log2 6) and 4 tile rows (log2 2). */
+   uint32_t tile_off[VP9_MAX_TILES];
+   uint32_t tile_len[VP9_MAX_TILES];
 };
 
 void
@@ -554,18 +561,22 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
    {
       uint32_t sc = (((width + 7) & ~7u) + 63) >> 6;
       uint32_t sr = (((height + 7) & ~7u) + 63) >> 6;
-      uint32_t l2c = sh->log2_tile_columns & 3u;
-      uint32_t l2r = sh->log2_tile_rows & 3u;
+      uint32_t l2c = sh->log2_tile_columns;
+      uint32_t l2r = sh->log2_tile_rows;
       uint32_t ncol = 1u << l2c;
       uint32_t nrow = 1u << l2r;
       uint32_t n = ncol * nrow;
       uint16_t *tile = (uint16_t *)((uint8_t *)st->scratch_cpu
                                     + st->tile_offset);
-      uint16_t cinfo[16], rinfo[16];
+      uint16_t cinfo[VP9_MAX_TILE_COLS], rinfo[VP9_MAX_TILE_ROWS];
       uint32_t i, j, k = 0, acc;
 
-      if (n > 16)
-         n = 16;
+      if (l2c > 6 || l2r > 2) {
+         MWV207_LOG(MWV207_LEVEL_ERROR,
+                    "vp9: invalid tile grid %u x %u\n", ncol, nrow);
+         reg_buf->set_reg(reg_buf, JMDEC_DEC_E, 0);
+         return;
+      }
 
       /* VP9 tile payload layout (spec 6.2.5): row-major over the
        * (ncol x nrow) grid, a 4-byte big-endian size in front of every tile
