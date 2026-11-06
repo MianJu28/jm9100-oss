@@ -388,7 +388,7 @@ H.264/HEVC 解码与桌面渲染不受影响。
 |---|---|---|---|
 | ~~A1~~ | ~~分段编码（segmentation）不支持~~ | **已解决（2026-11-06）**，见 §10.2 A1 | ~~P0~~ |
 | ~~A2~~ | ~~`show_existing_frame` 包未处理~~ | **已解决（2026-11-06）**，见 §10.2 A2 | ~~P1~~ |
-| A4 | 全范围色彩（`color_range=1`）未传 | 恒按 limited 处理 | P1 |
+| ~~A4~~ | ~~全范围色彩（`color_range=1`）未传~~ | **实测非缺陷（2026-11-06）**，见 §10.2 A4 | ~~P1~~ |
 | B1 | tile 数 > 16 静默截断 | 4K 多 tile 会缺内容 | P1 |
 | A3 | `frame_parallel_decoding_mode=0` 的概率自适应缺失 | 未实现，现有样片恰好都是 1 | P2 |
 | B2 | 中途改分辨率 / 参考尺寸与当前不同 | 未验证 | P2 |
@@ -468,19 +468,21 @@ H.264/HEVC 解码与桌面渲染不受影响。
   `vpxenc --ivf` 才能得到真 IVF 容器（默认写 WebM，名字叫 .ivf 也是 WebM）。
 - 回归：`/tmp/full_test.sh` 20 个流全 `OK`。
 
-#### A4（P1）全范围色彩未传下去
+#### A4（P1）全范围色彩 —— 实测不是驱动缺陷（2026-11-06）
 
-- 解析器解出 `sh->color_range`，但 VP9 路径没有传给 PP：
-  `mwv207_dec_pp_params_init()`（`mwv207_video_dec.c`）设置 `enabled/planar/tiled/cr_first/
-  shaper/align`，**不设 `video_range`**；调用处是
-  `mwv207_pp_unit_config ppu_ext_cfg[DEC_MAX_PPU_COUNT] = {0};`
-  ⇒ `video_range` 恒为 0（limited）。而 `mwv207_dec_ppu.c` 只在
-  `ppu_ext_cfg->video_range` 非 0 时做 full-range 转换。
-- 后果：`-color_range pc` 的流（HDR 风格素材、部分剪辑软件导出）会被当 limited 处理，
-  黑/白电平错（16..235 vs 0..255），表现为发灰或过曝。
-- 建议：给 `mwv207_dec_pp_params_init()` 增加 range 参数（或读
-  `dec->dec_param.video_range`），VP9 调用处传 `sh->color_range`；H.264/HEVC 路径同样
-  有这个字段，可一并检查。
+- 现象：`-color_range pc` 的流用
+  `ffmpeg ... -vf hwdownload,format=nv12 -pix_fmt yuv420p` 比较时，硬件输出像是被
+  压缩到 16..235（与软件参考差 28 dB）。
+- 原因：**是 ffmpeg 自己做的换算**，不是硬件/驱动。VAAPI 解码把 `color_range=pc`
+  写进 `AVFrame`，在转成 limited 的 `yuv420p` rawvideo 时，滤镜图里插入了
+  swscale 的 full→limited 映射（Y 值 `v*219/255+16`）。
+- 验证：把输出改成 `-vf hwdownload,format=nv12 -f rawvideo -pix_fmt nv12`
+  （不触发换算），Y 平面与 `vpxdec`/ffmpeg 软件解码**逐字节一致**（12 帧全部）；
+  翻转码流里的 color_range 位也能让同一份驱动输出在 raw / companded 之间切换，
+  证明硬件本身没做任何范围变换。
+- 结论：驱动不需要、也不应该做 range 转换（与软件解码器行为一致）；客户端要
+  limited 输出时自己转。`sh->color_range` 因此不必传给 PP。
+- 测试素材：`/tmp/pc1.ivf`（单关键帧 pc 流，`ffmpeg -c copy -f ivf` 提取）。
 
 #### B1（P1）tile 数 > 16 被静默截断
 
