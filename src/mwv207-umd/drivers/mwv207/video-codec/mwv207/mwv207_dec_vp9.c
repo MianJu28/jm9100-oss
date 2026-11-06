@@ -93,6 +93,17 @@ struct mwv207_vp9_state {
     * header parser on every intra/key frame. */
    int32_t lf_ref_delta[MAX_REF_LF_DELTAS];
    int32_t lf_mode_delta[MAX_MODE_LF_DELTAS];
+   /* Per-segment feature values persist across frames unless the header
+    * carries fresh segment data (segment_data_update == 1). */
+   uint32_t seg_feature_enable[MAX_MB_SEGMENTS][SEG_LVL_MAX];
+   int32_t seg_feature_data[MAX_MB_SEGMENTS][SEG_LVL_MAX];
+   uint32_t seg_feature_mode;
+   bool seg_feature_valid;
+   /* The hardware decodes the per-block segment ids into a map buffer and
+    * reads the previous map back for temporal prediction, so the two maps
+    * alternate: a frame that updates the map writes the inactive one, which
+    * becomes the read map of the next frame. */
+   uint32_t seg_active;
    /* VP9 reference frame slots: these point at the pipe_video_buffer of the
     * frame that last refreshed this slot.  The VA client keeps decoded
     * frames alive while they are referenced, so no extra reference is
@@ -168,6 +179,71 @@ static const uint32_t vp9_ref_dbase_msb[3] = {
 static const uint32_t vp9_ref_tcbase_msb[3] = {
    JMDEC_REFER0_TCBASE_MSB, JMDEC_REFER4_TCBASE_MSB, JMDEC_REFER5_TCBASE_MSB,
 };
+
+/* Per-segment feature registers.
+ *
+ * The register file carries *final* per-segment values: the vendor UMD
+ * resolves segmentation_abs_or_delta_update in software (adding the frame
+ * base quantiser / loop filter level in the delta case, clamping, and
+ * encoding the reference frame as "value + 1" so that 0 means "no per
+ * segment reference"), and the hardware just applies them per block.
+ * Features a segment does not enable fall back to the frame defaults.
+ */
+static void
+vp9_write_segment_regs(struct mwv207_video_reg_buf *reg_buf,
+                       struct mwv207_vp9_slice_header *sh)
+{
+   static const enum mwv207_9200_hw_if_name quant_reg[MAX_MB_SEGMENTS] = {
+      JMDEC_QUANT_SEG0, JMDEC_QUANT_SEG1, JMDEC_QUANT_SEG2, JMDEC_QUANT_SEG3,
+      JMDEC_QUANT_SEG4, JMDEC_QUANT_SEG5, JMDEC_QUANT_SEG6, JMDEC_QUANT_SEG7,
+   };
+   static const enum mwv207_9200_hw_if_name filt_reg[MAX_MB_SEGMENTS] = {
+      JMDEC_FILT_LEVEL_SEG0, JMDEC_FILT_LEVEL_SEG1, JMDEC_FILT_LEVEL_SEG2,
+      JMDEC_FILT_LEVEL_SEG3, JMDEC_FILT_LEVEL_SEG4, JMDEC_FILT_LEVEL_SEG5,
+      JMDEC_FILT_LEVEL_SEG6, JMDEC_FILT_LEVEL_SEG7,
+   };
+   static const enum mwv207_9200_hw_if_name refpic_reg[MAX_MB_SEGMENTS] = {
+      JMDEC_REFPIC_SEG0, JMDEC_REFPIC_SEG1, JMDEC_REFPIC_SEG2,
+      JMDEC_REFPIC_SEG3, JMDEC_REFPIC_SEG4, JMDEC_REFPIC_SEG5,
+      JMDEC_REFPIC_SEG6, JMDEC_REFPIC_SEG7,
+   };
+   static const enum mwv207_9200_hw_if_name skip_reg[MAX_MB_SEGMENTS] = {
+      JMDEC_SKIP_SEG0, JMDEC_SKIP_SEG1, JMDEC_SKIP_SEG2, JMDEC_SKIP_SEG3,
+      JMDEC_SKIP_SEG4, JMDEC_SKIP_SEG5, JMDEC_SKIP_SEG6, JMDEC_SKIP_SEG7,
+   };
+   int32_t base_q = sh->lossless ? 0 : (int32_t)sh->qp_yac;
+   int32_t base_lf = (int32_t)(sh->loop_filter_level & 0x3f);
+   bool abs_mode = sh->segment_feature_mode != 0;
+   bool intra = sh->key_frame || sh->intra_only;
+   uint32_t i;
+
+   /* Even with segmentation disabled the ASIC takes the frame quantiser and
+    * loop filter level from segment 0's feature words, so always write the
+    * per-segment table (segments 1..7 then simply carry the defaults). */
+   for (i = 0; i < MAX_MB_SEGMENTS; i++) {
+      int32_t q = base_q, lf = base_lf, ref = 0, skip = 0;
+
+      if (sh->segment_feature_enable[i][SEG_LVL_ALT_Q]) {
+         int32_t d = sh->segment_feature_data[i][SEG_LVL_ALT_Q];
+         q = abs_mode ? d : base_q + d;
+         q = q < 0 ? 0 : (q > 255 ? 255 : q);
+      }
+      if (sh->segment_feature_enable[i][SEG_LVL_ALT_LF]) {
+         int32_t d = sh->segment_feature_data[i][SEG_LVL_ALT_LF];
+         lf = abs_mode ? d : base_lf + d;
+         lf = lf < 0 ? 0 : (lf > 63 ? 63 : lf);
+      }
+      if (!intra && sh->segment_feature_enable[i][SEG_LVL_REF_FRAME])
+         ref = sh->segment_feature_data[i][SEG_LVL_REF_FRAME] + 1;
+      if (sh->segment_feature_enable[i][SEG_LVL_SKIP])
+         skip = 1;
+
+      reg_buf->set_reg(reg_buf, quant_reg[i], (uint32_t)q);
+      reg_buf->set_reg(reg_buf, filt_reg[i], (uint32_t)lf);
+      reg_buf->set_reg(reg_buf, refpic_reg[i], (uint32_t)ref);
+      reg_buf->set_reg(reg_buf, skip_reg[i], (uint32_t)skip);
+   }
+}
 
 static void
 vp9_write_ref_regs(struct mwv207_vp9_state *st,
@@ -313,7 +389,9 @@ vp9_get_state(struct mwv207_video_decoder *decoder, uint32_t width,
       st->tile_offset = VP9_COUNTER_OFFSET + ctr_size;
       st->seg_offset = vp9_align4k(st->tile_offset + tile_size);
       st->seg_size = seg_size;
-      st->filter_offset = vp9_align4k(st->seg_offset + st->seg_size);
+      /* Two segment map buffers: the hardware reads the map built by the
+       * previous frame (temporal update) and writes the current one. */
+      st->filter_offset = vp9_align4k(st->seg_offset + st->seg_size * 2u);
       st->width = width;
       st->height = height;
       st->stream_offset = vp9_align4k(st->filter_offset + VP9_FILTER_SIZE);
@@ -473,7 +551,6 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
 
    memcpy(st->scratch_cpu + VP9_PROB_OFFSET, &sh->entropy,
           VP9_PROB_TABLE_SIZE);
-
    {
       uint32_t sc = (((width + 7) & ~7u) + 63) >> 6;
       uint32_t sr = (((height + 7) & ~7u) + 63) >> 6;
@@ -618,19 +695,38 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
       /* The ASIC derives the block quantiser from segment 0's feature word
        * even when segmentation is disabled; 294..296 are signed per-plane
        * deltas relative to that base. */
-      int32_t base = sh->lossless ? 0 : (int32_t)sh->qp_yac;
       uint32_t dy = (uint32_t)(sh->lossless ? 0 : (int32_t)sh->qp_ydc) & 0x3f;
       uint32_t dc = (uint32_t)(sh->lossless ? 0 : (int32_t)sh->qp_ch_dc) & 0x3f;
       uint32_t da = (uint32_t)(sh->lossless ? 0 : (int32_t)sh->qp_ch_ac) & 0x3f;
-      reg_buf->set_reg(reg_buf, JMDEC_QUANT_SEG0, (uint32_t)base & 0xff);
       reg_buf->set_reg(reg_buf, JMDEC_QP_DELTA_Y_DC, dy);
       reg_buf->set_reg(reg_buf, JMDEC_QP_DELTA_CH_DC, dc);
       reg_buf->set_reg(reg_buf, JMDEC_QP_DELTA_CH_AC, da);
-      reg_buf->set_reg(reg_buf, JMDEC_FILT_LEVEL_SEG0,
-                       sh->loop_filter_level & 0x3f);
-      reg_buf->set_reg(reg_buf, JMDEC_SKIP_SEG0, 0);
-      reg_buf->set_reg(reg_buf, JMDEC_REFPIC_SEG0, 0);
    }
+   /* Segmentation: reuse the previous frame's feature values when this
+    * frame does not carry a fresh set, then hand the resolved per-segment
+    * words to the hardware. */
+   if (sh->segment_enabled) {
+      if (sh->segment_data_update || !st->seg_feature_valid) {
+         memcpy(st->seg_feature_enable, sh->segment_feature_enable,
+                sizeof(st->seg_feature_enable));
+         memcpy(st->seg_feature_data, sh->segment_feature_data,
+                sizeof(st->seg_feature_data));
+         st->seg_feature_mode = sh->segment_feature_mode;
+         st->seg_feature_valid = true;
+      } else {
+         memcpy(sh->segment_feature_enable, st->seg_feature_enable,
+                sizeof(st->seg_feature_enable));
+         memcpy(sh->segment_feature_data, st->seg_feature_data,
+                sizeof(st->seg_feature_data));
+         sh->segment_feature_mode = st->seg_feature_mode;
+      }
+   }
+   vp9_write_segment_regs(reg_buf, sh);
+   reg_buf->set_reg(reg_buf, JMDEC_SEGMENT_E, sh->segment_enabled ? 1 : 0);
+   reg_buf->set_reg(reg_buf, JMDEC_SEGMENT_UPD_E,
+                    sh->segment_map_update ? 1 : 0);
+   reg_buf->set_reg(reg_buf, JMDEC_SEGMENT_TEMP_UPD_E,
+                    sh->segment_map_temporal_update ? 1 : 0);
    reg_buf->set_reg(reg_buf, JMDEC_LOSSLESS_E, sh->lossless ? 1 : 0);
    reg_buf->set_reg(reg_buf, JMDEC_IDR_PIC_E,
                     (sh->key_frame || sh->intra_only) ? 1 : 0);
@@ -692,10 +788,6 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
    reg_buf->set_reg(reg_buf, JMDEC_FILT_MB_ADJ_1,
                     sh->mode_ref_lf_enabled ? (uint32_t)sh->mb_mode_lf_delta[1] : 0);
 
-   reg_buf->set_reg(reg_buf, JMDEC_SEGMENT_E, 0);
-   reg_buf->set_reg(reg_buf, JMDEC_SEGMENT_UPD_E, 0);
-   reg_buf->set_reg(reg_buf, JMDEC_SEGMENT_TEMP_UPD_E, 0);
-
    /* JMDEC_REFER_LTERM_E is a 32-bit field at dword 38, the same dword that
     * holds AREF_HOR/VER_SCALE; writing it must happen before the reference
     * scales or it wipes them. */
@@ -708,10 +800,20 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
                 VP9_PROB_OFFSET);
    vp9_set_addr(reg_buf, JMDEC_CTX_COUNTER_BASE_LSB, st->scratch->res->bo,
                 VP9_COUNTER_OFFSET);
+   /* The segment map is a ping-pong buffer pair: the hardware decodes this
+    * frame's segment ids into the write map, and a following frame that
+    * does not carry a map update predicts its ids from the map this frame
+    * left behind.  An intra-only or error resilient frame restarts the
+    * prediction, so both maps go back to segment 0. */
+   if (sh->intra_only || sh->error_resilient)
+      memset(st->scratch_cpu + st->seg_offset, 0, st->seg_size * 2u);
    vp9_set_addr(reg_buf, JMDEC_SEGMENT_READ_BASE_LSB, st->scratch->res->bo,
-                st->seg_offset);
+                st->seg_offset + st->seg_active * st->seg_size);
    vp9_set_addr(reg_buf, JMDEC_SEGMENT_WRITE_BASE_LSB, st->scratch->res->bo,
-                st->seg_offset + st->seg_size);
+                st->seg_offset + (1u - st->seg_active) * st->seg_size);
+   if (sh->segment_enabled && sh->segment_map_update)
+      st->seg_active ^= 1u;
+
    vp9_set_addr(reg_buf, JMDEC_TILE_BASE_LSB, st->scratch->res->bo,
                 st->tile_offset);
    vp9_set_addr(reg_buf, JMDEC_DEC_VERT_FILT_BASE_LSB, st->scratch->res->bo,

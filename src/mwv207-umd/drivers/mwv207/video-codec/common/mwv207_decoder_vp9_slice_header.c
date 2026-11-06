@@ -261,6 +261,10 @@ decode_segmentation_data(struct mwv207_strm_data *rb,
 
    tmp = mwv207_sw_get_bits(rb, 1);
    STREAM_TRACE("segment_data_update", tmp);
+   /* Remember whether this frame carried fresh per-segment feature data:
+    * when it does not, the previous frame's feature values stay in effect
+    * (VP9 spec 6.2.10) and the driver has to reuse its cached copy. */
+   slice_header->segment_data_update = tmp;
    if (tmp) {
       /* Absolute/relative mode */
       slice_header->segment_feature_mode = mwv207_sw_get_bits(rb, 1);

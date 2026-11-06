@@ -748,6 +748,7 @@ struct mwv207_vp9_slice_header {
    uint32_t segment_enabled;
    uint32_t segment_map_update;
    uint32_t segment_map_temporal_update;
+   uint32_t segment_data_update;
    uint32_t segment_feature_mode;
    uint32_t segment_feature_enable[MAX_MB_SEGMENTS][SEG_LVL_MAX];
    int32_t segment_feature_data[MAX_MB_SEGMENTS][SEG_LVL_MAX];

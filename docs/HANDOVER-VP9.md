@@ -386,7 +386,7 @@ H.264/HEVC 解码与桌面渲染不受影响。
 
 | 编号 | 问题 | 现状 | 优先级 |
 |---|---|---|---|
-| A1 | 分段编码（segmentation）不支持 | 实测开 AQ 的流 12-15 dB | **P0** |
+| ~~A1~~ | ~~分段编码（segmentation）不支持~~ | **已解决（2026-11-06）**，见 §10.2 A1 | ~~P0~~ |
 | A2 | `show_existing_frame` 包未处理 | 会走普通解码路径 | P1 |
 | A4 | 全范围色彩（`color_range=1`）未传 | 恒按 limited 处理 | P1 |
 | B1 | tile 数 > 16 静默截断 | 4K 多 tile 会缺内容 | P1 |
@@ -408,7 +408,7 @@ H.264/HEVC 解码与桌面渲染不受影响。
 | tile | 单 tile / 多 tile-columns / 多 tile-rows / 2×2 混合 | 最多 4 个 tile |
 | 编码器 | ffmpeg(ffmpeg 内建 VP9 编码器与 libvpx-vp9)、vpxenc | realtime 与 good/cpu-used 0–8 |
 | 色彩 | limited range（`color_range=0`） | 全范围见 A4 |
-| 分段 | **关闭** | 开 AQ 即错，见 A1 |
+| 分段 | 开（abs/delta、temporal update、8 段全特性） | `-aq-mode 1/2/3` 全部逐位一致，见 §10.2 A1 |
 | 分辨率 | 128×128 – 1920×1080（最长 120 帧） | 4K 见 B5 |
 
 验收脚本 `/tmp/full_test.sh`：20 个码流（14 个 `vp9-assets` 样片 + `pan`/`hd`/`m720`/
@@ -417,33 +417,40 @@ H.264/HEVC 解码与桌面渲染不受影响。
 
 ### 10.2 功能性缺口
 
-#### A1（P0）分段编码 segmentation 不支持
+#### A1（P0）分段编码 segmentation —— 已解决（2026-11-06）
 
-- 现象：任何启用 8 段分段的码流都解错。实测（`/tmp/aq{1,2,3}.webm`，ffmpeg
+- 原现象：任何启用 8 段分段的码流都解错。实测（`/tmp/aq{1,2,3}.webm`，ffmpeg
   `-aq-mode 1/2/3` —— libvpx 的 AQ 就是靠 segmentation 实现）：
   `aq1` 30/30 帧错（Y/U/V ≈ 12.85/12.84/12.83 dB）、`aq2` 30/30 帧错（12.21/12.14/12.08）、
   `aq3` 帧 0 逐位一致、其后 29 帧错（14.93/15.26）。
-- 原因：`set_regs` 恒写 `JMDEC_SEGMENT_E=0`、`JMDEC_SEGMENT_UPD_E=0`
-  （`src/mwv207-umd/drivers/mwv207/video-codec/mwv207/mwv207_dec_vp9.c`），把分段全关掉。
-  解析器其实已经解出 `segment_feature_mode`（abs/delta）与 `segment_feature_data[3][8]`
-  （每段 REFPIC/SKIP/FILT/QUANT 四个特性，见
-  `common/mwv207_decoder_vp9_slice_header.c` 的 `vp9_decode_segment_header()`），只是没
-  程序化到硬件。
-- 硬件侧已有寄存器（`mwv207_video_dec_8170enum.h`）：`SEGMENT_TEMP_UPD_E`、
-  `SEGMENT_UPD_E`、`SEGMENT_E`，以及每段的 `REFPIC_SEG0..7`、`SKIP_SEG0..7`、
-  `FILT_LEVEL_SEG0..7`、`QUANT_SEG0..7`；厂商 UMD 的
-  `jmgpu_decoder_vp9_set_segment_register` 就是写这一组（§6.3）。
-- 难点：
-  1. `QUANT_SEG0`(315) 现在被当作 base_qindex 写死（§5 量化模型）。开分段后
-     abs 模式每段是绝对 qindex、delta 模式是 base+delta，`INIT_QP`(288) 与 294 的位域
-     重叠（§5）要重新梳理。
-  2. ASIC 还有 `SEGMENT_READ_BASE` / `SEGMENT_WRITE_BASE` 两个 scratch 区（驱动已按
-     `2 × align4k(w*h)` 分配），推测是逐块 segment id 的读写缓冲，时序未验证。
-  3. `FILT_LEVEL_SEG*`/`SKIP_SEG*` 与普通 LF/skip 的交互（`segment_feature_mode`
-     abs 时覆盖 base）需要对着 libvpx 的 `vp9/decoder/vp9_detokenize.c`、
-     `vp9_decodeframe.c` 逐项对齐。
-- 影响：真实世界 VP9（YouTube、Chrome 系编码器、绝大多数转码流水线）默认开 AQ，
-  **不解决就无法作为桌面/浏览器解码器使用**。建议作为下一个任务。
+- 根本原因有**三处**，缺一不可：
+  1. `set_regs` 一直写 `JMDEC_SEGMENT_E=0`/`UPD_E=0`（分段全关；并且后面还有一段
+     残留的"清 SEGMENT_E"写在新的编程之后，把刚写好的使能又抹掉）。
+  2. **每段的特性值必须由软件算成最终值再写寄存器**：厂商
+     `jmgpu_decoder_vp9_set_segment_register` 在 UMD 里就做了 delta/abs 解析 ——
+     delta 模式 `q = clamp(base_q + data, 0, 255)`、`lf = clamp(base_lf + data, 0, 63)`；
+     abs 模式直接用 data；参考帧特性只对非 intra 帧生效且写 `data + 1`（0 表示"该段
+     不强制参考帧"）；skip 写 1。ASIC 只按每块 segment id 取这组"最终值"。
+  3. **分段特性数据要跨帧继承**：`segment_data_update=0` 时（VP9 spec 6.2.10）
+     各段特性沿用上一帧，而本驱动每帧 `memset(sh, 0, ...)`，必须自己缓存并在
+     下一帧回填（缓存在 `struct mwv207_vp9_state` 的 `seg_feature_*`）。
+- 另一处关键时序：segment map 是**乒乓双缓冲**（§10.2 原"难点 2"）。ASIC 把本帧
+  逐块 segment id 写进 WRITE map；下一帧若 `segment_map_update=0`，它从 READ map
+  做时间预测。正确顺序（与 hantro `config_seg_map()` 一致）是：intra_only/
+  error_resilient 帧先把两块清零 → 按当前 `seg_active` 计算 READ/WRITE 基址 →
+  若本帧 `update_map` 才翻转 `seg_active`。最初把"翻转到 0"放在基址计算之后，
+  导致下一帧读到的是从没写过的缓冲（全部 id=0），表现就是 segment 值生效但画面
+  仍在 40 dB 左右。
+- 实现位置：`mwv207_dec_vp9.c` 的 `vp9_write_segment_regs()`（新增）、
+  特性缓存/回填与 map 时序在 `mwv207_dec_vp9_set_regs()`；
+  `mwv207_decoder_vp9_slice_header.c` 的 `decode_segmentation_data()` 新增
+  `slice_header->segment_data_update` 保存该位；
+  `filter_offset` 后移为 `align4k(seg_offset + seg_size * 2)`（两块 map）。
+- 验证（全部与 ffmpeg 软解**逐字节相同**）：
+  `aq1`/`aq2`/`aq3` 各 30 帧；`aq_320x180_a1t0`（320×180、AQ1）、
+  `aq_640x360_a3t1`（640×360、AQ3 + 2 个 tile rows）、
+  `aq_1280x720_a1t1`（1280×720、120 帧、AQ1 + tile rows）。
+  回归：`/tmp/full_test.sh` 20 个流全 `OK`，H.264/HEVC 不受影响。
 
 #### A2（P1）show_existing_frame 未处理
 
