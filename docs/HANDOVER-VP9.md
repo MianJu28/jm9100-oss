@@ -16,7 +16,7 @@ alt-ref 帧 / 1080p）已与软件解码逐位一致**。修复过程与最终�
 - 逐位一致的样片清单（全部 Y/U/V PSNR 99.00）：w6(50 帧)、cb/blkramp/ramp、kf1t、kf2c/tc4/tc5/tc30(2 tile 列)、trb/tr30(2 tile 行)、tr0testsrc(30 帧)、eB/eF/eI、pan(30 帧带 GOLDEN/ALTREF)、tr_na、1080p `hd.webm`。
 - **适用边界（重要）**：以上结论只覆盖 **Profile0 / 8bit 4:2:0 / limited range / 不启用
   segmentation / 编码器为 libvpx（frame_parallel_decoding_mode=1）** 的码流。
-  一旦开启分段（常见的 AQ 编码）、全范围色彩、10bit、show_existing_frame 包、>16 个 tile
+  一旦开启分段（常见的 AQ 编码）、全范围色彩、10bit、>16 个 tile
   等，目前会解错或未验证——完整清单见 **§10**。
 
 ## 2. 测试环境
@@ -387,7 +387,7 @@ H.264/HEVC 解码与桌面渲染不受影响。
 | 编号 | 问题 | 现状 | 优先级 |
 |---|---|---|---|
 | ~~A1~~ | ~~分段编码（segmentation）不支持~~ | **已解决（2026-11-06）**，见 §10.2 A1 | ~~P0~~ |
-| A2 | `show_existing_frame` 包未处理 | 会走普通解码路径 | P1 |
+| ~~A2~~ | ~~`show_existing_frame` 包未处理~~ | **已解决（2026-11-06）**，见 §10.2 A2 | ~~P1~~ |
 | A4 | 全范围色彩（`color_range=1`）未传 | 恒按 limited 处理 | P1 |
 | B1 | tile 数 > 16 静默截断 | 4K 多 tile 会缺内容 | P1 |
 | A3 | `frame_parallel_decoding_mode=0` 的概率自适应缺失 | 未实现，现有样片恰好都是 1 | P2 |
@@ -452,16 +452,21 @@ H.264/HEVC 解码与桌面渲染不受影响。
   `aq_1280x720_a1t1`（1280×720、120 帧、AQ1 + tile rows）。
   回归：`/tmp/full_test.sh` 20 个流全 `OK`，H.264/HEVC 不受影响。
 
-#### A2（P1）show_existing_frame 未处理
+#### A2（P1）show_existing_frame —— 已解决（2026-11-06）
 
-- `vp9_decode_uncompressed_header()` 解析了 `show_existing_frame` 与
-  `show_existing_frame_index`，但 `set_regs` 只在计算 `prev_was_inter` 时读了一下，
-  **没有改变解码流程**。
-- 后果：这类包（规范上只需把某个参考槽重新显示，负载常常只有 1 字节）会走普通解码
-  路径，`DEC_E=1` 后硬件没有有效码流可解，输出是 clear 值或上一帧，但 VA 时间戳照常推进。
-- 建议：`set_regs` 开头判断 `sh->show_existing_frame`，跳过解码并直接输出
-  `ref_store[show_existing_frame_index]`（或复制上一帧）。需要先造含该类包的样片
-  （vpxenc `--auto-alt-ref=1 --lag-in-frames=N` 通常会产生）。
+- 实现：`mwv207_dec_vp9_set_regs()` 分配好输出缓冲后立刻判断
+  `sh->show_existing_frame`：取 `slot = sh->ref_frame_map[show_existing_frame_index & 7]`，
+  把 `st->ref_store` 里该槽的 `luma*3/2` 字节直接 `memcpy` 到当前输出缓冲
+  （`buf->res`），然后 `DEC_E=0`、`st->pending=NULL` 并返回 —— 解码单元空转一帧，
+  不刷新任何参考槽，也不碰 MV 图像与帧上下文状态。
+- 边界：`st->ref_luma` 与当前 `luma_size` 不一致、或槽未初始化时打一条错误日志并输出
+  未填充的缓冲（规范上也要求 show_existing 只能引用同分辨率帧）。
+- 验证：合成样片 `/tmp/show2.ivf` = 单个关键帧包 + 超帧索引里塞一个 1 字节
+  `show_existing_frame` 包（`0x88` = frame_marker 10 / profile 0 / show_existing=1 / idx 0）。
+  `ffmpeg -i show2.ivf` 解出 2 帧，硬件两帧与软件（libvpx）逐字节相同。
+  注意 `vpxdec` 不会重复输出 show_existing 帧（只出 1 帧），核对帧数要用 ffmpeg。
+  `vpxenc --ivf` 才能得到真 IVF 容器（默认写 WebM，名字叫 .ivf 也是 WebM）。
+- 回归：`/tmp/full_test.sh` 20 个流全 `OK`。
 
 #### A4（P1）全范围色彩未传下去
 

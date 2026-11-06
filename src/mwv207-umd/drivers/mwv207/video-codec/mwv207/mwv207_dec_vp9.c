@@ -656,6 +656,31 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
          reg_buf->set_reg(reg_buf, JMDEC_DEC_E, 0);
          return;
       }
+      /* A show_existing_frame packet carries no coded picture: it asks for
+       * an already decoded reference frame to be displayed again.  Hand the
+       * copy we keep of that frame straight to the output surface and leave
+       * the decode unit idle. */
+      if (sh->show_existing_frame) {
+         uint32_t idx = sh->show_existing_frame_index & 7u;
+         uint32_t slot = (uint32_t)sh->ref_frame_map[idx];
+         uint32_t need = luma_size * 3 / 2;
+
+         if (st->ref_store && st->ref_store->res && slot < 16 &&
+             st->ref_luma == luma_size) {
+            uint8_t *src = decoder->ws->bo_map(decoder->ws,
+                                               st->ref_store->res->bo);
+            uint8_t *dst = decoder->ws->bo_map(decoder->ws, buf->res->bo);
+            if (src && dst)
+               memcpy(dst, src + (size_t)slot * need, need);
+         } else {
+            MWV207_LOG(MWV207_LEVEL_ERROR,
+                       "vp9: show_existing_frame slot %u unavailable\n",
+                       slot);
+         }
+         reg_buf->set_reg(reg_buf, JMDEC_DEC_E, 0);
+         st->pending = NULL;
+         return;
+      }
       vp9_set_addr(reg_buf, JMDEC_DEC_OUT_YBASE_LSB, buf->res->bo, 0);
       vp9_set_addr(reg_buf, JMDEC_DEC_OUT_CBASE_LSB, buf->res->bo, luma_size);
       /* The motion vectors the entropy engine decodes are written to the
