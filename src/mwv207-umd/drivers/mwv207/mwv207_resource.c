@@ -520,6 +520,23 @@ mwv207_transfer_map(struct pipe_context *pctx,
    return ptr;
 }
 
+/* 上传暂存的延迟释放: 把 staging 资源挂到上下文的小环里, 环满时才等待最老的
+ * 一个。这样 GPU 侧 blit 读它的数据不会被下一次上传覆盖 (见 context.h 注释)。 */
+void
+mwv207_retire_staging(struct pipe_context *pctx, struct pipe_resource *resource)
+{
+   struct mwv207_context *ctx = mwv207_context(pctx);
+   struct pipe_resource **slot = &ctx->retired_staging[ctx->retired_staging_next];
+
+   if (*slot) {
+      mwv207_wait_resource(pctx, *slot);
+      pipe_resource_reference(slot, NULL);
+   }
+   *slot = resource;
+   ctx->retired_staging_next =
+      (ctx->retired_staging_next + 1) % ARRAY_SIZE(ctx->retired_staging);
+}
+
 static void
 mwv207_transfer_unmap(struct pipe_context *pctx, struct pipe_transfer *ptrans)
 {
@@ -532,9 +549,18 @@ mwv207_transfer_unmap(struct pipe_context *pctx, struct pipe_transfer *ptrans)
 
       ctx->ws->bo_unmap(ctx->ws, staging_res->bo);
 
-      if (trans->base.usage & PIPE_MAP_WRITE)
+      if (trans->base.usage & PIPE_MAP_WRITE) {
+         struct pipe_resource *keep = NULL;
+
          mwv207_blit_resource_box(pctx, &res->base, &staging_res->base,
             ptrans->level, &ptrans->box);
+
+         /* 把 staging 的引用转交到"延迟释放"环: 立刻 ignore 会让 pb_cache 把
+          * 同一块内存交给下一次上传, 而 GPU 还在读它做本次 blit —— 这正是
+          * Firefox chrome 字形/图标被撕裂的原因。 */
+         pipe_resource_reference(&keep, &staging_res->base);
+         mwv207_retire_staging(pctx, keep);
+      }
 
       pipe_resource_reference(&trans->staging_res, NULL);
    } else {

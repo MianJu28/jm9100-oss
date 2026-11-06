@@ -258,17 +258,28 @@ dmesg 里 GPU 相关错误计数为 0。
 - KMD 6.6 移植：[../reports/KMD-6.6-PORT-REPORT.md](../reports/KMD-6.6-PORT-REPORT.md)
 - 验证工具：`tests/query/run-query-tests.sh`、`tests/run-all.sh`
 
-## 火狐浏览器自身 UI 的文字错位（r8 起可见）
+## 火狐浏览器自身 UI 的文字错位（r8 起可见）—— 已修（2026-11-07）
 
-- 现状：页面内容（WebRender）在 r8 下已完全正确；浏览器界面（标签栏 / 地址栏）
-  的文字呈"字符被打乱"状（`file:///tmp/diagpage.html` → `fi fhi;ap: t.lp|/tg/e d l`）。
-  r7 时整个 chrome 区域全黑（完全不渲染），r8 修复后才暴露出来。
-- 已排除：双源混合（`/tmp/dsrc`）、亚像素抗锯齿逐通道覆盖率（`/tmp/dsrc2`），
-  两者与 llvmpipe 逐字节一致。
-- 疑点方向：chrome 文字用 R8 字形图集，其 UV / 取样位置可能有问题；与
-  128 位纹理路径无关（那条路径已修好并有回归）。
-- 状态（2026-11-03）：**用户已搁置**，不阻塞发布；页面内容与渲染性能均已修完（见 r12 交接）。
-- 参考：`reports/FF-RENDER-20261102.md` 第 11.7 节。
+- 现象：页面内容正常，但浏览器 chrome（标签标题、地址栏、导航按钮、会话恢复条、
+  各处 16×16 图标）的文字/图标呈"字符被打乱、图标变成别的像素"状；同一驱动下
+  `gfx.webrender.software=true`（SWGL）完全正常，llvmpipe 也正常。
+- **根因：上传暂存 BO 的复用竞态。** `mwv207_transfer_unmap()` 的对齐路径把 CPU
+  数据经 staging 资源 `blit` 进 tiled 纹理后，立刻 `pipe_resource_reference(&staging, NULL)`
+  放回了 `pb_cache`；此时 GPU 还没执行完这次 blit，同一次绘制里下一次
+  `glTexSubImage2D` 就可能拿到同一块内存并被 CPU 覆盖 → 纹理内容被"撕裂"。
+  WebRender 用 `glTexSubImage2D` 频繁往字形图集（R8 2048×2048）和图像图集里打补丁，
+  于是字形/图标看起来是"别的字符、别的像素"。因为缓冲复用时机依赖驱动上报的
+  GL 版本（4.0 与 3.3 下 WR 的批处理节奏不同），症状会随版本/时序变化 —— 这也是
+  此前一直误判成"UV 错、128 位取样错"的原因。
+- 修法：新增 `mwv207_retire_staging()`（`mwv207_resource.c`）与上下文里的
+  `retired_staging[16]` 环（`include/mwv207_context.h`），把 staging 的引用转交给环，
+  环满时才 `mwv207_wait_resource()` 等待最老的一个再释放；`mwv207_context_destroy()`
+  逐个等待并释放。没有引入全局 `glFinish`，`glxgears` 仍 110 FPS。
+- 验证：Firefox chrome 文字/图标全部恢复（`使用百度搜索，或者输入网址`、`新标签页`、
+  关闭 ×、导航箭头）；`gfx.webrender.software=false` 与 `=true` 两条路径一致；
+  GL 探针（`aln2` R8 5×4、`mask1g` WR 蒙版链路）全对；VP9 回归 18/18；
+  `switch-mwv207.sh umd verify` 全通过（载荷 `payload-38` / `24.1.2-fullstack-r14`）。
+- 参考：`reports/FF-RENDER-20261102.md` 第 11.7 节（当时的错误假设已在此更正）。
 
 ## 玲珑（linyaps）应用打不开：CDI 挂载源被我们删掉（已修）
 

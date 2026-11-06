@@ -132,6 +132,12 @@ struct mwv207_context {
 
    struct pipe_shader_buffer atomic_bo[16];
    uint32_t atomic_mask;
+
+   /* 上传暂存: transfer_unmap() 把 CPU 数据 blit 进 tiled 纹理后, staging
+    * 资源不能立刻让 pb_cache 回收 —— GPU 可能还没读完它 (竞态会撕裂纹理,
+    * 表现为 Firefox 字形/图标错乱)。先挂在这里, 环满时再等待最老的一个。 */
+   struct pipe_resource *retired_staging[16];
+   unsigned retired_staging_next;
    struct pipe_shader_buffer ssbo[PIPE_SHADER_TYPES][PIPE_MAX_SHADER_BUFFERS];
    uint32_t ssbo_mask[PIPE_SHADER_TYPES];
    struct pipe_image_view ssimage[PIPE_SHADER_TYPES][PIPE_MAX_SHADER_IMAGES];

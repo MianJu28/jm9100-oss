@@ -138,6 +138,9 @@ mwv207_context_resource_init(struct pipe_context *pctx);
 void
 mwv207_wait_resource(struct pipe_context *pctx, struct pipe_resource *resource);
 
+void
+mwv207_retire_staging(struct pipe_context *pctx, struct pipe_resource *resource);
+
 enum pipe_error
 mwv207_get_image_info(struct mwv207_resource *res);
 
