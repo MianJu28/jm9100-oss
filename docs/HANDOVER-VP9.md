@@ -288,14 +288,11 @@ ASIC 按 tile 表逐块回到**原始码流**取数据。现在默认直接指�
 - loop filter 细节：`FILTERING_DIS` 与 `FILT_LEVEL` 的交互还没完全摸清
   （`MWV207_VP9_NOLF=1` 时硬件的输出与 libvpx `VX_NOLF=1` 仍有差距，需再对一次）。
 
-### 8.6 调试开关（提交前需要清理）
+### 8.6 调试开关（这些历史开关已在 9.7 中全部删除）
 
-`MWV207_VP9_DBG`（头解析 trace）、`MWV207_VP9_TILEROW=1`（放行 tile rows）、
-`MWV207_VP9_COPY=1`（实验：恢复多 tile 重拷）、`MWV207_VP9_CLEAR=1`（每帧清参考槽）、
-`MWV207_VP9_REGSET='idx=val,...'`（寄存器覆盖）、`MWV207_VP9_REGD=<file>`（寄存器 dump）、
-`MWV207_VP9_CDUMP` / `FCDUMP`（系数/模式概率 dump）、`MWV207_VP9_MVDUMP`（MV 图像 dump）、
-`MWV207_VP9_NOLF`、`MWV207_VP9_TMODE`、`MWV207_VP9_SLEN`/`SLENADD`、`MWV207_VP9_SB`/`SOFF`、
-`MWV207_VP9_NOREF`、`MWV207_VP9_NOHINT`、`MWV207_VP9_PROBBUMP`、`MWV207_VP9_ZCTR`。
+调试期用过的 `MWV207_VP9_*` 环境变量（`DBG`/`TILEROW`/`COPY`/`CLEAR`/`REGSET`/`REGD`/
+`CDUMP`/`FCDUMP`/`MVDUMP`/`NOLF`/`TMODE`/`SLEN`/`SLENADD`/`SB`/`SOFF`/`NOREF`/`NOHINT`/
+`PROBBUMP`/`ZCTR` 等）在 2026-11-06 已整体移除，当前驱动不需要任何环境变量。
 
 ### 8.7 测试配方（重启会清空 /tmp）
 
@@ -304,7 +301,6 @@ ninja -C ref/oh-mesa/User_source_code/mesa-24.1.2/build-full \
       src/gallium/targets/va/libmwv207_drv_video.so
 cp ref/oh-mesa/.../build-full/src/gallium/targets/va/libmwv207_drv_video.so \
    /tmp/gd3/mwv207_drv_video.so      # 注意：文件名没有 lib 前缀！
-MWV207_VP9_TILEROW=1 MWV207_VP9_CLEAR=1 \
 LIBVA_DRIVERS_PATH=/tmp/gd3 LIBVA_DRIVER_NAME=mwv207 ffmpeg ...
 ```
 
@@ -362,11 +358,14 @@ active 参考"后：640×360 30 帧 0.57s（19ms/帧）、1080p 20 帧 1.8s（90
   替换系统驱动是安全的。
 - 1080p 样片 `/tmp/hd.webm`（1920×1080、20 帧、realtime crf33）逐位一致。
 
-### 9.6 仍未清理的调试开关
+### 9.6（原“仍未清理的调试开关”，已被 9.7 取代）
 
-`MWV207_VP9_DBG`（trace）、`MWV207_VP9_DUMP` / `DUMPS`（staging 转储）、
-`MWV207_VP9_MVDUMP`、`MWV207_VP9_REGSET` / `REGD`、`MWV207_VP9_CLEAR`、
-`MWV207_VP9_SLEN`/`SB`/`SOFF`/`TMODE`/`NOLF`/`PROBBUMP`/`ZCTR`/`NOTY`/`NOHINT`/`NOREF`/
-`CTRSZ`/`SCRZERO`/`EC`/`BD`/`RAWQP`/`ABSQP`/`SWAP`/`TABSWAP`/`HCBS`/`STRIDE`/`SEGFILT`/
-`OUTTILE`/`COPY`/`STREAM_FULL`/`BIGBUF`/`NOPP`/`OUTBD`/`TBASE`/`SLENADD`。
-功能上全部是 env 门控（默认不生效），但代码里仍是历史包袱，后续可整体删除。
+### 9.7 调试开关清理（2026-11-06）
+
+`mwv207_dec_vp9.c` 与 `mwv207_decoder_vp9_slice_header.c` 里所有 `MWV207_VP9_*` /
+`MWV207_PP_*` 环境变量、`vp9_trace()` / `vp9_dbg_enabled()`、以及全部 `fprintf(stderr)`
+调试打印都已删除（净减 444 行，编译 0 warning）。驱动现在不需要任何环境变量。
+
+等价性验证：清理前后的驱动在 17 个码流（14 个 `vp9-assets` 样片、`pan.webm`、
+1080p `hd.webm`、`tr_na.ivf`）上输出逐字节相同；对软件参考的 Y PSNR 全部 99.00；
+H.264/HEVC 解码与桌面渲染不受影响。
