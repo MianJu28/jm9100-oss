@@ -547,6 +547,12 @@ H.264/HEVC 解码与桌面渲染不受影响。
 
 #### A5（P3）10bit（Profile 2）、4:2:2/4:4:4（Profile 1/3）、alpha
 
+- **已加拒绝保护（2026-11-06）**：`set_regs` 解析完头部后检查
+  `sh->vp_profile != 0 || sh->bit_depth != 8` 就直接报错并 `DEC_E=0` 跳过该帧。
+  原因：把 Profile 1（4:4:4）流交给解码单元会让 ASIC 自旋，整台机器的图形栈卡死
+  （vainfo/ffmpeg 全部挂起、dmesg 没有 job timeout，只能重启），必须提前拒绝。
+  实测 Profile 1/2 的 webm 会被干净地拒绝（ffmpeg 报 `Function not implemented`，
+  无挂死、dmesg 无新增 timeout）。
 - `vainfo` 只广播 `VAProfileVP9Profile0`（H.264High10/HEVCMain10 有 10bit 路径），
   所以 10bit VP9 目前根本不会进这个驱动。
 - 要支持 Profile 2 需要：广播 profile、P010 输出（`mwv207_dec_pp_params_init()` 已有 10bit

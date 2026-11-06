@@ -909,6 +909,20 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
       return;
    }
 
+   /* Only VP9 Profile 0 (8-bit 4:2:0) is wired up here: the pipe only
+    * allocates NV12 staging buffers and the decode unit only knows the 8-bit
+    * 4:2:0 path.  Programming it with a 4:2:2/4:4:4 or 10-bit stream wedges
+    * the decode unit (observed: a Profile 1 stream hangs the ASIC and the
+    * whole driver until reboot), so reject such streams instead. */
+   if (sh->vp_profile != 0 || sh->bit_depth != 8) {
+      MWV207_LOG(MWV207_LEVEL_ERROR,
+                 "vp9: unsupported profile %u (%u-bit), only Profile 0 8-bit "
+                 "4:2:0 is decoded; frame skipped\n",
+                 sh->vp_profile, sh->bit_depth);
+      reg_buf->set_reg(reg_buf, JMDEC_DEC_E, 0);
+      return;
+   }
+
    width = sh->width ? sh->width : width;
    height = sh->height ? sh->height : height;
    /* Inter frames inherit the picture size from the reference frame and
