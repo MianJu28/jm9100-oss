@@ -134,8 +134,26 @@ C-2 16 位采样编码（硬件边界）、D7 Vulkan（官方闭源也没有）�
   先 `systemctl --user stop app-openuuyc`。
 - `EGL_ICD` 原地改写逻辑在 `switch-mwv207.sh`（`VENDOR_EGL_ICD_ORIG` 备份 +
   `library_path` 指向 `libEGL_jm.so.0`）；`/etc/cdi/jmgpu.yaml` 依赖该文件存在。
-- KMD 热切换不可行（refcnt 恒 1，内核内部引用），只能重启；脚本有 `kmd stage`
-  （只放置）与 `refresh_initramfs`。
+- KMD 热切换**可行**（2026-11-06 实测）：`sudo ./switch-mwv207.sh kmd install`
+  会停 lightdm → `rmmod`（refcnt 到 0 后能卸）→ 装入自建 `.ko` → 重新拉起 lightdm，
+  桌面约几秒后恢复，桌面会话会重新登录一次。脚本另有 `kmd stage`（只放置，重启生效）
+  与 `refresh_initramfs`。
+- **自建 KMD 用 DKMS 注册成 `mwv207-oss` 包，随内核自动重建**（2026-11-06）：
+  * 源目录 `/usr/src/mwv207-oss-1.0.0`（由 `tools/dkms-sync.sh` 从仓库
+    `src/kernel-6.6` 同步，剔除 `*.o/*.ko/*.mod.c` 等编译产物）；`dkms.conf` 里
+    `BUILT_MODULE_NAME=mwv207`、`DEST_MODULE_LOCATION=/updates/dkms`、`AUTOINSTALL=YES`，
+    `MAKE` 用 `${kernelver}` + `${build_dir}`。
+  * 产物 `/lib/modules/<kver>/updates/dkms/mwv207.ko`；因为模块名仍是 `mwv207`，
+    depmod 会把它排在 `kernel/drivers/gpu/drm/mwv207/` 的内建版之前，重启即生效。
+  * 内核升级后 `dkms autoinstall` 自动重编这个包；仓库源码有改动时跑一次
+    `sudo ./tools/dkms-sync.sh [版本号]` 同步并重建。
+  * 坑：`make -C /lib/modules/$(uname -r)/build M=`（M 为空）会触发 syncconfig，
+    而 Deepin 的 headers 包没有 `scripts/kconfig`，失败时会删掉
+    `include/generated/autoconf.h`，之后所有模块编译都报找不到该文件。可从 ostree
+    部署快照还原（`rsync -a /ostree/deploy/deepin/deploy/<当前部署>/usr/src/linux-headers-$(uname -r)/ /usr/src/linux-headers-$(uname -r)/`）；
+    `tools/dkms-sync.sh` 已在开头检查该文件并给出提示。
+  * 厂商那条 DKMS 包（`mwv207/1.8.0.uos`）构建出来的是 `jmgpu.ko`，不会覆盖我们的
+    模块；`jmgpu` 仍由内核命令行 `modprobe.blacklist=jmgpu` 拦住。
 - 上游枚举陷阱：`p_format.h` 只在 `ref/mesa-22.3.7/...`（`find` 要 `-L`）。
 - **切换脚本的 Xorg 日志要按实际显示号解析**（2026-11-03 修）：display 不一定是
   `:0`——`:0` 的 Xorg 崩溃后 lightdm 会起在 `:1`，日志写到 `Xorg.1.log`。原先写死
