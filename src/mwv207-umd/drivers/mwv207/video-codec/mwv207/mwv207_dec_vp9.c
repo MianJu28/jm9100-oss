@@ -126,6 +126,19 @@ struct mwv207_vp9_state {
    struct mwv207_video_buffer *pending;
    uint32_t pending_flags, pending_luma;
    uint32_t ref_buf_size, ref_luma, ref_frame_bytes;
+   /* Geometry of the picture each reference slot currently holds.  VP9 may
+    * pick a reference of a different size; the hardware then scales it with
+    * (ref_dim << 14) / cur_dim, and the reference's own stride/luma offset
+    * differ from the current frame's.  So remember per slot what it holds. */
+   uint16_t ref_slot_w[16];
+   uint16_t ref_slot_h[16];
+   uint32_t ref_slot_luma[16];
+   uint32_t ref_slot_bytes[16];
+   /* Slot pitch inside ref_store: the largest picture stored so far. */
+   uint32_t ref_stride;
+   /* Geometry of the frame handed to the hardware, needed by submit_done
+    * when it copies the decoded picture into its reference slots. */
+   uint32_t pending_w, pending_h;
    uint32_t width;
    uint32_t height;
    /* Tile payload of the current frame: the hardware walks the tiles by
@@ -259,11 +272,36 @@ vp9_write_segment_regs(struct mwv207_video_reg_buf *reg_buf,
    }
 }
 
+/* Tiled NV12 geometry of a decoded picture: stride, luma plane size and the
+ * full picture size (luma + two chroma planes).  Mirrors the layout the
+ * decode unit writes, so a reference of a different size can be described
+ * to the hardware correctly. */
+static void
+vp9_frame_geometry(struct mwv207_video_dec *dec, uint32_t width,
+                   uint32_t height, uint32_t *y_stride, uint32_t *luma_size,
+                   uint32_t *frame_bytes)
+{
+   uint32_t out_w = NEXT_MULTIPLE(4 * (((width + 7) >> 3) << 3)
+                                  * dec->dec_param.bit_depth,
+                                  ALIGN(dec->dec_param.w_align) * 8) / 8;
+   uint32_t chroma_rows = (height + 6) / 8;
+   uint32_t luma_rows = 2 * chroma_rows;
+   uint32_t luma = out_w * luma_rows;
+   uint32_t chroma = (out_w / 2) * chroma_rows;
+
+   if (y_stride)
+      *y_stride = out_w;
+   if (luma_size)
+      *luma_size = luma;
+   if (frame_bytes)
+      *frame_bytes = luma + 2 * chroma;
+}
+
 static void
 vp9_write_ref_regs(struct mwv207_vp9_state *st,
                    struct mwv207_video_reg_buf *reg_buf,
-                   struct mwv207_vp9_slice_header *sh, uint32_t luma_size,
-                   uint32_t frame_bytes, uint32_t y_stride)
+                   struct mwv207_vp9_slice_header *sh,
+                   struct mwv207_video_dec *dec)
 {
    uint32_t k;
 
@@ -273,38 +311,58 @@ vp9_write_ref_regs(struct mwv207_vp9_state *st,
       return;
    for (k = 0; k < 3; k++) {
       uint32_t slot = sh->active_ref_idx[k];
+      uint32_t refw, refh, rstride, rluma;
+      uint32_t hs, vs;
       struct mwv207_bo *bo;
-      uint64_t off = (uint64_t)slot * frame_bytes;
+      uint64_t off;
 
       if (slot >= 16)
          continue;
-      bo = st->ref_store->res->bo;
-      if (!bo)
+      refw = st->ref_slot_w[slot];
+      refh = st->ref_slot_h[slot];
+      /* A slot that has not been refreshed yet holds nothing usable. */
+      if (!refw || !refh || !sh->width || !sh->height || !st->ref_stride)
          continue;
+      off = (uint64_t)slot * st->ref_stride;
+      rluma = st->ref_slot_luma[slot];
+      bo = st->ref_store->res->bo;
+      if (!bo || !rluma)
+         continue;
+      vp9_frame_geometry(dec, refw, refh, &rstride, NULL, NULL);
 
       reg_buf->set_addr_reg_hi(reg_buf, vp9_ref_ybase_msb[k], bo, off,
                                MWV207_BO_ACC_FLAG_WRITE);
       reg_buf->set_addr_reg(reg_buf, vp9_ref_ybase_lsb[k], bo, off,
                             MWV207_BO_ACC_FLAG_WRITE);
       reg_buf->set_addr_reg_hi(reg_buf, vp9_ref_cbase_msb[k], bo,
-                               off + luma_size, MWV207_BO_ACC_FLAG_WRITE);
+                               off + rluma, MWV207_BO_ACC_FLAG_WRITE);
       reg_buf->set_addr_reg(reg_buf, vp9_ref_cbase_lsb[k], bo,
-                            off + luma_size, MWV207_BO_ACC_FLAG_WRITE);
+                            off + rluma, MWV207_BO_ACC_FLAG_WRITE);
       reg_buf->set_addr_reg_hi(reg_buf, vp9_ref_tybase_msb[k], bo, off,
                                MWV207_BO_ACC_FLAG_WRITE);
       reg_buf->set_addr_reg(reg_buf, vp9_ref_tybase_lsb[k], bo, off,
                             MWV207_BO_ACC_FLAG_WRITE);
       reg_buf->set_addr_reg_hi(reg_buf, vp9_ref_tcbase_msb[k], bo,
-                               off + luma_size, MWV207_BO_ACC_FLAG_WRITE);
+                               off + rluma, MWV207_BO_ACC_FLAG_WRITE);
       reg_buf->set_addr_reg(reg_buf, vp9_ref_tcbase_lsb[k], bo,
-                            off + luma_size, MWV207_BO_ACC_FLAG_WRITE);
-      reg_buf->set_reg(reg_buf, vp9_ref_y_stride_reg[k], y_stride);
-      reg_buf->set_reg(reg_buf, vp9_ref_c_stride_reg[k], y_stride);
-      reg_buf->set_reg(reg_buf, vp9_ref_w_reg[k], sh->width);
-      reg_buf->set_reg(reg_buf, vp9_ref_h_reg[k], sh->height);
-      /* 1.0 in the hardware's 14-bit fixed point (vendor: (w << 14) / w). */
-      reg_buf->set_reg(reg_buf, vp9_ref_hscale_reg[k], 1u << 14);
-      reg_buf->set_reg(reg_buf, vp9_ref_vscale_reg[k], 1u << 14);
+                            off + rluma, MWV207_BO_ACC_FLAG_WRITE);
+      reg_buf->set_reg(reg_buf, vp9_ref_y_stride_reg[k], rstride);
+      reg_buf->set_reg(reg_buf, vp9_ref_c_stride_reg[k], rstride);
+      /* The width/height registers describe the reference picture itself,
+       * not the frame being decoded. */
+      reg_buf->set_reg(reg_buf, vp9_ref_w_reg[k], refw);
+      reg_buf->set_reg(reg_buf, vp9_ref_h_reg[k], refh);
+      /* 14-bit fixed point scaling factors, (ref_dim << 14) / cur_dim the
+       * way the mainline hantro driver programs them
+       * (hantro_g2_vp9_dec.c, config_ref()).  Equal sizes yield 1.0. */
+      hs = ((uint32_t)refw << 14) / sh->width;
+      vs = ((uint32_t)refh << 14) / sh->height;
+      if (!hs)
+         hs = 1u << 14;
+      if (!vs)
+         vs = 1u << 14;
+      reg_buf->set_reg(reg_buf, vp9_ref_hscale_reg[k], hs);
+      reg_buf->set_reg(reg_buf, vp9_ref_vscale_reg[k], vs);
       /* ref_frame_sign_bias[] is indexed by REF_FRAME (INTRA, LAST, GOLDEN,
        * ALTREF); our k is 0..2 for LAST/GOLDEN/ALTREF. */
       reg_buf->set_reg(reg_buf, vp9_ref_sign_bias_reg[k],
@@ -330,24 +388,57 @@ vp9_write_ref_regs(struct mwv207_vp9_state *st,
 }
 
 
+/* Copy a freshly decoded picture into every reference slot its
+ * refresh_frame_flags selects.  Slots keep their own geometry because VP9
+ * allows a later frame of a different size to reference them; the slot pitch
+ * grows to the largest picture seen so far and the already stored pictures
+ * are relocated when that happens. */
 static void
 vp9_refresh_slots(struct mwv207_video_decoder *decoder,
                   struct mwv207_vp9_state *st, uint32_t refresh_flags,
-                  struct mwv207_video_buffer *buf, uint32_t frame_bytes,
-                  uint32_t luma_size)
+                  struct mwv207_video_buffer *buf, uint32_t width,
+                  uint32_t height, uint32_t frame_bytes, uint32_t luma_size)
 {
-   uint32_t i, need = frame_bytes;
+   uint32_t i, stride;
 
    if (!buf || !buf->res || !buf->res->bo)
       return;
-   if (st->ref_buf_size < need * 16) {
-      if (st->ref_store)
-         mwv207_video_buffer_destroy((struct pipe_video_buffer *)st->ref_store);
-      st->ref_store = mwv207_video_buffer_create_2(
-         decoder->base.context, need * 16, PIPE_USAGE_STAGING);
-      st->ref_buf_size = st->ref_store ? need * 16 : 0;
-      st->ref_luma = luma_size;
-      st->ref_frame_bytes = frame_bytes;
+   stride = (frame_bytes + 15u) & ~15u;
+   if (stride < st->ref_stride)
+      stride = st->ref_stride;
+   if (!st->ref_store || !st->ref_store->res ||
+       st->ref_buf_size < stride * 16u) {
+      struct mwv207_video_buffer *old = st->ref_store;
+      uint32_t old_stride = st->ref_stride;
+      uint8_t *dst = NULL, *src = NULL;
+
+      st->ref_store = mwv207_video_buffer_create_2(decoder->base.context,
+                                                   stride * 16u,
+                                                   PIPE_USAGE_STAGING);
+      if (!st->ref_store || !st->ref_store->res) {
+         st->ref_store = old;
+         return;
+      }
+      dst = decoder->ws->bo_map(decoder->ws, st->ref_store->res->bo);
+      if (old && old->res)
+         src = decoder->ws->bo_map(decoder->ws, old->res->bo);
+      if (dst && src && old_stride) {
+         /* Growing the pitch: move each slot back to front so the copies
+          * cannot overwrite data they still need. */
+         for (i = 16; i-- > 0;) {
+            uint32_t n = st->ref_slot_bytes[i];
+            if (!n)
+               continue;
+            if (n > old_stride)
+               n = old_stride;
+            memmove(dst + (size_t)i * stride,
+                    src + (size_t)i * old_stride, n);
+         }
+      }
+      if (old)
+         mwv207_video_buffer_destroy((struct pipe_video_buffer *)old);
+      st->ref_buf_size = stride * 16u;
+      st->ref_stride = stride;
    }
    if (!st->ref_store || !st->ref_store->res)
       return;
@@ -358,10 +449,15 @@ vp9_refresh_slots(struct mwv207_video_decoder *decoder,
       src = decoder->ws->bo_map(decoder->ws, buf->res->bo);
       dst = decoder->ws->bo_map(decoder->ws, st->ref_store->res->bo);
       if (src && dst)
-         memcpy(dst + (size_t)i * need, src, need);
+         memcpy(dst + (size_t)i * st->ref_stride, src, frame_bytes);
+      st->ref_slot_w[i] = (uint16_t)width;
+      st->ref_slot_h[i] = (uint16_t)height;
+      st->ref_slot_luma[i] = luma_size;
+      st->ref_slot_bytes[i] = frame_bytes;
    }
+   st->ref_luma = luma_size;
+   st->ref_frame_bytes = frame_bytes;
 }
-
 
 static void
 vp9_destroy_state(struct mwv207_vp9_state *st)
@@ -914,6 +1010,46 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
     * 4:2:0 path.  Programming it with a 4:2:2/4:4:4 or 10-bit stream wedges
     * the decode unit (observed: a Profile 1 stream hangs the ASIC and the
     * whole driver until reboot), so reject such streams instead. */
+   /* VP9 lets a frame reference a picture of a different size and scales it
+    * on the fly.  The decode unit does have the width/height/scale registers
+    * for that, but with our register setup every cross-size reference made
+    * the unit spin forever afterwards (the job timed out and the ring had to
+    * be reset).  Reject such frames instead of handing the hardware a
+    * reference geometry it cannot cope with. */
+   if (!sh->key_frame && !sh->intra_only) {
+      uint32_t k;
+      for (k = 0; k < 3; k++) {
+         uint32_t slot = sh->active_ref_idx[k];
+
+         if (slot >= 16) {
+            MWV207_LOG(MWV207_LEVEL_ERROR,
+                       "vp9: reference %u maps to slot %u, out of range;"
+                       " frame skipped\n", k, slot);
+            reg_buf->set_reg(reg_buf, JMDEC_DEC_E, 0);
+            return;
+         }
+         /* Decoding an inter frame whose reference has never been decoded
+          * (e.g. a client that recreated its VA context) would hand the
+          * decode unit empty reference addresses and wedge it, so skip it. */
+         if (!st->ref_slot_w[slot]) {
+            MWV207_LOG(MWV207_LEVEL_ERROR,
+                       "vp9: reference %u (slot %u) has no decoded picture;"
+                       " frame skipped\n", k, slot);
+            reg_buf->set_reg(reg_buf, JMDEC_DEC_E, 0);
+            return;
+         }
+         if (st->ref_slot_w[slot] != sh->width ||
+             st->ref_slot_h[slot] != sh->height) {
+            MWV207_LOG(MWV207_LEVEL_ERROR,
+                       "vp9: reference %u is %ux%u but frame is %ux%u,"
+                       " unsupported; frame skipped\n",
+                       k, st->ref_slot_w[slot], st->ref_slot_h[slot],
+                       sh->width, sh->height);
+            reg_buf->set_reg(reg_buf, JMDEC_DEC_E, 0);
+            return;
+         }
+      }
+   }
    if (sh->vp_profile != 0 || sh->bit_depth != 8) {
       MWV207_LOG(MWV207_LEVEL_ERROR,
                  "vp9: unsupported profile %u (%u-bit), only Profile 0 8-bit "
@@ -1079,12 +1215,12 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
          uint32_t need = frame_bytes;
 
          if (st->ref_store && st->ref_store->res && slot < 16 &&
-             st->ref_luma == luma_size) {
+             st->ref_slot_bytes[slot] == need && st->ref_stride) {
             uint8_t *src = decoder->ws->bo_map(decoder->ws,
                                                st->ref_store->res->bo);
             uint8_t *dst = decoder->ws->bo_map(decoder->ws, buf->res->bo);
             if (src && dst)
-               memcpy(dst, src + (size_t)slot * need, need);
+               memcpy(dst, src + (size_t)slot * st->ref_stride, need);
          } else {
             MWV207_LOG(MWV207_LEVEL_ERROR,
                        "vp9: show_existing_frame slot %u unavailable\n",
@@ -1232,7 +1368,7 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
    reg_buf->set_reg(reg_buf, JMDEC_NO_FWD_REF_E, 0);
    reg_buf->set_reg(reg_buf, JMDEC_REFER_VALID_E, 1);
    reg_buf->set_reg(reg_buf, JMDEC_REFER_LTERM_E, 0);
-   vp9_write_ref_regs(st, reg_buf, sh, vp9_luma_size, st->ref_frame_bytes, out_w_y);
+   vp9_write_ref_regs(st, reg_buf, sh, dec);
 
    vp9_set_addr(reg_buf, JMDEC_PROB_TAB_BASE_LSB, st->scratch->res->bo,
                 VP9_PROB_OFFSET);
@@ -1340,6 +1476,8 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
    st->pending = buf;
    st->pending_flags = sh->refresh_frame_flags;
    st->pending_luma = vp9_luma_size;
+   st->pending_w = sh->width;
+   st->pending_h = sh->height;
 }
 
 void
@@ -1351,7 +1489,8 @@ mwv207_dec_vp9_submit_done(struct mwv207_video_decoder *decoder)
    vp9_adapt_probs(st, &st->sh);
    st->prev_frame_key = st->sh.key_frame;
    vp9_refresh_slots(decoder, st, st->pending_flags, st->pending,
-                     st->ref_frame_bytes, st->pending_luma);
+                     st->pending_w, st->pending_h, st->ref_frame_bytes,
+                     st->pending_luma);
    st->pending = NULL;
 }
 
