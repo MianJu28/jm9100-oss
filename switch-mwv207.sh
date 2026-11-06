@@ -21,8 +21,8 @@
 #   sudo ./switch-mwv207.sh stack builtin         # 切到内核内建驱动 (内建 KMD + 开源 UMD)
 #   sudo ./switch-mwv207.sh stack vendor          # 切到厂商驱动 (jmgpu + 厂商 UMD, 桌面保持停止)
 #   sudo ./switch-mwv207.sh stack menu            # 交互选择
-#     切换失败(含桌面未点亮/自检不过)一律自动回滚到 oss(自建修复版)并点亮桌面;
-#     切 vendor 会拉起看门狗, 300s 内不确认就自动回滚。
+#     切换失败(含桌面未点亮/自检不过)一律自动回滚到 builtin(内核内建驱动)并点亮桌面;
+#     切 vendor 会拉起看门狗, 300s 内不确认就自动回滚到 builtin。
 #
 #   sudo ./switch-mwv207.sh status                # 同时看用户态 + 内核态
 #   sudo ./switch-mwv207.sh check                 # 两层一起预检
@@ -1699,7 +1699,7 @@ umd_main() {
 #   builtin  内核内建 mwv207.ko        + 开源用户态载荷 (Mesa 24.1.2 oss)
 #   oss      自建修复 mwv207.ko (DKMS) + 开源用户态载荷 (同上, VA-API 带 VP9 修复)
 #   vendor   厂商 jmgpu.ko             + 厂商 UMD (jmgpu_drv_video.so / EGL / OpenCL)
-# 切换永远双层同切; 任一步失败或桌面未点亮 → 自动回滚到 oss(自建修复版)。
+# 切换永远双层同切; 任一步失败或桌面未点亮 → 自动回滚到 builtin(内核内建驱动)。
 STACK_FLAG="/run/mwv207-stack-pending"
 STACK_WD_TIMEOUT="${STACK_WD_TIMEOUT:-300}"
 
@@ -1710,6 +1710,13 @@ stack_kmd_state() {
     lv=$(loaded_srcver)
     dk=$(ko_srcver "$(ko_dkms)" 2>/dev/null) || dk=""
     [ -n "$dk" ] || dk=$(cat "$(ko_state)/oss-srcversion" 2>/dev/null) || dk=""
+    # 再退一步: 用仓库里的构建产物, 并顺手补写缓存(否则切 builtin 阶段中断后认不出自建版)
+    if [ -z "$dk" ] && [ -f "$WORKDIR/src/kernel-6.6/mwv207.ko" ]; then
+        dk=$(ko_srcver "$WORKDIR/src/kernel-6.6/mwv207.ko" 2>/dev/null) || dk=""
+        if [ -n "$dk" ] && [ "$(id -u)" = 0 ]; then
+            mkdir -p "$(ko_state)"; printf '%s\n' "$dk" > "$(ko_state)/oss-srcversion" 2>/dev/null || true
+        fi
+    fi
     it=$(ko_srcver "$(ko_in_tree)" 2>/dev/null) || it=""
     if [ -n "$dk" ] && [ "$lv" = "$dk" ]; then echo oss
     elif [ -n "$it" ] && [ "$lv" = "$it" ]; then echo builtin
@@ -1765,7 +1772,7 @@ stack_status() {
         oss|builtin)
             printf '    mwv207      已加载 srcversion=%s refcnt=%s\n' "$(loaded_srcver)" "$(loaded_refcnt)"
             printf '    内建 .ko     %s\n' "$(ko_srcver "$(ko_in_tree)" 2>/dev/null || echo '[缺失]')"
-            printf '    自建 .ko     %s\n' "$(ko_srcver "$(ko_dkms)" 2>/dev/null || echo '[未放置]')"
+            printf '    自建 .ko     %s\n' "$(ko_srcver "$(ko_dkms)" 2>/dev/null || echo '[未放置, 重启后将回落到内建]')"
             ;;
         *)
             printf '    mwv207      %s\n' "$([ -d /sys/module/mwv207 ] && echo 已加载 || echo 未加载)"
@@ -1785,7 +1792,7 @@ stack_status() {
         "$([ -e "$VENDOR_DEV" ] && echo present || echo absent)"
     printf '  待回滚标记    %s\n' "$([ -e "$STACK_FLAG" ] && echo "yes (看门狗 ${STACK_WD_TIMEOUT}s)" || echo no)"
     if [ "$all" = mixed ]; then
-        printf '  提示          内核态与用户态不一致; 执行 "sudo %s stack oss" 可统一到自建修复态\n' "$0"
+        printf '  提示          内核态与用户态不一致; 执行 "sudo %s stack oss" 可统一到自建修复态, 或 "stack builtin" 回到内建态\n' "$0"
     fi
 }
 
@@ -1853,23 +1860,30 @@ stack_kmd_builtin() {
     kmd_reload_module
 }
 
-# ---- 回滚: 任何失败都回到 oss(自建修复) ----------------------------------
-stack_rollback_to_oss() {
-    log "==== 自动回滚到开源修复驱动 (oss) ===="
+# ---- 回滚: 任何失败都回到 builtin(内核内建驱动) ---------------------------
+# 失败兜底选最保守的一档: 内核内建模块 + 开源用户态。内建 .ko 始终在
+# /lib/modules/<kver>/kernel/... 里, 不依赖 DKMS 是否装好、不会被我们删掉,
+# 因此它永远可用; 自建版只作为"正常态", 不作为兜底。
+stack_rollback_to_builtin() {
+    log "==== 自动回滚到内核内建驱动 (builtin) ===="
     if vendor_loaded; then
         fbcon_bind 0
         run modprobe -r jmgpu || warn "  jmgpu 卸载失败 (refcnt=$(cat /sys/module/jmgpu/refcnt 2>/dev/null))"
         sleep 1
     fi
-    if ! stack_kmd_oss; then
-        warn "  自建模块加载失败, 退回内建模块"
-        stack_kmd_builtin || warn "  内建模块也未能加载"
+    # 用户态先回到开源载荷(与 builtin 搭配的合法组合), 再做 KMD
+    stack_ensure_oss_umd || warn "  开源载荷恢复失败"
+    if ! stack_kmd_builtin; then
+        warn "  内建模块加载失败"
+        fbcon_bind 1
+        start_display || warn "  lightdm 启动失败"
+        return 1
     fi
     fbcon_bind 1
-    stack_ensure_oss_umd || warn "  开源载荷恢复失败"
     start_display || warn "  lightdm 启动失败"
     wait_x_ok || warn "  桌面未点亮, 请查看 /var/log/Xorg.0.log"
     log "  回滚结束: 驱动状态=$(stack_detect)"
+    return 0
 }
 
 # ---- 厂商栈下的最小可用性检查 -------------------------------------------
@@ -1890,7 +1904,7 @@ stack_vendor_check() {
 #   阶段 1 (前台): 只做文件级动作 —— UMD 载荷、KMD 模块、depmod、initramfs,
 #                  全程不碰桌面; 失败就退出, 桌面毫发无损。
 #   阶段 2 (detached): 停 lightdm → rmmod/modprobe → 起 lightdm → 自检,
-#                  失败自动回滚到 oss, 结果写 /run/mwv207-stack-result。
+#                  失败自动回滚到 builtin, 结果写 /run/mwv207-stack-result。
 STACK_PLAN="/run/mwv207-stack-plan"
 STACK_STATE_RESULT="/run/mwv207-stack-result"
 STACK_LOG="/var/log/mwv207-stack.log"
@@ -1936,8 +1950,24 @@ stack_apply_stage() {
     [ "$target" != vendor ] && rm -f "$STACK_FLAG" 2>/dev/null
     stop_display
     case "$target" in
-        oss)     KMD_EXPECT_SRCVER=$(ko_srcver "$(ko_dkms)");     kmd_reload_module || rc=1 ;;
-        builtin) KMD_EXPECT_SRCVER=$(ko_srcver "$(ko_in_tree)");  kmd_reload_module || rc=1 ;;
+        oss)
+            KMD_EXPECT_SRCVER=$(ko_srcver "$(ko_dkms)")
+            if [ -z "$KMD_EXPECT_SRCVER" ]; then
+                warn "  找不到自建模块 $(ko_dkms)(阶段 1 未就位?)"
+                rc=1
+            else
+                kmd_reload_module || rc=1
+            fi
+            ;;
+        builtin)
+            KMD_EXPECT_SRCVER=$(ko_srcver "$(ko_in_tree)")
+            if [ -z "$KMD_EXPECT_SRCVER" ]; then
+                warn "  找不到内建模块 $(ko_in_tree)"
+                rc=1
+            else
+                kmd_reload_module || rc=1
+            fi
+            ;;
         vendor)
             vendor_switch_kmd || rc=1
             if [ $rc = 0 ]; then sleep 1; stack_vendor_check || rc=1; fi
@@ -1950,10 +1980,10 @@ stack_apply_stage() {
         setsid nohup bash -c "
             sleep $STACK_WD_TIMEOUT
             [ -e '$STACK_FLAG' ] || exit 0
-            echo \"[\$(date '+%F %T')] stack 看门狗: 到点自动回滚到 oss\" >> '$STACK_LOG'
-            '$self' stack apply oss --from-watchdog >> '$STACK_LOG' 2>&1
+            echo \"[\$(date '+%F %T')] stack 看门狗: 到点回滚到 builtin\" >> '$STACK_LOG'
+            '$self' stack apply builtin --from-watchdog >> '$STACK_LOG' 2>&1
         " >/dev/null 2>&1 &
-        log "  厂商栈已就位; 桌面保持停止; 看门狗 ${STACK_WD_TIMEOUT}s 后自动回滚到 oss"
+        log "  厂商栈已就位; 桌面保持停止; 看门狗 ${STACK_WD_TIMEOUT}s 后回滚到 builtin"
         log "  自检: sudo $0 vendor verify    退栈: sudo $0 stack oss"
         echo "ok $(date '+%F %T') target=vendor" > "$STACK_STATE_RESULT"
         stack_status
@@ -1968,8 +1998,8 @@ stack_apply_stage() {
     fi
 
     if [ $rc != 0 ]; then
-        warn "  应用阶段失败 → 自动回滚到开源修复驱动 (oss)"
-        stack_rollback_to_oss
+        warn "  应用阶段失败 → 自动回滚到内核内建驱动 (builtin)"
+        stack_rollback_to_builtin
         echo "failed $(date '+%F %T') target=$target" > "$STACK_STATE_RESULT"
         return 1
     fi
@@ -1988,7 +2018,7 @@ stack_switch_to() {
 
     if [ "$DRY_RUN" = 1 ]; then
         log "[dry-run] 阶段 1 前台: 切用户态($target) + 放 KMD 模块文件 (不动桌面)"
-        log "[dry-run] 阶段 2 detached: 停 lightdm → rmmod/modprobe → 起 lightdm → 自检 (失败回滚 oss)"
+        log "[dry-run] 阶段 2 detached: 停 lightdm → rmmod/modprobe → 起 lightdm → 自检 (失败回滚 builtin)"
         return 0
     fi
     if [ "$cur" = "$target" ]; then
@@ -2014,7 +2044,7 @@ stack_switch_to() {
     log "  阶段 2 已转入后台, ${delay}s 后执行 (会短暂停止 lightdm, 图形会话将中断一次)"
     log "  日志: $STACK_LOG"
     log "  结果: $STACK_STATE_RESULT"
-    log "  稍后查看: sudo $0 stack status  ($(stack_label "$target") 失败会自动回滚到 oss)"
+    log "  稍后查看: sudo $0 stack status  ($(stack_label "$target") 失败会自动回滚到 builtin)"
     return 0
 }
 

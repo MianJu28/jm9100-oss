@@ -165,7 +165,7 @@ C-2 16 位采样编码（硬件边界）、D7 Vulkan（官方闭源也没有）�
   | `vendor` | 厂商 `jmgpu.ko` | 厂商 UMD/EGL/OpenCL |
 
   `sudo ./switch-mwv207.sh stack status|builtin|oss|vendor|menu`；任一步失败（含桌面未点亮、
-  自检不过）自动回滚到 `oss` 并点亮桌面；切 `vendor` 会拉看门狗，超时自动回滚。
+  自检不过）自动回滚到 `builtin`（内核内建驱动）并点亮桌面；切 `vendor` 会拉看门狗，超时自动回滚到 `builtin`。
   状态检测靠 `srcversion` 三方比对（已加载 / 内建 .ko / 自建 .ko），自建版 srcversion
   另存 `/var/lib/mwv207-oss/oss-srcversion`，因此 updates 里的 .ko 被删掉时仍能认出来。
 
