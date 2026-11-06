@@ -56,6 +56,8 @@ void mwv207_vp9_reset_probs(struct mwv207_vp9_slice_header *sh);
  * halfway through the frame).  Give it a wide berth instead. */
 #define VP9_COUNTER_SIZE 0x20000u
 #define VP9_STREAM_COPY_SIZE (4u << 20)
+/* One MV image per reference slot plus slot 0 for the frame being decoded. */
+#define VP9_MV_SLOTS 16u
 
 #define VP9_FILTER_SIZE (2u << 20)
 
@@ -89,8 +91,8 @@ struct mwv207_vp9_state {
    /* Bounce buffer for the hardware's per-block motion vector store. */
    uint32_t mv_offset;
    uint32_t mv_size;
-   uint32_t mv_cur;
    bool prev_was_inter;
+   bool prev_was_shown;
    bool saw_error_resilient;
    /* The loop filter reference/mode deltas are updated by the header only
     * when the stream says so; otherwise they carry over from the previous
@@ -186,7 +188,6 @@ vp9_write_ref_regs(struct mwv207_vp9_state *st,
       return;
    if (!st->ref_store || !st->ref_store->res)
       return;
-
    for (k = 0; k < 3; k++) {
       uint32_t slot = sh->active_ref_idx[k];
       struct mwv207_bo *bo;
@@ -227,11 +228,17 @@ vp9_write_ref_regs(struct mwv207_vp9_state *st,
        * ALTREF); our k is 0..2 for LAST/GOLDEN/ALTREF. */
       reg_buf->set_reg(reg_buf, vp9_ref_sign_bias_reg[k],
                        sh->ref_frame_sign_bias[k + 1] ? 1 : 0);
-      /* The vendor points the per-reference MV store at the same offset in
-       * every slot (right behind the picture).  We keep the MVs in a scratch
-       * area instead; VP9 never predicts MVs across frames. */
+      /* Each reference slot needs the MV image of *that* slot's frame: the
+       * decoder reads it back as the temporal (previous-frame) MV candidate.
+       * slot 0 of our MV area holds the frame being decoded, slots 1..16 hold
+       * the MV images of the 16 reference slots. */
       if (st->scratch && st->scratch->res) {
-         uint32_t prev = st->mv_offset + (st->mv_cur ? 0u : st->mv_size);
+         /* VP9's temporal MV candidate is the previous decoded frame's MV
+          * image (vp9_mvref_common.c: cm->prev_frame->mvs).  The ASIC looks
+          * it up through the reference's DBASE, so every reference slot has
+          * to hold the MV image of the frame just decoded: slot 0 is that
+          * image, slots 1..16 mirror it after each frame. */
+         uint32_t prev = st->mv_offset + (1u + slot) * st->mv_size;
          reg_buf->set_addr_reg_hi(reg_buf, vp9_ref_dbase_msb[k],
                                   st->scratch->res->bo, prev,
                                   MWV207_BO_ACC_FLAG_WRITE);
@@ -343,7 +350,7 @@ vp9_get_state(struct mwv207_video_decoder *decoder, uint32_t width,
        * picture, luma * 3 / 2 bytes later.  We only need somewhere valid for
        * the hardware to write to, so give it a buffer of that size. */
       st->mv_size = vp9_align4k(width * height * 3 / 2 + 64);
-      st->scratch_size = st->mv_offset + 2u * st->mv_size;
+      st->scratch_size = st->mv_offset + (1u + VP9_MV_SLOTS) * st->mv_size;
       st->scratch = mwv207_video_buffer_create_2(
          decoder->base.context, st->scratch_size, PIPE_USAGE_STAGING);
       if (!st->scratch) {
@@ -432,6 +439,17 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
            (void *)st, width, height, (void *)buf);
    sh = &st->sh;
    memset(sh, 0, sizeof(*sh));
+   /* The reference slots are addressed by the bitstream's own slot numbers:
+    * we copy every decoded frame into the slots selected by
+    * refresh_frame_flags, so a refreshed slot always holds the newest frame
+    * and the slot->frame mapping is the identity.  Keep it that way after the
+    * memset, otherwise every active reference resolves to slot 0 and blocks
+    * that use GOLDEN/ALTREF predict from the LAST frame instead. */
+   {
+      uint32_t map_i;
+      for (map_i = 0; map_i < NUM_REF_FRAMES; map_i++)
+         sh->ref_frame_map[map_i] = (int32_t)map_i;
+   }
 
    sh->dec_mode = DEC_MODE_VP9;
    sh->width = width;
@@ -638,8 +656,7 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
        * prediction; without it every block after the first row predicts
        * from garbage.  The vendor programs DEC_OUT_DBASE for VP9 too. */
       vp9_set_addr(reg_buf, JMDEC_DEC_OUT_DBASE_LSB,
-                   st->scratch->res->bo,
-                   st->mv_offset + (st->mv_cur ? st->mv_size : 0u));
+                   st->scratch->res->bo, st->mv_offset);
       if (getenv("MWV207_VP9_TYBASE")) {
          reg_buf->set_addr_reg_hi(reg_buf, JMDEC_DEC_OUT_TYBASE_MSB, buf->res->bo, 0, MWV207_BO_ACC_FLAG_WRITE);
          reg_buf->set_addr_reg(reg_buf, JMDEC_DEC_OUT_TYBASE_LSB, buf->res->bo, 0, MWV207_BO_ACC_FLAG_WRITE);
@@ -749,7 +766,7 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
    if (!sh->key_frame && !sh->intra_only && st->scratch && st->scratch->res) {
       reg_buf->set_reg(reg_buf, JMDEC_WRITE_MVS_E, 1);
       vp9_set_addr(reg_buf, JMDEC_DIR_MV_BASE_LSB, st->scratch->res->bo,
-                   st->mv_offset + (st->mv_cur ? st->mv_size : 0u));
+                   st->mv_offset);
    } else {
       reg_buf->set_reg(reg_buf, JMDEC_WRITE_MVS_E, 0);
    }
@@ -763,10 +780,11 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
                     !sh->error_resilient &&
                     sh->width == st->width &&
                     sh->height == st->height &&
-                    st->prev_was_inter;
+                    st->prev_was_inter && st->prev_was_shown;
       reg_buf->set_reg(reg_buf, JMDEC_TEMPOR_MVP_E, tempor ? 1 : 0);
       /* This frame becomes the "previous frame" for temporal MV prediction. */
       st->prev_was_inter = !sh->key_frame && !sh->intra_only && !sh->show_existing_frame;
+      st->prev_was_shown = sh->show_frame != 0;
    }
    reg_buf->set_reg(reg_buf, JMDEC_DEC_TILE_INT_E, 0);
 
@@ -795,10 +813,13 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
    reg_buf->set_reg(reg_buf, JMDEC_SEGMENT_UPD_E, 0);
    reg_buf->set_reg(reg_buf, JMDEC_SEGMENT_TEMP_UPD_E, 0);
 
-   vp9_write_ref_regs(st, reg_buf, sh, vp9_luma_size, out_w_y);
+   /* JMDEC_REFER_LTERM_E is a 32-bit field at dword 38, the same dword that
+    * holds AREF_HOR/VER_SCALE; writing it must happen before the reference
+    * scales or it wipes them. */
    reg_buf->set_reg(reg_buf, JMDEC_NO_FWD_REF_E, 0);
    reg_buf->set_reg(reg_buf, JMDEC_REFER_VALID_E, 1);
    reg_buf->set_reg(reg_buf, JMDEC_REFER_LTERM_E, 0);
+   vp9_write_ref_regs(st, reg_buf, sh, vp9_luma_size, out_w_y);
 
    vp9_set_addr(reg_buf, JMDEC_PROB_TAB_BASE_LSB, st->scratch->res->bo,
                 VP9_PROB_OFFSET);
@@ -1025,30 +1046,6 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
         }
      }
    }
-   /* Frames with more than one tile row are not supported yet.  Handing
-    * them to the ASIC wedges the DEC engine: it never raises its job-done
-    * interrupt, the kernel logs "job from 'av:vp9:dfN' to 'mwv207_dec0',
-    * timed out!" every two seconds and retries the same command buffer, and
-    * because the display is driven by the same GPU the whole desktop stops
-    * refreshing.  Skip the decoder (the PP still converts the cleared
-    * staging buffer) so userspace gets a frame and the GPU stays usable. */
-   if (sh->log2_tile_rows && !getenv("MWV207_VP9_TILEROW")) {
-      struct mwv207_context *gc = mwv207_context(decoder->base.context);
-      if (buf->res && gc) {
-         void *m = gc->ws->bo_map(gc->ws, buf->res->bo);
-         if (m)
-            memset(m, 0x10, vp9_luma_size * 3 / 2);
-      }
-      MWV207_LOG(MWV207_LEVEL_ERROR,
-                 "vp9: %ux%u stream uses %u tile rows, unsupported "
-                 "(the decoder would hang); frame skipped\n",
-                 width, height, 1u << sh->log2_tile_rows);
-      reg_buf->set_reg(reg_buf, JMDEC_DEC_E, 0);
-      st->tile_n = 1;
-      st->pending = NULL;
-      return;
-   }
-
    reg_buf->set_reg(reg_buf, JMDEC_DEC_E, 1);
    st->pending = buf;
    st->pending_flags = sh->refresh_frame_flags;
@@ -1072,14 +1069,22 @@ mwv207_dec_vp9_submit_done(struct mwv207_video_decoder *decoder)
       if (mp && st->scratch_cpu && st->mv_size) {
          FILE *f = fopen(mp, "ab");
          if (f) {
-            fwrite((uint8_t *)st->scratch_cpu + st->mv_offset +
-                   (st->mv_cur ? st->mv_size : 0u), 1, st->mv_size, f);
+            fwrite((uint8_t *)st->scratch_cpu + st->mv_offset, 1,
+                   st->mv_size, f);
             fclose(f);
          }
       }
    }
-   /* The frame just decoded is the new source of temporal MV prediction. */
-   st->mv_cur ^= 1u;
+   /* The temporal MV candidate of VP9 is the previous decoded frame's MV
+    * image, whichever reference slot a block uses.  Every reference slot
+    * therefore has to hold the MV image of the frame just decoded. */
+   if (st->scratch_cpu && st->mv_size) {
+      uint32_t j;
+      for (j = 0; j < VP9_MV_SLOTS; j++)
+         memcpy((uint8_t *)st->scratch_cpu + st->mv_offset +
+                   (1u + j) * st->mv_size,
+                (uint8_t *)st->scratch_cpu + st->mv_offset, st->mv_size);
+   }
    if (st->ref_store && st->ref_store->res) {
       uint8_t *q = decoder->ws->bo_map(decoder->ws, st->ref_store->res->bo);
       if (q) {
