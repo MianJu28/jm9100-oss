@@ -1965,6 +1965,8 @@ stack_vendor_check() {
 #                  失败自动回滚到 builtin, 结果写 /run/mwv207-stack-result。
 STACK_PLAN="/run/mwv207-stack-plan"
 STACK_STATE_RESULT="/run/mwv207-stack-result"
+STACK_REBOOT_MARK="/var/lib/mwv207-oss/reboot-target"
+STACK_POSTBOOT_UNIT="/etc/systemd/system/mwv207-stack-postboot.service"
 STACK_LOG="/var/log/mwv207-stack.log"
 
 stack_prepare_to() {
@@ -1998,6 +2000,91 @@ stack_prepare_to() {
 }
 
 # 阶段 2: 由 setsid 后台执行, 不依赖调用者终端是否还存在。
+# ---- 重启释放路径 ---------------------------------------------------------
+# 实测: 停 lightdm 后 mwv207 的 refcnt 仍卡在 2 (fuser 看不到, 扫 /proc 也杀不掉),
+# modprobe -r 永远 "Module is in use"。用户决定: 不再硬碰硬, 直接重启释放 ——
+# 阶段 1 把"开机要加载哪个模块/哪个用户态"准备好, 然后 reboot, 开机后自检。
+stack_stage_boot_args() {
+    local target="$1" g=/etc/default/grub line="modprobe.blacklist=mwv207"
+    case "$target" in
+        vendor)
+            if ! grep -q "$line" "$g" 2>/dev/null; then
+                cp -a "$g" "$g.bak-stack-vendor"
+                sed -i "s|^GRUB_CMDLINE_LINUX_DEFAULT=\"|GRUB_CMDLINE_LINUX_DEFAULT=\"$line |" "$g"
+                update-grub >/dev/null 2>&1 || warn "  update-grub 失败"
+                log "  开机参数: 已加入 $line (原文件备份 $g.bak-stack-vendor)"
+            fi
+            printf '%s\n' jmgpu > /etc/modules-load.d/zz-mwv207-stack.conf
+            ;;
+        oss|builtin)
+            if grep -q "$line" "$g" 2>/dev/null; then
+                cp -a "$g" "$g.bak-stack-vendor"
+                sed -i "s|$line ||" "$g"
+                update-grub >/dev/null 2>&1 || warn "  update-grub 失败"
+                log "  开机参数: 已移除 $line"
+            fi
+            rm -f /etc/modules-load.d/zz-mwv207-stack.conf
+            ;;
+    esac
+    return 0
+}
+
+stack_write_postboot_unit() {
+    cat > "$STACK_POSTBOOT_UNIT" <<EOF
+[Unit]
+Description=MWV207 切换后自检
+After=lightdm.service
+[Service]
+Type=oneshot
+ExecStart=/home/admin/jm9100-oss/switch-mwv207.sh stack postboot
+[Install]
+WantedBy=multi-user.target
+EOF
+    systemctl daemon-reload 2>/dev/null || warn "  daemon-reload 失败"
+}
+
+stack_reboot_to() {
+    local target="$1"
+    stack_stage_boot_args "$target" || return 1
+    mkdir -p "$(dirname "$STACK_REBOOT_MARK")"
+    printf '%s %s\n' "$target" "$(date '+%F %T')" > "$STACK_REBOOT_MARK"
+    stack_write_postboot_unit
+    systemctl enable mwv207-stack-postboot.service >/dev/null 2>&1 || warn "  启用开机自检单元失败"
+    echo "reboot $(date '+%F %T') target=$target" > "$STACK_STATE_RESULT"
+    log "  模块无法热卸载(refcnt 卡死) → 改为重启释放: 开机后自动加载 $target 并自检"
+    sync
+    sleep 1
+    systemctl reboot
+}
+
+stack_postboot() {
+    local target cur umd res rc=0
+    if [ ! -f "$STACK_REBOOT_MARK" ]; then
+        systemctl disable mwv207-stack-postboot.service >/dev/null 2>&1
+        return 0
+    fi
+    target=$(awk '{print $1}' "$STACK_REBOOT_MARK" 2>/dev/null)
+    log "==== [postboot] 开机自检: 目标 $target ===="
+    sleep 3
+    cur=$(stack_kmd_state 2>/dev/null); umd=$(stack_umd_state 2>/dev/null)
+    res=failed
+    if [ "$cur" = "$target" ]; then
+        case "$target" in
+            vendor) [ -e "$VENDOR_DEV" ] && res=ok ;;
+            *)      [ "$umd" = "$target" ] && res=ok ;;
+        esac
+    fi
+    echo "$res $(date '+%F %T') target=$target kmd=$cur umd=$umd" > "$STACK_STATE_RESULT"
+    log "  自检结果: $res (kmd=$cur umd=$umd)"
+    if [ "$res" = failed ] && [ "$target" != builtin ]; then
+        warn "  目标态未生效：请执行 sudo $0 stack builtin 回到内建驱动"
+    fi
+    rm -f "$STACK_REBOOT_MARK"
+    systemctl disable mwv207-stack-postboot.service >/dev/null 2>&1
+    stack_status 2>/dev/null || true
+    return $rc
+}
+
 stack_apply_stage() {
     local target="${1:-}" rc=0
     [ -n "$target" ] || { echo "apply 需要目标(builtin|oss|vendor)" >&2; return 2; }
@@ -2006,6 +2093,14 @@ stack_apply_stage() {
     log "==== [detached] 应用阶段: $target ===="
     # 退栈时先撤销"待回滚"标记，避免厂商栈看门狗在回滚完成后又触发一次
     [ "$target" != vendor ] && rm -f "$STACK_FLAG" 2>/dev/null
+
+    # 内核态需要切换(且不能热卸载)时不再停 lightdm 硬干, 直接重启释放。
+    if [ "$(stack_kmd_state 2>/dev/null)" != "$target" ]; then
+        log "  内核态需从 $(stack_kmd_state 2>/dev/null) 换到 $target → 走重启释放路径"
+        stack_reboot_to "$target"
+        return 0
+    fi
+
     stop_display
     case "$target" in
         oss)
@@ -2110,6 +2205,7 @@ stack_main() {
     case "${1:-status}" in
         status)  shift; stack_status "$@" ;;
         apply)   shift; stack_apply_stage "$@" ;;
+        postboot) shift; stack_postboot ;;
         prepare) shift; need_root "stack prepare"; stack_prepare_to "$@" ;;
         builtin|oss|vendor) stack_switch_to "$1" ;;
         menu)    shift; stack_menu "$@" ;;
