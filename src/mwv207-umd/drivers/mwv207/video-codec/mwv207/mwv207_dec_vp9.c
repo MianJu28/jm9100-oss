@@ -56,8 +56,9 @@ void mwv207_vp9_reset_probs(struct mwv207_vp9_slice_header *sh);
  * halfway through the frame).  Give it a wide berth instead. */
 #define VP9_COUNTER_SIZE 0x20000u
 #define VP9_STREAM_COPY_SIZE (4u << 20)
-/* One MV image per reference slot plus slot 0 for the frame being decoded. */
-#define VP9_MV_SLOTS 16u
+/* Slot 0 holds the MV image of the frame being decoded, 1..3 the copies the
+ * LAST/GOLDEN/ALTREF references read as their temporal MV candidate. */
+#define VP9_MV_SLOTS 3u
 
 #define VP9_FILTER_SIZE (2u << 20)
 
@@ -91,6 +92,7 @@ struct mwv207_vp9_state {
    /* Bounce buffer for the hardware's per-block motion vector store. */
    uint32_t mv_offset;
    uint32_t mv_size;
+   uint32_t mv_bytes;
    bool prev_was_inter;
    bool prev_was_shown;
    bool saw_error_resilient;
@@ -228,17 +230,16 @@ vp9_write_ref_regs(struct mwv207_vp9_state *st,
        * ALTREF); our k is 0..2 for LAST/GOLDEN/ALTREF. */
       reg_buf->set_reg(reg_buf, vp9_ref_sign_bias_reg[k],
                        sh->ref_frame_sign_bias[k + 1] ? 1 : 0);
-      /* Each reference slot needs the MV image of *that* slot's frame: the
-       * decoder reads it back as the temporal (previous-frame) MV candidate.
-       * slot 0 of our MV area holds the frame being decoded, slots 1..16 hold
-       * the MV images of the 16 reference slots. */
       if (st->scratch && st->scratch->res) {
          /* VP9's temporal MV candidate is the previous decoded frame's MV
-          * image (vp9_mvref_common.c: cm->prev_frame->mvs).  The ASIC looks
-          * it up through the reference's DBASE, so every reference slot has
-          * to hold the MV image of the frame just decoded: slot 0 is that
-          * image, slots 1..16 mirror it after each frame. */
-         uint32_t prev = st->mv_offset + (1u + slot) * st->mv_size;
+          * image (vp9_mvref_common.c: cm->prev_frame->mvs).  The ASIC reads
+          * it through the reference's DBASE, so hand every reference used by
+          * this frame a copy of slot 0, which still holds the previous
+          * frame's MV image (the current one is written after submit). */
+         uint32_t prev = st->mv_offset + (1u + k) * st->mv_size;
+         if (st->scratch_cpu && st->mv_bytes)
+            memcpy((uint8_t *)st->scratch_cpu + prev,
+                   (uint8_t *)st->scratch_cpu + st->mv_offset, st->mv_bytes);
          reg_buf->set_addr_reg_hi(reg_buf, vp9_ref_dbase_msb[k],
                                   st->scratch->res->bo, prev,
                                   MWV207_BO_ACC_FLAG_WRITE);
@@ -350,6 +351,11 @@ vp9_get_state(struct mwv207_video_decoder *decoder, uint32_t width,
        * picture, luma * 3 / 2 bytes later.  We only need somewhere valid for
        * the hardware to write to, so give it a buffer of that size. */
       st->mv_size = vp9_align4k(width * height * 3 / 2 + 64);
+      /* The hardware stores one 16 byte record per 8x8 block, arranged in
+       * 64x64 superblocks, so only the first sbw * sbh * 1024 bytes of the
+       * image are ever written.  Copying the whole luma * 3/2 span instead
+       * is several times more data than needed. */
+      st->mv_bytes = ((width + 63) / 64) * ((height + 63) / 64) * 1024u;
       st->scratch_size = st->mv_offset + (1u + VP9_MV_SLOTS) * st->mv_size;
       st->scratch = mwv207_video_buffer_create_2(
          decoder->base.context, st->scratch_size, PIPE_USAGE_STAGING);
@@ -1074,16 +1080,6 @@ mwv207_dec_vp9_submit_done(struct mwv207_video_decoder *decoder)
             fclose(f);
          }
       }
-   }
-   /* The temporal MV candidate of VP9 is the previous decoded frame's MV
-    * image, whichever reference slot a block uses.  Every reference slot
-    * therefore has to hold the MV image of the frame just decoded. */
-   if (st->scratch_cpu && st->mv_size) {
-      uint32_t j;
-      for (j = 0; j < VP9_MV_SLOTS; j++)
-         memcpy((uint8_t *)st->scratch_cpu + st->mv_offset +
-                   (1u + j) * st->mv_size,
-                (uint8_t *)st->scratch_cpu + st->mv_offset, st->mv_size);
    }
    if (st->ref_store && st->ref_store->res) {
       uint8_t *q = decoder->ws->bo_map(decoder->ws, st->ref_store->res->bo);
