@@ -347,6 +347,7 @@ K8/K9/K12 引自原报告，本树未复核（KMD 的 `irq.c`/`sched.c`/`ttm.c` 
 | **N4** | 中 → **已修**（`fbed27f`） | `pipe_dma.c` | 原：DMA 提交在 `run_job` 工作线程内忙等最多 5 s 并返回 stub fence。现：submit 只启动 + 返回真 fence，完成走本管线有序工作队列睡眠轮询（1500 ms 上限，小于调度器 2000 ms 超时），reset/destroy 以 `-EIO` 收尾 |
 | **N14** | 中 | `pipe_3d.c:301-307`、`pipe_2d.c:212-227`、`pipe_dec.c:136-141` | 三条管线 `reset` 都只 `dma_fence_put` 在飞 fence **而不 signal**；2D 的 `destroy` 还不排空 `fence_queue`（`pipe_2d.c:424-448`）→ **用户态可能永久等待**。**已修：2026-11-10 `22145e9`**（含 ENC），重启后已生效（运行中 `039F972E…`） |
 | **N9** | 低 | `kms.c:172`、`hdmi.c:1057` | 仍保留 `BUG_ON`（K8 残留）。**已修：2026-11-10 `6502f19`**（`pr_err` + `-ENODEV`，重启后启动无报错） |
+| **N16** | **高** | `mwv207_sched.c:65-72`（`mwv207_job_fini`） | 畸形 submit（`nr_cmd_dat>0` 而 `cmd_dats==NULL`）在 `mwv207_submit_init_job()` 里先赋 `nr_cmd_dat`、后分配 `cmd_dats`，中途报错返回后清理函数对未分配数组取 `&mjob->cmd_dats[i]` → **空指针解引用、内核 oops**（实测 `pc : mwv207_job_fini+0x12c/0x25c`，任何本地进程一次 ioctl 即可触发）。**已修：2026-11-10 `c01af40`**（条件加 `&& mjob->cmd_dats`；配套新增 `tests/bad-submit/`，9 个用例，默认不在验收脚本里跑） |
 | **N10** | 低 | HDMI | `mode_valid` 阈值（6.6 树已是 594 MHz）与 `phy_configure` 恒传 `bpp=8`。**决定只文档化（2026-11-10）**：只挡 6K/8K，本机 1080p@100Hz 正常，改判据需显示侧实测、收益极低 |
 
 ### H.3 结构澄清（回答任务书疑问）

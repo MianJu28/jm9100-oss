@@ -48,8 +48,9 @@ modinfo /lib/modules/…/updates/dkms/…    -> srcversion 0EFB7F4433EA5311B08E8
   `D5EEF36617A4D3FBF4AFD1D`，2026-11-10 13:29 重启后回归全过）；
 - `fbed27f` 修的 N4 / K11（见 §2.3）：2026-11-10 14:36 重启后**已验证生效**
   （一键验收 22 项全过），运行中 srcversion 即 `0EFB7F4433EA5311B08E88C`；
-- `53b3229` 收敛的 20 处 `BUG_ON`（见 §2.4）：两内核与 initramfs 已装
-  `63D36B44B229F708AE64C77`，**待重启生效**。
+- `53b3229` 收敛的 20 处 `BUG_ON`（见 §2.4）与 `c01af40` 修的 N16（`job_fini`
+  对未分配的 `cmd_dats` 空指针解引用，见 §2.5）：两内核与 initramfs 已装
+  `5A5B401802B79D560151210`，**待重启生效**。
 
 因此 **K 系列、N14、§2.2 的 5 条、§2.3 的 N4/K11 均已生效**。
 剩下的只有 N10（决定只文档化）。
@@ -72,7 +73,8 @@ modinfo /lib/modules/…/updates/dkms/…    -> srcversion 0EFB7F4433EA5311B08E8
 | 4b | KMD | **N1/N2/K12/K9-②/N9 已修，重启后已验证生效** | 修复见 §2.2（`6502f19`）；2026-11-10 13:29 重启后 srcversion = `D5EEF36617A4D3FBF4AFD1D`，GL/query 4·4/VP9 18·18/H.264 8bit 逐位一致/N14 探针 6·6 全过，dmesg 无 WARN/BUG；引擎计数用 `tests/engines/` 核对（lite 机型 3d=1 dec=1 enc=0 2d=1 dma=1） | 本文 §2.2 |
 | 4c | UMD 视频 | **I-4：H.264 High10 已定案（2026-11-10 收回声明）** —— 按当前寄存器配置提交 10bit H.264 会让 DEC 管线挂死（6 次 TDR、输出全 0）；缺 Hantro 的 high10p 位流预转换 | 客户端现在对该类流直接回退（`hwaccel initialisation returned error`），DEC 零超时；原厂闭源驱动同样不声明 High10 | 本文 §1.2 / `api/05-VIDEO-CODEC.md` §6.7 |
 | 4d | KMD | **N4/K11 已修并重启验证生效** | 修复见 §2.3（`fbed27f`）：DMA 提交改异步完成 + 真 fence；移除路径补 `pci_disable_device` 与 `free_irq` 前硬件侧关中断。运行中 srcversion `0EFB7F4433EA5311B08E88C`，2026-11-10 14:36 重启后一键验收 `PASS=22 FAIL=0 SKIP=1` | 本文 §2.3 |
-| 4e | KMD | **20 处 `BUG_ON` 已收敛为可恢复错误，待重启生效** | `53b3229`：用户提交路径仍可能触发的那几处（`mem_type` 非 VRAM/TT、`reloc->idx` 越界、DMA `cmd_size` 不符、3D 事件槽耗尽）现在返回 `-EINVAL`/`-EIO`/`-EBUSY`；寄存器/ring 描述符类改 `WARN_ON_ONCE` + 跳过，由 TDR 回收。两内核已装 `63D36B4…` | 本文 §2.4 |
+| 4e | KMD | **20 处 `BUG_ON` 已收敛为可恢复错误，待重启生效** | `53b3229`：用户提交路径仍可能触发的那几处（`mem_type` 非 VRAM/TT、`reloc->idx` 越界、DMA `cmd_size` 不符、3D 事件槽耗尽）现在返回 `-EINVAL`/`-EIO`/`-EBUSY`；寄存器/ring 描述符类改 `WARN_ON_ONCE` + 跳过，由 TDR 回收 | 本文 §2.4 |
+| 4f | KMD | **N16 已修，待重启生效**（新发现）：畸形 submit（`nr_cmd_dat>0` 而 `cmd_dats==NULL`）会让 `mwv207_job_fini()` 空指针解引用 → 内核 oops，任何本地进程可触发 | `c01af40`：清理条件加 `&& mjob->cmd_dats`；配套 `tests/bad-submit/` 9 个用例（默认不跑，老模块会 oops）。两内核已装 `5A5B4018…` | 本文 §2.5 |
 | 5 | KMD | 只剩 N10（决定只文档化） | K9-① 已核实为与厂商一致（非缺陷）；N10 改为只记录 | 本文 §2.3 |
 | 6 | 切换脚本 | **vendor 态端到端未实跑** | `stack vendor` 会重启，需人工确认；热切换已证不可行（refcnt 恒 2） | `switch-mwv207.sh` / §5 |
 | 7 | 打包 | **DKMS 一致性警告（走 stage 时会复现，已记录处理步骤）** | `tools/dkms-sync.sh` 重建后两个内核都干净；`kmd stage` 直接覆盖仓库构建的 .ko 会让 6.6.155 重新报 `Diff between built and installed module!`，用 `dkms install --force` + `depmod` + `update-initramfs` 恢复即可 | §2.1、§5 |
@@ -465,10 +467,50 @@ GL/引擎/VAAPI profile/三类解码逐位一致/TDR 探针/dmesg 告警）；�
 `glxgears`、`tests/query`、`vp9-regression.sh` 与重启前一致——本批只动错误路径，
 **正常路径的行为必须完全相同**。
 
-**残余缺口**：① 只有代码审查，没有构造真实的 malformed 提交去打 `-EINVAL` 分支
-（要构造合法 bo handle + 畸形 reloc 才走到，测试价值低于风险，见 §7 的测试能力说明）；
-② 3D ring 越界时"跳过描述符"依赖 TDR 回收，实际场景未构造；③ `WARN_ON_ONCE` 意味着
-同一位置只报一次，长期运行的 dmesg 里不会重复，但也更难统计频率。
+**残余缺口**：① 3D ring 越界时"跳过描述符"依赖 TDR 回收，实际场景未构造；
+② `WARN_ON_ONCE` 意味着同一位置只报一次，长期运行的 dmesg 里不会重复，
+但也更难统计频率。（原先"没有构造真实 malformed 提交"这条缺口已由 §2.5 的
+`tests/bad-submit/` 补上——而且它第一次跑就抓到一个真正会 oops 的缺陷。）
+
+### 2.5 N16：`job_fini` 对未分配的 `cmd_dats` 做空指针解引用（2026-11-10，`c01af40`；待重启生效）
+
+**怎么发现的**：写 §2.4 的配套测试 `tests/bad-submit/`（畸形 submit 全被拒 +
+驱动仍可用）时，第 9 项"`nr_cmd_dat=1` 但 `cmd_dats=NULL`"直接把内核打出了 oops：
+
+```
+Unable to handle kernel NULL pointer dereference at virtual address 0000000000000010
+Internal error: Oops: 0000000096000004 [#11] PREEMPT SMP
+pc : mwv207_job_fini+0x12c/0x25c [mwv207]
+Call trace:
+ mwv207_job_fini+0x12c/0x25c [mwv207]
+ mwv207_job_put+0x78/0xa0 [mwv207]
+ mwv207_submit_ioctl+0x1e8/0x31c [mwv207]
+```
+
+**根因**：`mwv207_submit_init_job()`（`src/kernel-6.6/mwv207_submit.c`）一进门就把
+`mjob->nr_cmd_dat = args->nr_cmd_dat` 赋了值，而 `mjob->cmd_dats` 数组要等
+`mwv207_submit_init_job_cmd_dat()` 里 `kvcalloc()` 成功才有内容；那个函数中途
+报错返回（`cmd_dats == NULL`、`dat_size <= 0`、`nr_relocs != 0 && relocs == NULL`
+等）时，`mwv207_job_fini()` 的 `if (mjob->nr_cmd_dat) { dat = &mjob->cmd_dats[i]; }`
+会拿 NULL 基址 + 偏移 → 空指针解引用。
+
+**影响**：任何本地进程（有 `renderD128` 权限即可，通常就是桌面用户）一次畸形
+`DRM_IOCTL_MWV207_SUBMIT` 就能让内核 oops。虽然 oops 后进程被杀、系统通常继续跑，
+但内核处于不确定状态（本次连续触发两次 `[#11]`/`[#12]`，`Tainted: G D W OE`）。
+
+**修法**（`c01af40`）：条件改成 `if (mjob->nr_cmd_dat && mjob->cmd_dats)`；
+数组为空时后面的 `kvfree(mjob->cmd_dats)` 本来就安全（`kvfree(NULL)` 允许），
+其余清理项（`relocs`/`cmds`/`mtvb`）同理。
+
+**验证**：干净编译，srcversion `5A5B401802B79D560151210`（与 §2.4 同批部署）。
+运行时验证要等重启：`tests/bad-submit/run-badsubmit.sh` 应全部 `ok`（第 9 项返回
+`EINVAL`），且 `dmesg | grep -E "Oops|NULL pointer"` 为空。
+
+**附带产物**：`tests/bad-submit/badsubmit.c`（9 个用例：未知 `engine_type`、
+`engine_id` 越界、`cmd_size` 为 0/超限、`cmds` 空、`bos` 里 handle 不存在、
+`nr_relocs>0` 而 `relocs` 空、`reloc.idx` 越界、`nr_cmd_dat>0` 而 `cmd_dats` 空）
++ `run-badsubmit.sh`；已作为 `tests/verify-installed.sh --bad-submit` 的可选步骤
+接入（**默认不跑**：老模块没有 N16 修复时跑它会 oops 内核）。
 
 ---
 
@@ -536,7 +578,8 @@ GL/引擎/VAAPI profile/三类解码逐位一致/TDR 探针/dmesg 告警）；�
 
 | 日期 | 项 | 提交 |
 |---|---|---|
-| 2026-11-10 | KMD：20 处 `BUG_ON` 收敛为可恢复错误（提交路径给 errno、内部不变量改 `WARN_ON_ONCE` + 跳过） | `53b3229`（`src/kernel-6.6`；两内核与两个 initramfs 已装 `63D36B4…`，待重启生效） |
+| 2026-11-10 | KMD：N16 —— `mwv207_job_fini()` 对未分配的 `cmd_dats` 空指针解引用（畸形 submit 可让内核 oops） | `c01af40`（`src/kernel-6.6`；与下面 `53b3229` 同批部署为 `5A5B4018…`，待重启生效）＋ 新增 `tests/bad-submit/` |
+| 2026-11-10 | KMD：20 处 `BUG_ON` 收敛为可恢复错误（提交路径给 errno、内部不变量改 `WARN_ON_ONCE` + 跳过） | `53b3229`（`src/kernel-6.6`；两内核与两个 initramfs 已装 `5A5B4018…`，待重启生效） |
 | 2026-11-10 | KMD：DMA 提交忙等 5 s + stub fence（N4）、移除路径缺 `pci_disable_device` 与 `free_irq` 前未在硬件侧关中断（K11） | `fbed27f`（`src/kernel-6.6`；2026-11-10 重启后验证生效，一键验收 22 项全过） |
 | 2026-11-10 | KMD：sched 槽位撞车（N1）、3D 在飞上限撞事件表（N2）、超时路径 devfreq 多减（K12）、ISR 影子寄存器数据竞争（K9-②）、显示侧两处 `BUG_ON(irq == 0)`（N9） | `6502f19`（`src/kernel-6.6`；两内核已装、initramfs 已刷，重启后生效） |
 | 2026-11-10 | KMD：3D/2D/DEC/ENC `reset`/`destroy` 对在飞 fence 只 `dma_fence_put` 不 signal（N14），2D `destroy` 不排空 `fence_queue` | `22145e9`（`src/kernel-6.6`；模块已暂存，重启后生效） |
@@ -579,7 +622,10 @@ GL/引擎/VAAPI profile/三类解码逐位一致/TDR 探针/dmesg 告警）；�
   High10 回退且 DEC 零超时、TDR 探针、dmesg 新增告警；`sudo ./tests/verify-installed.sh <srcversion>`
   全跑，普通用户跑会自动跳过需要 root 的两项）、`tests/query/run-query-tests.sh`、
   `tests/engines/run-engines.sh`（引擎计数，N1）、
-  `tests/n14-reset/run-n14-reset.sh`（reset 通路，N14/K12）、`tests/run-all.sh`
+  `tests/n14-reset/run-n14-reset.sh`（reset 通路，N14/K12）、
+  `tests/bad-submit/run-badsubmit.sh`（畸形提交防御，N16；**老模块上跑会让内核
+  oops**，故默认不跑，只在确认模块含 `c01af40` 后用
+  `tests/verify-installed.sh --bad-submit` 带上）、`tests/run-all.sh`
 
 ## 火狐浏览器自身 UI 的文字错位（r8 起可见）—— 已修（2026-11-07）
 

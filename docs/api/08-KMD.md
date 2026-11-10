@@ -945,11 +945,17 @@ PLL 硬件命令通道（`mwv207_vcmd.c`）：
 | 打包/CSC | `video_packetize` 固定 `color_depth = 4`、`output_select = 0x3` 写 `0x0801-0x0804`；CSC 系数矩阵写 `0x4100-0x4113` | `:748-812` |
 | HDCP | `mwv207_hdmi_tx_hdcp_config` 写 `0x5000/0x5001/0x5009`（无实际认证流程） | `:832-841` |
 | set_timing | 关溢出中断 → `drm_match_cea_mode` → 量化范围判定 → `av_composer` → **`phy_configure(hdmi, mode->clock, 8)`（bpp 恒为 8）** → 视频路径 → 音频时钟 → infoframes → packetize/csc/sample/hdcp → 清溢出 | `:843-880` |
-| mode_valid | `clock >= 384000` → `MODE_CLOCK_HIGH`；`> 594000` → 同；**非 HDMI sink 且 `>= 165000` → `MODE_CLOCK_HIGH`** | `:903-916` |
+| mode_valid | `clock > 594000` → `MODE_CLOCK_HIGH`；**非 HDMI sink 且 `clock >= 165000` → `MODE_CLOCK_HIGH`**（6.6 树；5.10 树的 `>= 384000` 判据已不存在） | `:908-918` |
 | irq | `irq_find_mapping(domain, idx + 32)`，`BUG_ON(hdmi->irq == 0)`，`request_threaded_irq(..., IRQF_SHARED, ...)` | `:1056-1063` |
 | 销毁 | `free_irq` → `drm_connector_unregister` → `drm_connector_cleanup` | `:940-947` |
 
-> **N10**：`mode_valid` 的第一个条件 `clock >= 384000` 已经把 384–594 MHz 判为超范围，紧随其后的 `> 594000` 分支只对 ≥384000 的输入可达（两条都返回 `MODE_CLOCK_HIGH`），即 **384–594 MHz 的合法 HDMI 2.0 时序被拒绝**；同时 `phy_configure` 恒传 bpp = 8，导致 PHY 表中 10/12 bpp 的表项不可达。属功能限制，未确认为缺陷（可能与硬件/移植范围有关）。
+> **N10（2026-11-10 定案，只文档化）**：6.6 树的 `mode_valid` 只有两条判据——
+> `clock > 594000`（挡 6K/8K）与"非 HDMI sink 且 `clock >= 165000`"（非 HDMI 的
+> DVI sink 走 TMDS 165 MHz 上限）。**5.10 树里那条 `clock >= 384000`（把 384–594 MHz
+> 判为超范围）在 6.6 树已不存在**，所以早先"384–594 MHz 合法 HDMI 2.0 时序被拒绝"
+> 的记录对本树不成立。`phy_configure` 仍恒传 `bpp = 8`，PHY 表的 10/12 bpp 项不可达
+> ——那是性能/带宽层面的取舍，改它必须显示侧实测（本机 HDMI-1 实测 1920×1080@100Hz
+> 正常）。结论：**不改代码，只记录**。
 
 ### 7.8 连接器细节补充
 
@@ -1088,8 +1094,10 @@ PLL 硬件命令通道（`mwv207_vcmd.c`）：
 | N12 | 低 | `mwv207_i2c_put_byte` 非 static 但无头文件声明；`mwv207_i2c_set_addr` 恒返回 0（不校验 channel，靠 `create` 限 0..5） | `i2c.c:214-233`、`:171-212`、`:252` | 补声明、加校验 |
 | N13 | 低 | probe 第 14 步起的 5 条错误路径不调用 `mwv207_db_fini`（`db_fini` 的置 NULL 防护只在 `err_vbios` 生效） | `drv.c:369-373`、`:414-429` | 统一错误路径 |
 | N14 | 中 | 管线 `reset` 重置后丢弃在飞 fence 而不 signal（3D/2D/DEC），且 `pipe_2d_destroy` 不排空 `fence_queue` | `pipe_3d.c:301-307`、`pipe_2d.c:212-227`、`:424-448`、`pipe_dec.c:136-141` | reset 内对在飞 fence `dma_fence_set_error(-EIO)` + signal —— **已修（2026-11-10，`22145e9`）**：四条管线（含 ENC）reset/destroy 都完成 fence，2D destroy 排空队列；模块已暂存，重启后生效 |
+| N16 | **高** | `mwv207_job_fini()` 对未分配的 `cmd_dats` 空指针解引用 | `sched.c:65-72` vs `submit.c:281-330` | `submit_init_job` 先赋 `nr_cmd_dat` 后分配 `cmd_dats`，中途报错返回后清理对 NULL 基址取 `&cmd_dats[i]` → 内核 oops（实测 `pc : mwv207_job_fini+0x12c/0x25c`，一次畸形 submit 即中）。**已修（2026-11-10，`c01af40`）**：条件加 `&& mjob->cmd_dats`；新增 `tests/bad-submit/` 做回归 |
 
-（编号 N1–N14 为本轮新增，与既有 O1–O12（UMD 侧）不重叠。）
+（编号 N1–N14 为本轮新增，与既有 O1–O12（UMD 侧）不重叠；N16 是 2026-11-10
+写 `tests/bad-submit/` 时新抓到的，见上表末行。N15 编号未使用。）
 
 ### 9.4 与 `06-KNOWN-ISSUES.md` 的差异结论
 

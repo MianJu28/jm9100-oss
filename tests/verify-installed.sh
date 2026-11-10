@@ -20,10 +20,14 @@ VADIR=${VADIR:-/usr/local/lib/mwv207-oss}
 TMP=${TMP:-/tmp/mwv207-verify}
 EXPECT_SRC=""
 DO_N14=1
+DO_BAD=0
 
 for arg in "$@"; do
 	case "$arg" in
 	--no-n14) DO_N14=0 ;;
+	# 畸形提交测试是**选择性**的：它会在老模块（没有 N16 的空指针修复）上
+	# 让内核 oops，所以默认不跑，只在确认模块含 N16 时手动加。
+	--bad-submit) DO_BAD=1 ;;
 	-*) echo "未知参数: $arg" >&2; exit 2 ;;
 	*) EXPECT_SRC="$arg" ;;
 	esac
@@ -218,6 +222,17 @@ else
 		ok "N14 探针：$(printf '%s' "$out" | tr '\n' ' ')"
 	else
 		bad "N14 探针：$(printf '%s' "$out" | tr '\n' ' ')"
+	fi
+fi
+
+# -------------------------------------------------- 6b. 畸形提交（选择性）
+if [ "$DO_BAD" = 1 ]; then
+	head1 "6b. 畸形提交防御（--bad-submit）"
+	out=$("$W/tests/bad-submit/run-badsubmit.sh" 2>&1) && rc=0 || rc=$?
+	if [ "$rc" = 0 ]; then
+		ok "畸形 submit 全部被拒且驱动仍可用"
+	else
+		bad "畸形 submit 测试失败（rc=$rc）：$(printf '%s' "$out" | tail -3 | tr '\n' ' ')"
 	fi
 fi
 
