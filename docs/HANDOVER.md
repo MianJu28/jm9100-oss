@@ -1,25 +1,28 @@
-# 交接文档 — JM9100 (MWV207) 开源驱动适配（2026-11-03）
+# 交接文档 — JM9100 (MWV207) 开源驱动适配（2026-11-10）
 
 > 目的：把当前进度、环境、方法学与"下一步做什么"完整交给下一个会话。
-> 本文档随进度更新；未修问题权威清单在 `docs/UNRESOLVED.md`（343 行）。
+> 本文档随进度更新；未修问题权威清单在 `docs/UNRESOLVED.md`（含 2026-11-10 的 §0.1 速览）。
+> VP9 专项见 `docs/HANDOVER-VP9.md`。
 
 ## 1. 当前状态（一句话）
 
-**r13 已部署并验收通过**。桌面零 env 下 GL 4.0 / GLES 3.2 / `Video memory: 2048MB`，
-glxgears 110 FPS，Firefox 硬件渲染正常（内容+性能都修完），OpenCL/VA-API/VDPAU
-全走我们的栈，玲珑应用正常，自建 KMD 在跑（srcversion `D507FC2774D547E7BEBA182`）。
-r13 在 r12 基础上新增 **10bit HEVC 解码面**（P010/P016，见 §3 末条）。
+**r16 已部署并验收通过**（`payload-41` / `24.1.2-fullstack-r16`，内核 `6.6.143-arm64-desktop-hwe`）。
+桌面零 env 下 GL 4.0 / GLES 3.2 / `Video memory: 2048MB`，glxgears 110 FPS；
+OpenCL/VA-API/VDPAU 全走我们的栈；自建 KMD 在跑（srcversion `D507FC2774D547E7BEBA182`，
+DKMS 包 `mwv207-oss/1.0.0`）。**VP9 Profile0 8bit 硬解已与软件逐位一致**（回归 18/18，
+含真实 720p/1080p 影视内容）。**Firefox 两处渲染缺陷已根治**：字形/图标撕裂（`f8f693a`）、
+标签栏"微缩 chrome"（`6ec1e17`）。剩余项见 §5。
 
 ## 2. 系统与仓库布局
 
 | 项 | 值 |
 |---|---|
-| 机器 | Deepin 25 aarch64，内核 `6.6.155-arm64-desktop-hwe`，GPU `[0731:9100]` PCI 07:00.0，HDMI-1 1920×1080@100Hz，无免密 sudo（用 `printf '666\n' \| sudo -S`） |
+| 机器 | Deepin 25 aarch64，内核 `6.6.143-arm64-desktop-hwe`，GPU `[0731:9100]` PCI 07:00.0，HDMI-1 1920×1080@100Hz，无免密 sudo（用 `printf '666\n' \| sudo -S`） |
 | 仓库 | `/home/admin/jm9100-oss`（git，远端 `git@github.com:MianJu28/jm9100-oss.git`，已推送同步） |
 | 源码 | `src/mwv207-umd/`（UMD，唯一可改处；上游树 `ref/oh-mesa/.../src/gallium/{drivers,winsys}/mwv207` 是指向它的符号链接）、`src/kernel-6.6/`（KMD，已并入本仓库） |
-| 已装栈 | `/usr/local/lib/mwv207-oss/`（r13，DRI md5 `f80fa8e0…`），`/lib/modules/…/updates/dkms/mwv207.ko`（自建 KMD） |
-| 载荷 | `payload-37`（`24.1.2-fullstack-r13`）；历史快照在 `/var/lib/mwv207-oss/switch-history`（留 5 个） |
-| 快速回归副本 | `/tmp/gd3/`（与已装栈同 md5）。实验构建流程：改 `src/mwv207-umd` → `ninja -C ref/oh-mesa/User_source_code/mesa-24.1.2/build-full src/gallium/targets/dri/libmwv207_dri.so` → `cp` 到 `/tmp/gd3/` → 用 `LIBGL_DRIVERS_PATH=/tmp/gd3 MESA_LOADER_DRIVER_OVERRIDE=mwv207` 测 |
+| 已装栈 | `/usr/local/lib/mwv207-oss/`（r16，DRI md5 `01904e3a…`，EGL md5 `300daa41…`），`/lib/modules/…/updates/dkms/mwv207.ko`（自建 KMD） |
+| 载荷 | `payload-41`（`24.1.2-fullstack-r16`）；历史快照在 `/var/lib/mwv207-oss/switch-history` |
+| 快速回归副本 | `/tmp/gd3/`（测试用；`/tmp` 是 7.8G tmpfs，重启即空，记得清理大文件）。实验构建流程：改 `src/mwv207-umd` → `ninja -C ref/oh-mesa/User_source_code/mesa-24.1.2/build-full src/gallium/targets/dri/libmwv207_dri.so` → `cp` 到 `/tmp/gd3/` → 用 `LIBGL_DRIVERS_PATH=/tmp/gd3 MESA_LOADER_DRIVER_OVERRIDE=mwv207` 测 |
 | 出包安装 | `./tools/make-payload.sh -v 24.1.2-fullstack-rN` → `printf '666\n' \| sudo -S ./switch-mwv207.sh umd install --force`（**install 调用常显示 interrupted，实装已完成——必须用 `status` + md5 比对确认，勿盲目重跑**） |
 | 构建陷阱 | 性能实验必须用 `build-full`（`build-glvnd` 是旧二进制）；`meson setup --wipe` 会把 glvnd 从 auto 变 enabled → 必须显式 `-Dglvnd=false -Dgles1/2=enabled` |
 
@@ -81,30 +84,38 @@ r13 在 r12 基础上新增 **10bit HEVC 解码面**（P010/P016，见 §3 末�
    `/tmp/diagpage.html`、`/tmp/ffp4/user.js`、`/tmp/hist2.py`、`/tmp/ts4.sh`、
    `/tmp/swapbench`、`/tmp/wrshade/`、`/tmp/wrreplay`、`/tmp/tsprobe`。清理时保留。
 
-## 5. 剩余工作（按优先级）
+## 5. 剩余工作（按优先级，2026-11-10 复核）
 
-### 已拍板待办
-- **10bit HEVC/VP9 解码面（已完成 2026-11-03，`f0c7605`）**：`P010/P016` 在
-  `R16_UNORM`/`R16G16_UNORM` 可采样时接受，VA 前端开始广播 `YUV420_10BPP`；
-  真机 Main10 硬解 + `DRM_PRIME_2` 导出与软件解码逐位一致。GL 侧 16 位采样
-  仍恒 0（C1：0x1F76 不解码 0x32–0x36，2026-11-03 定位），渲染路径仍受限，
-  出厂前需真机装一次验证。
-- **C 类诚实性取舍（已拍板 2026-11-03，见 §6）：C1/C2/C3 均取“保留声明 + 文档注明”**，按用户“尽可能保留完整功能”的要求；I-3 仍待定。
-- **D1 VP9 硬解**（最有价值功能项）：硬件档位 `0x00001F76` 确认 `vp9_support=1`，
-  解析器/bool 解码器已编入库（零调用），缺 `mwv207_dec_vp9_set_regs()` 分支；
-  H264/HEVC 的 set_regs 可作模板（`mwv207_dec_h264.c:2321`、`mwv207_dec_hevc.c:1231`）。
-- **N14 KMD reset 不 signal 在飞 fence**（唯一可能卡死应用的 KMD 缺陷，需重启验证）。
+### 已完成（不再需要做）
+- **VP9 Profile0 8bit 硬解**：单 tile / 多 tile 列 / tile rows / 分段 / show_existing /
+  概率自适应 / 时间 MV / ALTREF 全部逐位一致；`tools/vp9-regression.sh` 18/18；
+  Big Buck Bunny 720p/1080p 整条逐字节一致。提交链 `5c6d05e`→`f8f693a`，
+  细节见 `docs/HANDOVER-VP9.md`。
+- **Firefox 渲染两处根因**：字形/图标撕裂（`f8f693a`，上传暂存 BO 延迟释放）、
+  标签栏"微缩 chrome"（`6ec1e17`，buffer 写入前等待 GPU）；mesa 侧
+  `loader_dri3_query_buffer_age()` 恒 0（`ref/oh-mesa` `248659c`，仅本地提交）。
+- **KMD 自建 + DKMS**：`mwv207-oss/1.0.0` 已注册，运行中 srcversion 与构建一致；
+  切换脚本三态（builtin/oss/vendor）已实现，失败回滚 builtin。
 
-### B 类（中成本，可做）
-E8/D6 多视口（先确认硬件是否有多组 viewport 寄存器，无则把 cap 降为 1）、
-E3 压缩纹理 blit 的 `task_info` 覆盖（`mwv207_blit.c:568-584`）、K9-①/K9-②/K12
-（KMD 竞态类，需重启）、N2（`hw_submission=30` 改小）、N4（DMA run_job 忙等 5s）、
-K11（suspend 次序）。
+### 待办（按价值排序）
+1. **A5：VP9 10bit（Profile 2）/4:2:2** —— 当前 `vp_profile!=0 || bit_depth!=8` 直接拒绝
+   （Profile1/2 会让 ASIC 自旋挂死整机）。要先有安全试错路径（超时/看门狗）再放开。
+2. **B3：VP9 intra-only 非关键帧样片** —— 本机编码器产不出，需外部样片或自写构造器。
+3. **B2：真正的跨尺寸参考** —— 已有"缺参考/尺寸不同即拒绝"保护（`72f9523`）；要验证
+   "参考自身几何 + hscale/vscale"路径，需要一个自写 VAAPI 客户端（ffmpeg 在分辨率变化时
+   会重建 VA context，绕不过去）。
+4. **N14（KMD）**：reset 时不 signal 在飞 fence（唯一可能卡死应用的 KMD 缺陷，需重启验证）；
+   其余 N1/N2/N4/K9-①/K9-②/K11/K12/N10/N9 见 `docs/UNRESOLVED.md` §2。
+5. **vendor 态端到端验证**：`stack vendor` 会重启，尚未人工实跑；热切换已证不可行
+   （`mwv207` refcnt 恒为 2，只有 reboot 才释放）。
+6. **性能**：buffer 写入等待的吞吐代价只做了 glxgears 观测（110 FPS 无回退），重负载未量化；
+   Firefox WebGL 42–44 FPS 的剩余瓶颈在 WebRender 帧调度。
+7. **DKMS 一致性**：`dkms status` 有 `Diff between built and installed module!` 警告
+   （srcversion 与运行中一致）；KMD 源码改动后必须重跑 `tools/dkms-sync.sh`。
 
-### 不建议投入
-C-2 16 位采样编码（硬件边界）、D7 Vulkan（官方闭源也没有）、C-5/C-6（厂商库无
-来源）、N10/N9（实测无影响）、火狐 WebGL 42-44 FPS 剩余瓶颈（在 WebRender 帧调度，
-总 CPU 仅 2.4-3.6%）、chrome 文字错位（用户已搁置）、openuuyc 单实例 UX（用户已确认没问题）。
+### 不建议投入（沿用 2026-11-03 结论）
+C-2 16 位采样编码（硬件边界）、D7 Vulkan、C-5/C-6、N10/N9、openuuyc 单实例 UX。
+原先"chrome 文字错位（用户已搁置）"一条已随 `f8f693a`/`6ec1e17` 修复，可删除。
 
 ## 6. C 类三项（2026-11-03 已拍板：全部保留声明 + 注明）
 

@@ -1,15 +1,12 @@
 # 未修复缺陷与未实现功能 · 总清单
 
-> 汇总截至 **2026-11-03**（UMD 已部署 **r13**，`payload-37/VERSION = 24.1.2-fullstack-r13`），
-> 对应外层仓库工作树（含 `src/mwv207-umd/` 分层）。
+> 汇总截至 **2026-11-10**（UMD 已部署 **r16**，`payload-41/VERSION = 24.1.2-fullstack-r16`，
+> 内核 `6.6.143-arm64-desktop-hwe`），对应外层仓库工作树（含 `src/mwv207-umd/` 分层）。
 > 取代散落在 `api/06-KNOWN-ISSUES.md`、`api/11-FIX-FEASIBILITY.md` 里的分散记录：
 > 本文件是**唯一索引**，那两个文件保留历史细节与推导过程。
 >
-> **口径**：只列**当前仍未落地**的项。2026-10-30/31 已修复的（VRAM 单位、O2、O3、
-> 遮挡查询 C4）、2026-11-02 已修复的（条件渲染 C5 真实现、KMD 零重定位提交空 entity N15、
-> 批次 1/2 健壮性、GBM/Wayland `err=-13`）、2026-11-03 已修复的（dual-source blend 崩溃、
-> A 类 E5/F.3.1/F.4 三条/O5 视频路径、F.3.2/F.3.3/E9/E10、批次 2b 的 O5 flush 失败路径）
-> 不在此列，见文末《已修复索引》。
+> **口径**：只列**当前仍未落地**的项。2026-11-06~11-10 新增已修项（VP9 Profile0 全链路、
+> Firefox 字形/图标撕裂、Firefox 标签栏"微缩 chrome"）见 §6《已修复索引》。
 > 每条给出 `文件:行号`；标【实测】的表示上机验证过，未标者为静态审计结论。
 
 ---
@@ -47,6 +44,23 @@ N1 / N14 / K11 / N2 / N4 / K9-① / K9-② / K12 / N10 / N9（见 §2）。
 dmesg 里 GPU 相关错误计数为 0。
 
 ---
+
+### 0.1 未解决项速览（2026-11-10 复核）
+
+按"是否影响出厂可用性"排序；详细条目见对应章节。
+
+| # | 领域 | 未解决项 | 影响 | 位置 |
+|---|---|---|---|---|
+| 1 | VAAPI/VP9 | **A5 10bit（Profile 2）与 4:2:2 未实现** | 只能解 Profile0 8bit；Profile1/2 被显式拒绝（放开会让 ASIC 自旋挂死整机） | `docs/HANDOVER-VP9.md` §10 A5 |
+| 2 | VAAPI/VP9 | **B3 intra-only 非关键帧样片缺** | 该分支未上机验证；本机编码器产不出 | `docs/HANDOVER-VP9.md` §10 B3 |
+| 3 | VAAPI/VP9 | **B2 真正的跨尺寸参考未验证** | 已有"缺参考/尺寸不同即拒绝"的保护（`72f9523`），缩放路径未跑通；需自写 VAAPI 客户端 | `docs/HANDOVER-VP9.md` §10 B2 |
+| 4 | KMD | **N14 reset 不 signal 在飞 fence** | 唯一可能卡死应用的 KMD 缺陷，需重启验证 | 本文 §2 |
+| 5 | KMD | N1/N2/N4/K9-①/K9-②/K11/K12/N10/N9 | 竞态/健壮性，多为低概率 | 本文 §2 |
+| 6 | 切换脚本 | **vendor 态端到端未实跑** | `stack vendor` 会重启，需人工确认；热切换已证不可行（refcnt 恒 2） | `switch-mwv207.sh` / §5 |
+| 7 | 打包 | **DKMS 一致性警告** | `dkms status` 报 `Diff between built and installed module!`（srcversion 与运行中一致）；KMD 改源码后必须重跑 `tools/dkms-sync.sh` | §5 |
+| 8 | 性能 | buffer 写入等待的吞吐代价未量化 | 仅 glxgears（110 FPS）观测；重负载未测 | 本文 §4 性能 |
+| 9 | 依赖补丁 | `loader_dri3` buffer age 恒 0 只在本地 mesa 树提交 | 未推厂商镜像；重建 mesa 时需保留 | `ref/oh-mesa` `248659c` |
+| 10 | 测试 | 无自动化 GL 回归 | Firefox/GL 侧探针均为一次性脚本；VP9 有 `tools/vp9-regression.sh` | §7 |
 
 ## 1. UMD — 未修复缺陷
 
@@ -230,6 +244,10 @@ dmesg 里 GPU 相关错误计数为 0。
 
 | 日期 | 项 | 提交 |
 |---|---|---|
+| 2026-11-10 | Firefox 标签栏"微缩 chrome"：buffer 写入前等待 GPU（`mwv207_resource.c`） | `6ec1e17`（`src/mwv207-umd`） |
+| 2026-11-10 | mesa：`loader_dri3_query_buffer_age()` 恒 0（我们不做交换后缓冲保留） | `248659c`（`ref/oh-mesa`，本地） |
+| 2026-11-07 | Firefox 字形/图标撕裂：上传暂存 BO 延迟释放（`retired_staging` 环） | `f8f693a`（`src/mwv207-umd`） |
+| 2026-11-06~10 | **VP9 Profile0 8bit 硬解全链路**（tile 列/行、量化、分段、show_existing、概率自适应、时间 MV、ALTREF、跨尺寸保护），回归 18/18 | `5c6d05e`→`f8f693a`（`docs/HANDOVER-VP9.md`） |
 | 2026-11-03 | 校验器路径失效（迁出 oh-mesa 后符号链接不进 `os.walk`）：`check_coverage.py`、`validate_register_map.py` | `d056efc`（`docs/tools/`） |
 | 2026-11-03 | A 类：E5 双面模板双重互换、F.3.1 反汇编 type 位序、F.4 三条健壮性、O5 视频路径失败 fence | `5dee412`（`src/mwv207-umd`） |
 | 2026-11-03 | 10bit 解码面启用：P010/P016 在 `R16_UNORM`/`R16G16_UNORM` 可采样时接受（真机 Main10 硬解 + 导出逐位一致） | `f0c7605`（`src/mwv207-umd`） |
