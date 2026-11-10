@@ -26,7 +26,7 @@ OpenCL/VA-API/VDPAU 全走我们的栈；自建 KMD 在跑（srcversion `D5EEF36
 | 机器 | Deepin 25 aarch64，内核 `6.6.155-arm64-desktop-hwe`（143 也装了 DKMS 包，但不是启动内核），GPU `[0731:9100]` PCI 07:00.0，HDMI-1 1920×1080@100Hz，无免密 sudo（用 `printf '666\n' \| sudo -S`） |
 | 仓库 | `/home/admin/jm9100-oss`（git，远端 `git@github.com:MianJu28/jm9100-oss.git`，已推送同步） |
 | 源码 | `src/mwv207-umd/`（UMD，唯一可改处；上游树 `ref/oh-mesa/.../src/gallium/{drivers,winsys}/mwv207` 是指向它的符号链接）、`src/kernel-6.6/`（KMD，已并入本仓库） |
-| 已装栈 | `/usr/local/lib/mwv207-oss/`（运行中 r19：DRI md5 `5408ee72…`、VA md5 `eec6bfe5…`、EGL_mwv207 md5 `d038036a…`；**r20 已生成待装**：DRI `39f38c6f5fd2f5ec64d0b90459f31e89`、VA `fa63148dfb01b97461897106a4591346`、vdpau `f10fcec15f26…`、OpenCL `a3fb2f47559b…`），`/lib/modules/…/updates/dkms/mwv207.ko`（自建 KMD，运行中 `0EFB7F4…`） |
+| 已装栈 | `/usr/local/lib/mwv207-oss/`（运行中 r19：DRI md5 `5408ee72…`、VA md5 `eec6bfe5…`、EGL_mwv207 md5 `d038036a…`；**r20 已生成待装**：DRI `39f38c6f5fd2f5ec64d0b90459f31e89`、VA `fa63148dfb01b97461897106a4591346`、vdpau `f10fcec15f26…`、OpenCL `a3fb2f47559b…`），`/lib/modules/…/updates/dkms/mwv207.ko`（自建 KMD，运行中 `0EFB7F4…`，已装待重启 `63D36B4…`） |
 | 载荷 | 运行中 `payload-42`（`24.1.2-fullstack-r19`，含 I-1/I-2/I-3/I-4；2026-11-10 13:25 安装）；**`payload-42` 已重新组装为 `24.1.2-fullstack-r20`**（追加 A5：VP9 Profile 2 10bit 4:2:0），`umd check` 通过、`/tmp/p42` 预验证（glxinfo/query 4·4/720p60 10bit 逐位一致），**安装需用户在自己终端跑 `sudo ./switch-mwv207.sh umd install`（会重启 lightdm）**；`payload-41`（r16）为上一份可回滚点，历史快照在 `/var/lib/mwv207-oss/switch-history` |
 | 快速回归副本 | `/tmp/gd3/`（测试用；`/tmp` 是 7.8G tmpfs，重启即空，记得清理大文件）。实验构建流程：改 `src/mwv207-umd` → `ninja -C ref/oh-mesa/User_source_code/mesa-24.1.2/build-full src/gallium/targets/dri/libmwv207_dri.so` → `cp` 到 `/tmp/gd3/` → 用 `LIBGL_DRIVERS_PATH=/tmp/gd3 MESA_LOADER_DRIVER_OVERRIDE=mwv207` 测 |
 | 出包安装 | `./tools/make-payload.sh -v 24.1.2-fullstack-rN` → `printf '666\n' \| sudo -S ./switch-mwv207.sh umd install --force`（**install 调用常显示 interrupted，实装已完成——必须用 `status` + md5 比对确认，勿盲目重跑**） |
@@ -109,6 +109,11 @@ OpenCL/VA-API/VDPAU 全走我们的栈；自建 KMD 在跑（srcversion `D5EEF36
   117 FPS 全过；reset 通路已用 `tests/n14-reset/` 探针实测：6 轮 TDR、
   `pipe_3d_force_complete` 命中 6/6、用户 fence 12.3 s 完成、复位后 GPU 正常。
   2D/DEC/ENC 与 destroy 路径仍未被探针覆盖，见 `docs/UNRESOLVED.md` §2.1。
+- **KMD 加固批次（`53b3229`，待重启生效）**：20 处 `BUG_ON` 收敛——用户提交路径上
+  的（`mem_type` 非 VRAM/TT、`reloc->idx` 越界、DMA `cmd_size` 不符、3D 事件槽耗尽）
+  返回 `-EINVAL`/`-EIO`/`-EBUSY`，寄存器访问器与 3D ring 描述符改 `WARN_ON_ONCE` +
+  跳过动作（受影响的 job 由 2 s TDR 回收，N14 已保证在飞 fence 会被 signal）。两内核与
+  两个 initramfs 已装 `63D36B44B229F708AE64C77`，重启后按 `docs/UNRESOLVED.md` §2.4 复核。
 - **KMD 结构/边界批次（`6502f19`，已重启验证生效）**：N1 sched 槽位撞车（6 槽放 7 个
   引擎，enc0 覆盖 dec1）→ `MWV207_MAX_SCHED_NR 7` + 显式下标；N2 3D `hw_submission`
   30→28（等于事件槽数会命中 `BUG_ON(event >= 30)`）；K12 超时路径 devfreq 多减 →
@@ -157,9 +162,10 @@ OpenCL/VA-API/VDPAU 全走我们的栈；自建 KMD 在跑（srcversion `D5EEF36
    "参考自身几何 + hscale/vscale"路径，需要一个自写 VAAPI 客户端（ffmpeg 在分辨率变化时
    会重建 VA context，绕不过去）。
 4. **其余 KMD 项**：N1/N2/K12/K9-②/N9 已修并重启验证（`6502f19`）；N4/K11 已修、
-   两内核已装并**重启验证生效**（`fbed27f`，运行中 srcversion `0EFB7F4…`；判据见
-   `docs/UNRESOLVED.md` §2.3）；K9-① 已核实为与厂商一致（非缺陷）；只剩 N10（只文档化）
-   与 20 处 `BUG_ON` 的防御性收敛。
+   **重启验证生效**（`fbed27f`，运行中 srcversion `0EFB7F4…`；判据见
+   `docs/UNRESOLVED.md` §2.3）；K9-① 已核实为与厂商一致（非缺陷）；20 处 `BUG_ON`
+   已收敛为可恢复错误（`53b3229`，两内核已装 `63D36B4…`、**待重启生效**，见 §2.4）；
+   只剩 N10（决定只文档化）。
    **一条命令验收**：`printf '666\n' | sudo -S ./tests/verify-installed.sh 0EFB7F4433EA5311B08E88C`
    （`--no-n14` 跳过 TDR 探针）。2026-11-10 14:36 重启后实跑：
    `PASS=22 FAIL=0 SKIP=1`（SKIP 为 TDR 探针后预期的 6 条 `timed out`），

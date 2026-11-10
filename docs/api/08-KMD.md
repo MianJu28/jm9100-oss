@@ -42,7 +42,8 @@
 ### 0.4 图例
 
 - 寄存器分三层，勿混用：
-  1. **NT 空间字节地址**（`jdev_read/jdev_write`，`mwv207.h:105-123`）：如 `0x9b0140`；窗口从 `0x100000` 起（`mwv207.h:107` 的 `BUG_ON(reg <= 0x100000)`）。
+  1. **NT 空间字节地址**（`jdev_read/jdev_write`，`mwv207.h:105-123`）：如 `0x9b0140`；窗口从 `0x100000` 起（`mwv207.h` 的 `jdev_write` 现在用 `WARN_ON_ONCE(reg <= 0x100000)`
+丢弃这次写，2026-11-10 `53b3229` 起不再是 `BUG_ON`）。
   2. **管线窗口字节偏移**（`pipe_read/pipe_write`，`mwv207_sched.h:128-136`，基址 `jdev->mmio + regbase`）：如 3D 的 `0x10`。
   3. **显示窗口字节偏移**（`dc/mwv207_va.c` 的 `va_read/write`、`dc/mwv207_hdmi.c` 的 `readb/writeb`）：VA 基址 `0x990000 + 0x100*idx (+0x600/+0xC00)`（`va.c:29-31`）；HDMI 寄存器线性空间 `0x1200000 + 0x40000*idx`（`hdmi.c:22`）。
   4. 驱动命令流里的 **16 位寄存器号 = 厂商 `_Address >> 2`**（见 `docs/registers/REGISTERS.md`）；`mwv207_pipe_dec.c:167` 的 `reg = (cmd & 0xffff) * 4` 就是这一换算的内核侧体现。
@@ -468,7 +469,7 @@ SUBMIT 的栈缓冲策略（影响最大参数）：
 | kunmap | `mwv207_bo_kunmap_reserved` | `bo.c:199-208` | `map_count` 计数归零才真正 `ttm_bo_kunmap` |
 | 引用 | `mwv207_bo_ref/unref` | `bo.c:210-225` | `ttm_bo_get/ttm_bo_put` |
 | 等待 | `mwv207_bo_wait(jbo, no_wait)` | `bo.c:294-307` | 预留（不可中断）→ `ttm_bo_wait` → 解除 |
-| 放置 | `void mwv207_bo_placement_from_domain(struct mwv207_bo *jbo, u32 domain, bool pinned)` | `bo.c:39-105` | domain 位：`0x2` VRAM、`0x4` TT、`0x1` SYSTEM；`placements[3]`；`BUG_ON(c > 3)`（`:101`） |
+| 放置 | `void mwv207_bo_placement_from_domain(struct mwv207_bo *jbo, u32 domain, bool pinned)` | `bo.c:39-105` | domain 位：`0x2` VRAM、`0x4` TT、`0x1` SYSTEM；`placements[3]`；`c > 3` 现为 `WARN_ON_ONCE` + 夹紧到 `ARRAY_SIZE`（`:101`，`53b3229`） |
 
 `mwv207_bo.placements[3]` 的取值条件（`bo.c:56-95`）：
 
@@ -604,7 +605,7 @@ DMA 专用提交（`is_dma = true`，`:430-467`）有更严格的形状要求：
 | `cmd_offset` 必须分别等于 `offsetof(struct mwv207_dma_cmd, src.base)` 与 `dst.base` | `:446-453` |
 | src/dst 不得为同一 BO | `:455-456` |
 
-DMA 条目的地址填充（`mwv207_submit_patch_dma_entry`，`:391-428`）：VRAM → `base = mwv207_bo_gpu_phys(jbo)` 且 `pg_nr_type = MWV207_DMA_NR_PAGES_VRAM(num_pages)`（bit63 = 0）；TT → `base = gtt->ttm.dma_address` 且 `MWV207_DMA_NR_PAGES_RAM`（bit63 = 1）；**其它 mem_type 直接 `BUG_ON(1)`（`:411`）**；随后三重边界校验（`offset >= bo_size`；`offset + stride*(height-1) + width` 回绕；越过 `bo_size`）与 `(offset % stride) + width > stride` 的对齐校验，均返回 `-ERANGE`。
+DMA 条目的地址填充（`mwv207_submit_patch_dma_entry`，`:391-428`）：VRAM → `base = mwv207_bo_gpu_phys(jbo)` 且 `pg_nr_type = MWV207_DMA_NR_PAGES_VRAM(num_pages)`（bit63 = 0）；TT → `base = gtt->ttm.dma_address` 且 `MWV207_DMA_NR_PAGES_RAM`（bit63 = 1）；**其它 mem_type 返回 `-EINVAL`（原 `BUG_ON(1)`，`53b3229` 改）**；随后三重边界校验（`offset >= bo_size`；`offset + stride*(height-1) + width` 回绕；越过 `bo_size`）与 `(offset % stride) + width > stride` 的对齐校验，均返回 `-ERANGE`。
 
 ### 5.4 提交前的显存校验（`mwv207_submit_validate`，`submit.c:513-547`）
 

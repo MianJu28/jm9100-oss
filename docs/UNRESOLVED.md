@@ -46,11 +46,13 @@ modinfo /lib/modules/…/updates/dkms/…    -> srcversion 0EFB7F4433EA5311B08E8
 - `22145e9` 修的 N14（reset/destroy 时 signal 在飞 fence，见 §2.1）；
 - `6502f19` 修的 N1 / N2 / K12 / K9-② / N9（见 §2.2，运行中 srcversion 已是
   `D5EEF36617A4D3FBF4AFD1D`，2026-11-10 13:29 重启后回归全过）；
-- `fbed27f` 修的 N4 / K11（见 §2.3）：两内核已装 `0EFB7F4433EA5311B08E88C`，
-  2026-11-10 14:36 重启后**已验证生效**（一键验收 22 项全过）。
+- `fbed27f` 修的 N4 / K11（见 §2.3）：2026-11-10 14:36 重启后**已验证生效**
+  （一键验收 22 项全过），运行中 srcversion 即 `0EFB7F4433EA5311B08E88C`；
+- `53b3229` 收敛的 20 处 `BUG_ON`（见 §2.4）：两内核与 initramfs 已装
+  `63D36B44B229F708AE64C77`，**待重启生效**。
 
 因此 **K 系列、N14、§2.2 的 5 条、§2.3 的 N4/K11 均已生效**。
-剩下的是 N10（决定只文档化）与 20 处 `BUG_ON` 的防御性收敛（见 §2 / §2.3）。
+剩下的只有 N10（决定只文档化）。
 自建模块会打印 `loading out-of-tree module taints kernel` 与
 `module verification failed: signature and/or required key missing`（DKMS 签了名，
 但 MOK 证书没有 enroll 进内核信任链），属既有现象；dmesg 里 GPU 相关错误计数为 0。
@@ -70,7 +72,8 @@ modinfo /lib/modules/…/updates/dkms/…    -> srcversion 0EFB7F4433EA5311B08E8
 | 4b | KMD | **N1/N2/K12/K9-②/N9 已修，重启后已验证生效** | 修复见 §2.2（`6502f19`）；2026-11-10 13:29 重启后 srcversion = `D5EEF36617A4D3FBF4AFD1D`，GL/query 4·4/VP9 18·18/H.264 8bit 逐位一致/N14 探针 6·6 全过，dmesg 无 WARN/BUG；引擎计数用 `tests/engines/` 核对（lite 机型 3d=1 dec=1 enc=0 2d=1 dma=1） | 本文 §2.2 |
 | 4c | UMD 视频 | **I-4：H.264 High10 已定案（2026-11-10 收回声明）** —— 按当前寄存器配置提交 10bit H.264 会让 DEC 管线挂死（6 次 TDR、输出全 0）；缺 Hantro 的 high10p 位流预转换 | 客户端现在对该类流直接回退（`hwaccel initialisation returned error`），DEC 零超时；原厂闭源驱动同样不声明 High10 | 本文 §1.2 / `api/05-VIDEO-CODEC.md` §6.7 |
 | 4d | KMD | **N4/K11 已修并重启验证生效** | 修复见 §2.3（`fbed27f`）：DMA 提交改异步完成 + 真 fence；移除路径补 `pci_disable_device` 与 `free_irq` 前硬件侧关中断。运行中 srcversion `0EFB7F4433EA5311B08E88C`，2026-11-10 14:36 重启后一键验收 `PASS=22 FAIL=0 SKIP=1` | 本文 §2.3 |
-| 5 | KMD | 剩余 N10（只文档化）+ 20 处 `BUG_ON` | K9-① 已核实为与厂商一致（非缺陷）；N10 改为只记录；`BUG_ON` 属防御性收敛，非缺陷修复 | 本文 §2 / §2.3 |
+| 4e | KMD | **20 处 `BUG_ON` 已收敛为可恢复错误，待重启生效** | `53b3229`：用户提交路径仍可能触发的那几处（`mem_type` 非 VRAM/TT、`reloc->idx` 越界、DMA `cmd_size` 不符、3D 事件槽耗尽）现在返回 `-EINVAL`/`-EIO`/`-EBUSY`；寄存器/ring 描述符类改 `WARN_ON_ONCE` + 跳过，由 TDR 回收。两内核已装 `63D36B4…` | 本文 §2.4 |
+| 5 | KMD | 只剩 N10（决定只文档化） | K9-① 已核实为与厂商一致（非缺陷）；N10 改为只记录 | 本文 §2.3 |
 | 6 | 切换脚本 | **vendor 态端到端未实跑** | `stack vendor` 会重启，需人工确认；热切换已证不可行（refcnt 恒 2） | `switch-mwv207.sh` / §5 |
 | 7 | 打包 | **DKMS 一致性警告（走 stage 时会复现，已记录处理步骤）** | `tools/dkms-sync.sh` 重建后两个内核都干净；`kmd stage` 直接覆盖仓库构建的 .ko 会让 6.6.155 重新报 `Diff between built and installed module!`，用 `dkms install --force` + `depmod` + `update-initramfs` 恢复即可 | §2.1、§5 |
 | 8 | 性能 | buffer 写入等待的吞吐代价未量化 | 仅 glxgears（110 FPS）观测；重负载未测 | 本文 §4 性能 |
@@ -426,6 +429,47 @@ H.264 High 420 / HEVC 8bit / HEVC Main10 **逐位一致**（这三类每次搬�
 桌面常规负载下走过，未做高吞吐压力；② 没有构造"DMA 引擎真的挂住"的场景（需要让引擎停在半路，风险高），
 `-ETIMEDOUT` 分支只有代码审查；③ 中间批次（>64 MB 搬移）仍走同步等待，未单独压测。
 
+### 2.4 20 处 `BUG_ON` 收敛为可恢复错误（2026-11-10，`53b3229`；待重启生效）
+
+**判断**：这些 `BUG_ON` 里有一部分在**用户态提交路径**上（`mem_type` 非 VRAM/TT、
+`reloc->idx` 越界、DMA `cmd_size` 不符、3D 事件槽耗尽），一旦触发就是整机 panic；
+其余是 ring 描述符/寄存器访问器的内部不变量，panic 只会把可恢复的驱动 bug 变成死机。
+统一原则：能返回错误的返回 `-EINVAL`/`-EIO`/`-EBUSY`；不能返回的改
+`WARN_ON_ONCE` + 跳过该动作，让受影响的 job 由 2 s TDR 回收（N14 已保证在飞 fence
+会被 signal）。
+
+| 位置 | 触发条件 | 改法 |
+|---|---|---|
+| `mwv207_submit.c` patch_dma_entry default | BO 的 `mem_type` 既非 VRAM 也非 TT | `-EINVAL`（原 `BUG_ON(1)`） |
+| `mwv207_ttm.c` evict_flags | `placements[0/1]` 不是 VRAM/TT | `WARN_ON_ONCE` + 放弃本次 evict 特化 |
+| `mwv207_bo.c` placement_from_domain | `c > 3`（不可达） | `WARN_ON_ONCE` + 夹紧到 `ARRAY_SIZE` |
+| `mwv207.h` `jdev_write`/`jdev_modify` | `reg <= 0x100000`（把 VRAM 地址当寄存器） | `WARN_ON_ONCE` + 丢弃；modify 把检查提到读之前 |
+| `dc/mwv207_vi.h` `output_read/write/modify` | `reg >= 0x8000` | read 返回 0、write/modify 直接返回 |
+| `mwv207_sched.h` `mwv207_job_bo` | `idx` 越界 | 返回 NULL，4 个调用点补 NULL 检查（dma reloc 路径另补 `reloc->idx` 上界） |
+| `mwv207_pipe_2d.c` `pipe_2d_start` | 重置后 ring 跨度 ≠ 32 | `WARN_ON_ONCE` + 停止后续写入 |
+| `mwv207_pipe_2d.c` submit | 跨度非 16 对齐 / > `size` | `WARN_ON_ONCE` + `-EIO`（tail 不回滚，fence 由 ISR/reset 回收） |
+| `mwv207_pipe_3d.c` `pipe_3d_event_push` | 30 个事件槽全在飞 | 返回 -1，调用点回滚 tail + 释放本地引用 + `-EBUSY` |
+| `mwv207_pipe_3d.c` link/wait/wtol/loadstate/stall | ring 越界/对齐 | `WARN_ON_ONCE` + 跳过该描述符 |
+| `mwv207_pipe_3d.c` submit | 跨度 > `size` | `WARN_ON_ONCE` + `-EIO` |
+| `mwv207_pipe_dma.c` `cursor_advance` | 越过行尾 | len 夹紧到行尾（保证推进、不死循环） |
+| `mwv207_pipe_dma.c` submit | `cmd_size` 不符 | `-EINVAL` |
+| `dc/mwv207_va.c` | crtc 索引 ≠ `va->idx` | `WARN_ON_ONCE` 后继续 |
+
+**部署状态**：两内核已装 `63D36B44B229F708AE64C77`，两个 initramfs 已解包核对为同一
+srcversion（143 的 `update-initramfs` 仍偶发 exit 139，重试 3 次后成功，属既有内核
+问题，见 §2.3 的证据链）。运行中仍是 `0EFB7F44…`，**重启后生效**。
+
+**重启后判据**：`/sys/module/mwv207/srcversion` 应为 `63D36B44B229F708AE64C77`；
+`sudo ./tests/verify-installed.sh 63D36B44B229F708AE64C77` 全过（该脚本覆盖
+GL/引擎/VAAPI profile/三类解码逐位一致/TDR 探针/dmesg 告警）；重点确认
+`glxgears`、`tests/query`、`vp9-regression.sh` 与重启前一致——本批只动错误路径，
+**正常路径的行为必须完全相同**。
+
+**残余缺口**：① 只有代码审查，没有构造真实的 malformed 提交去打 `-EINVAL` 分支
+（要构造合法 bo handle + 畸形 reloc 才走到，测试价值低于风险，见 §7 的测试能力说明）；
+② 3D ring 越界时"跳过描述符"依赖 TDR 回收，实际场景未构造；③ `WARN_ON_ONCE` 意味着
+同一位置只报一次，长期运行的 dmesg 里不会重复，但也更难统计频率。
+
 ---
 
 ## 3. 未实现功能（新功能，不是修缺陷）
@@ -492,6 +536,7 @@ H.264 High 420 / HEVC 8bit / HEVC Main10 **逐位一致**（这三类每次搬�
 
 | 日期 | 项 | 提交 |
 |---|---|---|
+| 2026-11-10 | KMD：20 处 `BUG_ON` 收敛为可恢复错误（提交路径给 errno、内部不变量改 `WARN_ON_ONCE` + 跳过） | `53b3229`（`src/kernel-6.6`；两内核与两个 initramfs 已装 `63D36B4…`，待重启生效） |
 | 2026-11-10 | KMD：DMA 提交忙等 5 s + stub fence（N4）、移除路径缺 `pci_disable_device` 与 `free_irq` 前未在硬件侧关中断（K11） | `fbed27f`（`src/kernel-6.6`；2026-11-10 重启后验证生效，一键验收 22 项全过） |
 | 2026-11-10 | KMD：sched 槽位撞车（N1）、3D 在飞上限撞事件表（N2）、超时路径 devfreq 多减（K12）、ISR 影子寄存器数据竞争（K9-②）、显示侧两处 `BUG_ON(irq == 0)`（N9） | `6502f19`（`src/kernel-6.6`；两内核已装、initramfs 已刷，重启后生效） |
 | 2026-11-10 | KMD：3D/2D/DEC/ENC `reset`/`destroy` 对在飞 fence 只 `dma_fence_put` 不 signal（N14），2D `destroy` 不排空 `fence_queue` | `22145e9`（`src/kernel-6.6`；模块已暂存，重启后生效） |
