@@ -1097,7 +1097,8 @@ PLL 硬件命令通道（`mwv207_vcmd.c`）：
 | N16 | **高** | `mwv207_job_fini()` 对未分配的 `cmd_dats` 空指针解引用 | `sched.c:65-72` vs `submit.c:281-330` | `submit_init_job` 先赋 `nr_cmd_dat` 后分配 `cmd_dats`，中途报错返回后清理对 NULL 基址取 `&cmd_dats[i]` → 内核 oops（实测 `pc : mwv207_job_fini+0x12c/0x25c`，一次畸形 submit 即中）。**已修（2026-11-10，`c01af40`）**：条件加 `&& mjob->cmd_dats`；新增 `tests/bad-submit/` 做回归 |
 
 （编号 N1–N14 为本轮新增，与既有 O1–O12（UMD 侧）不重叠；N16 是 2026-11-10
-写 `tests/bad-submit/` 时新抓到的，见上表末行。N15 编号未使用。）
+写 `tests/bad-submit/` 时新抓到的，见上表末行；N15 是更早修的零重定位提交
+`drm_sched_job_init` 缺失（`BUG_ON(!entity)`，`28bc73d`）。）
 
 ### 9.4 与 `06-KNOWN-ISSUES.md` 的差异结论
 

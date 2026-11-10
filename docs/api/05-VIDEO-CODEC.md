@@ -152,7 +152,7 @@ mwv207_context_video_codec_init(&ctx->base);
 | `PIPE_VIDEO_PROFILE_HEVC_MAIN` | 49 | ✅ |
 | `PIPE_VIDEO_PROFILE_HEVC_MAIN_10` | 50 | ✅ |
 | `PIPE_VIDEO_PROFILE_VP9_PROFILE0` | — | ✅ 8bit 4:2:0（2026-11 完成，回归 18/18） |
-| `PIPE_VIDEO_PROFILE_VP9_PROFILE2` | — | ✅ **2026-11-10 起声明（A5，`82e7b02`）**：10bit 4:2:0，与软件解码逐位一致；`MWV207_VP9_10BIT_DISABLE=1` 可关。Profile 1/3（4:2:2/4:4:4）不声明 |
+| `PIPE_VIDEO_PROFILE_VP9_PROFILE2` | — | ✅ **2026-11-10 起声明（A5，`82e7b02`）**：10bit 4:2:0，与软件解码逐位一致（载荷 r20，2026-11-10 16:17 安装；重启后 1080p30 硬件解码 186624000 B 逐位一致、零超时）；`MWV207_VP9_10BIT_DISABLE=1` 可关。Profile 1/3（4:2:2/4:4:4）不声明 |
 | 其它（含 HEVC_MAIN_12/444、AV1、VC1…） | 54 | ❌ `return false` |
 
 返回值为（`:51`）：

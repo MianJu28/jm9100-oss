@@ -1,13 +1,11 @@
 # 未修复缺陷与未实现功能 · 总清单
 
-> 汇总截至 **2026-11-10 15:30**（运行中的 UMD 是 **r19**（`payload-42/VERSION =
-> 24.1.2-fullstack-r19`，2026-11-10 13:25 安装、重启后复核 `vainfo` 只剩
-> ConstrainedBaseline/Main/High + HEVC Main/Main10 + VP9Profile0，H.264 High10 流正确回退、
-> HEVC 8bit 逐位一致）；**r20 已生成、待安装** —— 含 A5 的 VP9 Profile 2（10bit 4:2:0），
-> 装上后 `vainfo` 会多一行 `VAProfileVP9Profile2`（见 §1.6，DRI md5
-> `39f38c6f5fd2f5ec64d0b90459f31e89`、VA md5 `fa63148dfb01b97461897106a4591346`）；内核
-> `6.6.155-arm64-desktop-hwe` 侧运行中的 `0EFB7F4433EA5311B08E88C`（N4/K11，2026-11-10
-> 14:36 重启后 `tests/verify-installed.sh` 全过 `PASS=22 FAIL=0 SKIP=1`）），
+> 汇总截至 **2026-11-10 16:25**（运行中的 UMD 已是 **r20**（`payload-42/VERSION =
+> 24.1.2-fullstack-r20`，2026-11-10 16:17 安装，`vainfo` 已列出 `VAProfileVP9Profile2`；
+> DRI md5 `39f38c6f5fd2f5ec64d0b90459f31e89`、VA md5 `fa63148dfb01b97461897106a4591346`）；
+> 内核 `6.6.155-arm64-desktop-hwe` 侧运行中的 `5A5B401802B79D560151210`（20 处 `BUG_ON`
+> 收敛 + N16，2026-11-10 16:21 重启后 `tests/verify-installed.sh … --bad-submit` 全过
+> `PASS=25 FAIL=0 SKIP=1`）），
 > 对应外层仓库工作树（含 `src/mwv207-umd/` 分层）。
 > 取代散落在 `api/06-KNOWN-ISSUES.md`、`api/11-FIX-FEASIBILITY.md` 里的分散记录：
 > 本文件是**唯一索引**，那两个文件保留历史细节与推导过程。
@@ -49,8 +47,8 @@ modinfo /lib/modules/…/updates/dkms/…    -> srcversion 0EFB7F4433EA5311B08E8
 - `fbed27f` 修的 N4 / K11（见 §2.3）：2026-11-10 14:36 重启后**已验证生效**
   （一键验收 22 项全过），运行中 srcversion 即 `0EFB7F4433EA5311B08E88C`；
 - `53b3229` 收敛的 20 处 `BUG_ON`（见 §2.4）与 `c01af40` 修的 N16（`job_fini`
-  对未分配的 `cmd_dats` 空指针解引用，见 §2.5）：两内核与 initramfs 已装
-  `5A5B401802B79D560151210`，**待重启生效**。
+  对未分配的 `cmd_dats` 空指针解引用，见 §2.5）：2026-11-10 16:21 重启后**已验证生效**
+  （运行中 `5A5B4018…`；畸形提交 9/9 干净返回 errno、dmesg 零 oops）。
 
 因此 **K 系列、N14、§2.2 的 5 条、§2.3 的 N4/K11 均已生效**。
 剩下的只有 N10（决定只文档化）。
@@ -73,8 +71,8 @@ modinfo /lib/modules/…/updates/dkms/…    -> srcversion 0EFB7F4433EA5311B08E8
 | 4b | KMD | **N1/N2/K12/K9-②/N9 已修，重启后已验证生效** | 修复见 §2.2（`6502f19`）；2026-11-10 13:29 重启后 srcversion = `D5EEF36617A4D3FBF4AFD1D`，GL/query 4·4/VP9 18·18/H.264 8bit 逐位一致/N14 探针 6·6 全过，dmesg 无 WARN/BUG；引擎计数用 `tests/engines/` 核对（lite 机型 3d=1 dec=1 enc=0 2d=1 dma=1） | 本文 §2.2 |
 | 4c | UMD 视频 | **I-4：H.264 High10 已定案（2026-11-10 收回声明）** —— 按当前寄存器配置提交 10bit H.264 会让 DEC 管线挂死（6 次 TDR、输出全 0）；缺 Hantro 的 high10p 位流预转换 | 客户端现在对该类流直接回退（`hwaccel initialisation returned error`），DEC 零超时；原厂闭源驱动同样不声明 High10 | 本文 §1.2 / `api/05-VIDEO-CODEC.md` §6.7 |
 | 4d | KMD | **N4/K11 已修并重启验证生效** | 修复见 §2.3（`fbed27f`）：DMA 提交改异步完成 + 真 fence；移除路径补 `pci_disable_device` 与 `free_irq` 前硬件侧关中断。运行中 srcversion `0EFB7F4433EA5311B08E88C`，2026-11-10 14:36 重启后一键验收 `PASS=22 FAIL=0 SKIP=1` | 本文 §2.3 |
-| 4e | KMD | **20 处 `BUG_ON` 已收敛为可恢复错误，待重启生效** | `53b3229`：用户提交路径仍可能触发的那几处（`mem_type` 非 VRAM/TT、`reloc->idx` 越界、DMA `cmd_size` 不符、3D 事件槽耗尽）现在返回 `-EINVAL`/`-EIO`/`-EBUSY`；寄存器/ring 描述符类改 `WARN_ON_ONCE` + 跳过，由 TDR 回收 | 本文 §2.4 |
-| 4f | KMD | **N16 已修，待重启生效**（新发现）：畸形 submit（`nr_cmd_dat>0` 而 `cmd_dats==NULL`）会让 `mwv207_job_fini()` 空指针解引用 → 内核 oops，任何本地进程可触发 | `c01af40`：清理条件加 `&& mjob->cmd_dats`；配套 `tests/bad-submit/` 9 个用例（默认不跑，老模块会 oops）。两内核已装 `5A5B4018…` | 本文 §2.5 |
+| 4e | KMD | **20 处 `BUG_ON` 已收敛为可恢复错误，重启后已验证生效** | `53b3229`：用户提交路径仍可能触发的那几处（`mem_type` 非 VRAM/TT、`reloc->idx` 越界、DMA `cmd_size` 不符、3D 事件槽耗尽）现在返回 `-EINVAL`/`-EIO`/`-EBUSY`；寄存器/ring 描述符类改 `WARN_ON_ONCE` + 跳过，由 TDR 回收 | 本文 §2.4 |
+| 4f | KMD | **N16 已修，重启后已验证生效**（新发现）：畸形 submit（`nr_cmd_dat>0` 而 `cmd_dats==NULL`）会让 `mwv207_job_fini()` 空指针解引用 → 内核 oops，任何本地进程可触发 | `c01af40`：清理条件加 `&& mjob->cmd_dats`；配套 `tests/bad-submit/` 9 个用例（默认不跑，老模块会 oops）。两内核已装 `5A5B4018…` | 本文 §2.5 |
 | 5 | KMD | 只剩 N10（决定只文档化） | K9-① 已核实为与厂商一致（非缺陷）；N10 改为只记录 | 本文 §2.3 |
 | 6 | 切换脚本 | **vendor 态端到端未实跑** | `stack vendor` 会重启，需人工确认；热切换已证不可行（refcnt 恒 2） | `switch-mwv207.sh` / §5 |
 | 7 | 打包 | **DKMS 一致性警告（走 stage 时会复现，已记录处理步骤）** | `tools/dkms-sync.sh` 重建后两个内核都干净；`kmd stage` 直接覆盖仓库构建的 .ko 会让 6.6.155 重新报 `Diff between built and installed module!`，用 `dkms install --force` + `depmod` + `update-initramfs` 恢复即可 | §2.1、§5 |
@@ -232,12 +230,21 @@ Profile 1/3（4:2:2 / 4:4:4）与 H.264 422/444 同理**不可实现**——解�
 
 **残余缺口**：12bit VP9（Profile 2 语法允许）未验证，代码只放行 10bit；Profile 1/3 永久拒绝。
 
+**装到 r20 后的实机复核（2026-11-10 16:21 重启后，运行中的 UMD 即 r20）**：
+
+| 检查 | 结果 |
+|---|---|
+| `vainfo` | 已列出 `VAProfileVP9Profile2`（与 Profile 0 并存），H.264 只剩 ConstrainedBaseline/Main/High，HEVC Main/Main10 |
+| 1080p30 Profile 2（30 帧，g=15） | 硬件解码 186624000 B 与软件解码 **IDENTICAL** |
+| dmesg | 无新增 `timed out`（仅 `tests/n14-reset` 探针的 6 条 3D 超时），无 WARN/BUG |
+| 其余 | H.264 High 420 / HEVC 8bit / HEVC Main10 逐位一致；query 4/4；VP9 回归 18/18；N14 探针 PASS |
+
 ---
 
 ## 2. KMD — 未修复缺陷
 
 > 行号以 **6.6 树** `src/kernel-6.6/` 为准（与 5.10 树的行号不同）。
-> **自建 KMD 已经在跑**（`srcversion D5EEF36617A4D3FBF4AFD1D`，见 §0），
+> **自建 KMD 已经在跑**（`srcversion 5A5B401802B79D560151210`，见 §0），
 > 所以下表全部是**真实存在于当前系统上**的未修缺陷，不是"待部署"的纸上问题。
 > 下表之外，K1–K8/K10、N15、N14、N1/N2/K12/K9-②/N9 已修好并在运行
 > （N14 见 §2.1、`6502f19` 一批见 §2.2，均已于 2026-11-10 重启后验证）；
@@ -431,7 +438,7 @@ H.264 High 420 / HEVC 8bit / HEVC Main10 **逐位一致**（这三类每次搬�
 桌面常规负载下走过，未做高吞吐压力；② 没有构造"DMA 引擎真的挂住"的场景（需要让引擎停在半路，风险高），
 `-ETIMEDOUT` 分支只有代码审查；③ 中间批次（>64 MB 搬移）仍走同步等待，未单独压测。
 
-### 2.4 20 处 `BUG_ON` 收敛为可恢复错误（2026-11-10，`53b3229`；待重启生效）
+### 2.4 20 处 `BUG_ON` 收敛为可恢复错误（2026-11-10，`53b3229`；已重启验证）
 
 **判断**：这些 `BUG_ON` 里有一部分在**用户态提交路径**上（`mem_type` 非 VRAM/TT、
 `reloc->idx` 越界、DMA `cmd_size` 不符、3D 事件槽耗尽），一旦触发就是整机 panic；
@@ -457,22 +464,28 @@ H.264 High 420 / HEVC 8bit / HEVC Main10 **逐位一致**（这三类每次搬�
 | `mwv207_pipe_dma.c` submit | `cmd_size` 不符 | `-EINVAL` |
 | `dc/mwv207_va.c` | crtc 索引 ≠ `va->idx` | `WARN_ON_ONCE` 后继续 |
 
-**部署状态**：两内核已装 `63D36B44B229F708AE64C77`，两个 initramfs 已解包核对为同一
-srcversion（143 的 `update-initramfs` 仍偶发 exit 139，重试 3 次后成功，属既有内核
-问题，见 §2.3 的证据链）。运行中仍是 `0EFB7F44…`，**重启后生效**。
+**部署状态**：最终部署版本是 `5A5B401802B79D560151210`（`53b3229` + 随后的 N16
+`c01af40`，见 §2.5），两内核与两个 initramfs 均已解包核对为同一 srcversion
+（143 的 `update-initramfs` 仍偶发 exit 139，重试后成功，属既有内核问题，见 §2.3
+的证据链）。2026-11-10 16:21 重启后**运行中即是该版本，已验证生效**。
 
-**重启后判据**：`/sys/module/mwv207/srcversion` 应为 `63D36B44B229F708AE64C77`；
-`sudo ./tests/verify-installed.sh 63D36B44B229F708AE64C77` 全过（该脚本覆盖
-GL/引擎/VAAPI profile/三类解码逐位一致/TDR 探针/dmesg 告警）；重点确认
-`glxgears`、`tests/query`、`vp9-regression.sh` 与重启前一致——本批只动错误路径，
-**正常路径的行为必须完全相同**。
+**重启后判据**：`/sys/module/mwv207/srcversion` 应为 `5A5B401802B79D560151210`；
+`sudo ./tests/verify-installed.sh 5A5B401802B79D560151210 --bad-submit` 全过
+（该脚本覆盖 GL/引擎/VAAPI profile/三类解码逐位一致/TDR 探针/畸形提交/dmesg 告警）；
+重点确认 `glxgears`、`tests/query`、`vp9-regression.sh` 与重启前一致——本批只动错误
+路径，**正常路径的行为必须完全相同**。
+
+**2026-11-10 16:21 重启后的实测**：`PASS=25 FAIL=0 SKIP=1`（SKIP 是 N14 探针那 6 条
+预期 `timed out`）；`tests/bad-submit` 9/9 用例全部干净返回
+`ENODEV`/`EINVAL`/`E2BIG`/`ENOENT` 且末段 INFO 正常，`dmesg | grep -cE "Oops|NULL pointer"`
+为 0；glxinfo/query/vp9-regression 与重启前一致。
 
 **残余缺口**：① 3D ring 越界时"跳过描述符"依赖 TDR 回收，实际场景未构造；
 ② `WARN_ON_ONCE` 意味着同一位置只报一次，长期运行的 dmesg 里不会重复，
 但也更难统计频率。（原先"没有构造真实 malformed 提交"这条缺口已由 §2.5 的
 `tests/bad-submit/` 补上——而且它第一次跑就抓到一个真正会 oops 的缺陷。）
 
-### 2.5 N16：`job_fini` 对未分配的 `cmd_dats` 做空指针解引用（2026-11-10，`c01af40`；待重启生效）
+### 2.5 N16：`job_fini` 对未分配的 `cmd_dats` 做空指针解引用（2026-11-10，`c01af40`；已重启验证）
 
 **怎么发现的**：写 §2.4 的配套测试 `tests/bad-submit/`（畸形 submit 全被拒 +
 驱动仍可用）时，第 9 项"`nr_cmd_dat=1` 但 `cmd_dats=NULL`"直接把内核打出了 oops：
@@ -503,8 +516,10 @@ Call trace:
 其余清理项（`relocs`/`cmds`/`mtvb`）同理。
 
 **验证**：干净编译，srcversion `5A5B401802B79D560151210`（与 §2.4 同批部署）。
-运行时验证要等重启：`tests/bad-submit/run-badsubmit.sh` 应全部 `ok`（第 9 项返回
-`EINVAL`），且 `dmesg | grep -E "Oops|NULL pointer"` 为空。
+2026-11-10 16:21 重启后实测：`tests/bad-submit/run-badsubmit.sh` → 9/9 `ok`
+（第 9 项返回 `EINVAL`），末段 INFO 正常；`dmesg | grep -cE "Oops|NULL pointer"`
+为 0；`tests/verify-installed.sh … --bad-submit` 全过 `PASS=25 FAIL=0 SKIP=1`。
+对比：修前同一用例在 `0EFB7F44…` 上直接打出 `[#11]`/`[#12]` 两次 oops。
 
 **附带产物**：`tests/bad-submit/badsubmit.c`（9 个用例：未知 `engine_type`、
 `engine_id` 越界、`cmd_size` 为 0/超限、`cmds` 空、`bos` 里 handle 不存在、
@@ -578,8 +593,8 @@ Call trace:
 
 | 日期 | 项 | 提交 |
 |---|---|---|
-| 2026-11-10 | KMD：N16 —— `mwv207_job_fini()` 对未分配的 `cmd_dats` 空指针解引用（畸形 submit 可让内核 oops） | `c01af40`（`src/kernel-6.6`；与下面 `53b3229` 同批部署为 `5A5B4018…`，待重启生效）＋ 新增 `tests/bad-submit/` |
-| 2026-11-10 | KMD：20 处 `BUG_ON` 收敛为可恢复错误（提交路径给 errno、内部不变量改 `WARN_ON_ONCE` + 跳过） | `53b3229`（`src/kernel-6.6`；两内核与两个 initramfs 已装 `5A5B4018…`，待重启生效） |
+| 2026-11-10 | KMD：N16 —— `mwv207_job_fini()` 对未分配的 `cmd_dats` 空指针解引用（畸形 submit 可让内核 oops） | `c01af40`（`src/kernel-6.6`；与下面 `53b3229` 同批部署为 `5A5B4018…`，2026-11-10 16:21 重启后验证：9/9 畸形提交返回 errno、dmesg 零 oops）＋ 新增 `tests/bad-submit/` |
+| 2026-11-10 | KMD：20 处 `BUG_ON` 收敛为可恢复错误（提交路径给 errno、内部不变量改 `WARN_ON_ONCE` + 跳过） | `53b3229`（`src/kernel-6.6`；两内核与两个 initramfs 已装 `5A5B4018…`，2026-11-10 16:21 重启后一键验收 `PASS=25 FAIL=0`） |
 | 2026-11-10 | KMD：DMA 提交忙等 5 s + stub fence（N4）、移除路径缺 `pci_disable_device` 与 `free_irq` 前未在硬件侧关中断（K11） | `fbed27f`（`src/kernel-6.6`；2026-11-10 重启后验证生效，一键验收 22 项全过） |
 | 2026-11-10 | KMD：sched 槽位撞车（N1）、3D 在飞上限撞事件表（N2）、超时路径 devfreq 多减（K12）、ISR 影子寄存器数据竞争（K9-②）、显示侧两处 `BUG_ON(irq == 0)`（N9） | `6502f19`（`src/kernel-6.6`；两内核已装、initramfs 已刷，重启后生效） |
 | 2026-11-10 | KMD：3D/2D/DEC/ENC `reset`/`destroy` 对在飞 fence 只 `dma_fence_put` 不 signal（N14），2D `destroy` 不排空 `fence_queue` | `22145e9`（`src/kernel-6.6`；模块已暂存，重启后生效） |
