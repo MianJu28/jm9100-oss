@@ -37,6 +37,21 @@ mwv207_profile_supported(struct pipe_screen *screen,
                         enum pipe_video_entrypoint entrypoint)
 {
    assert(screen);
+   /* FIX(jm9100-oss): 原表还声明过 PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH422 /
+    * HIGH444，现已收回（I-3）。依据：
+    *  1) 解码器寄存器表（mwv207_video_dec_8170table.h 共 1840 项）里没有
+    *     "色度采样格式" 选择字段，仅有 word7 bit30 的 JMDEC_BLACKWHITE_E
+    *     用于 chroma_format_idc==0（单色）；原厂闭源 VAAPI 驱动的寄存器
+    *     文档串亦写作 "chroma format idc. 0=4:0:0. 1=4:2:0"。
+    *  2) 原厂闭源驱动 jmgpu_QueryConfigProfiles 自己声明的 H.264 profile
+    *     只有 ConstrainedBaseline/Main/High（+ 条件性 Multiview/StereoHigh），
+    *     没有 4:2:2 / 4:4:4。
+    *  3) libva 1.22 的 VAProfile 枚举里根本没有 H264 High422/High444，
+    *     VAAPI 客户端无法表达该请求。
+    * 该硬件的 H.264 硬解只有 4:0:0 与 4:2:0 两种采样；本驱动此前把
+    * chroma_format_idc 硬置为 1、视频缓冲模板硬编码 420，声明 422/444
+    * 只会让客户端（如 ffmpeg 按 pix_fmt 直接要 VA_RT_FORMAT_YUV422）建出
+    * 无法下载/解码正确的配置。收回声明后客户端会正确回退到软件解码。 */
    switch (profile) {
    case PIPE_VIDEO_PROFILE_MPEG4_AVC_BASELINE:
    case PIPE_VIDEO_PROFILE_MPEG4_AVC_CONSTRAINED_BASELINE:
@@ -44,8 +59,6 @@ mwv207_profile_supported(struct pipe_screen *screen,
    case PIPE_VIDEO_PROFILE_MPEG4_AVC_EXTENDED:
    case PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH:
    case PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH10:
-   case PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH422:
-   case PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH444:
    case PIPE_VIDEO_PROFILE_HEVC_MAIN:
    case PIPE_VIDEO_PROFILE_HEVC_MAIN_10:
    case PIPE_VIDEO_PROFILE_VP9_PROFILE0:
@@ -123,7 +136,10 @@ mwv207_is_video_format_supported(struct pipe_screen *pscreen,
     * R16_UNORM/R16G16_UNORM, P010 平面建不出 sampler view, 渲染端
     * blit 全拒 → 10bit HEVC 硬解黑屏(mwv207_blit.c:947)。
     * 正确语义是 AND: format 支持 && 该 profile 的解码链路可用。
-    * 例外: VPP 配置传入 PIPE_VIDEO_PROFILE_UNKNOWN, 不做 profile 过滤。 */
+    * 例外: VPP 配置传入 PIPE_VIDEO_PROFILE_UNKNOWN, 不做 profile 过滤。
+    * I-3: 这里不再列 MPEG4_AVC_HIGH422/HIGH444 —— 硬件只有 4:0:0/4:2:0，
+    * 声明了只会让 ffmpeg 按 pix_fmt 直接要 VA_RT_FORMAT_YUV422 并建出
+    * 无法正确解码的配置（详见 mwv207_profile_supported 上方注释）。 */
    if (ret && profile != PIPE_VIDEO_PROFILE_UNKNOWN) {
       switch (profile) {
       case PIPE_VIDEO_PROFILE_MPEG4_AVC_BASELINE:
@@ -132,8 +148,6 @@ mwv207_is_video_format_supported(struct pipe_screen *pscreen,
       case PIPE_VIDEO_PROFILE_MPEG4_AVC_EXTENDED:
       case PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH:
       case PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH10:
-      case PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH422:
-      case PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH444:
       case PIPE_VIDEO_PROFILE_HEVC_MAIN:
       case PIPE_VIDEO_PROFILE_HEVC_MAIN_10:
       case PIPE_VIDEO_PROFILE_VP9_PROFILE0:

@@ -609,9 +609,33 @@ mwv207_video_decoder_end_frame(struct pipe_video_codec *decoder,
    assert(decoder);
 
    switch (u_reduce_video_profile(picture->profile)) {
-   case PIPE_VIDEO_FORMAT_MPEG4_AVC:
-      get_h264_msg(dec, (struct pipe_h264_picture_desc *)picture);
+   case PIPE_VIDEO_FORMAT_MPEG4_AVC: {
+      /* FIX(jm9100-oss): I-3 —— 硬件解码器只有 4:0:0 / 4:2:0 两种色度采样
+       * （寄存器表无采样格式选择字段，见 mwv207_video_codec.c 里
+       * mwv207_profile_supported 上方注释）。VAAPI 侧已收回 422/444 声明，
+       * 正常客户端不会走到这里；万一有客户端绕过能力表硬塞 4:2:2/4:4:4
+       * 码流，这里显式拒绝并清掉本帧流数据，避免把错色度的画面当成功
+       * 解出来（end_frame 返回 void，无法向上报错）。 */
+      struct pipe_h264_picture_desc *h264_pic =
+         (struct pipe_h264_picture_desc *)picture;
+      if (h264_pic->pps && h264_pic->pps->sps &&
+          h264_pic->pps->sps->chroma_format_idc > 1) {
+         static bool warned;
+         if (!warned) {
+            warned = true;
+            MWV207_LOG(MWV207_LEVEL_ERROR,
+                       "H.264 chroma_format_idc=%u (4:2:2/4:4:4) 不被硬件支持，"
+                       "已跳过解码\n",
+                       h264_pic->pps->sps->chroma_format_idc);
+         }
+         memset(dec->streams_len, 0, sizeof(dec->streams_len));
+         dec->streams_num = 0;
+         dec->decoder->reg_buf->bos_clear(dec->decoder->reg_buf);
+         return;
+      }
+      get_h264_msg(dec, h264_pic);
       break;
+   }
 
    case PIPE_VIDEO_FORMAT_HEVC:
       get_h265_msg(dec, (struct pipe_h265_picture_desc *)picture);

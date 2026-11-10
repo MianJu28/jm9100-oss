@@ -2080,7 +2080,14 @@ dec_h264_set_ref_buffer_info(struct mwv207_video_decoder *decoder,
    reg_buf->set_reg(reg_buf, JMDEC_REFER_VALID_E, valid_flags);
 
    reg_buf->set_reg(reg_buf, JMDEC_PICORD_COUNT_E, 1);
-   reg_buf->set_reg(reg_buf, JMDEC_BITPLANE1_E, 0);
+   /* FIX(jm9100-oss): 此处原有一句 `set_reg(reg_buf, JMDEC_BITPLANE1_E, 0);`。
+    * 查原厂 mwv207_video_dec_8170table.h 的 {word,width,shift} 表：word 7 上
+    * bit31/30/29 两个名字共用 —— BITPLANE0/1/2 与 CABAC/BLACKWHITE/
+    * DIR_8X8_INFER 逐位同名同址（第 137/139/143 与 147/148/149 项）。这不是
+    * 抄错，而是寄存器按 codec 复用：H.264 通路必须写 BLACKWHITE_E
+    * (bit30 = chroma_format_idc==0 单色)，只有 JPEG/bitplane 通路才用
+    * BITPLANE1_E。原句把 bit30 清零，等于在 H.264 里取消单色模式，故删除
+    * （H.264 从不进入 bitplane 模式，不需要这一句）。见 I-2。 */
 }
 
 static void
