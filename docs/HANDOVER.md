@@ -19,7 +19,7 @@ OpenCL/VA-API/VDPAU 全走我们的栈；自建 KMD 在跑（srcversion `039F972
 
 | 项 | 值 |
 |---|---|
-| 机器 | Deepin 25 aarch64，内核 `6.6.143-arm64-desktop-hwe`，GPU `[0731:9100]` PCI 07:00.0，HDMI-1 1920×1080@100Hz，无免密 sudo（用 `printf '666\n' \| sudo -S`） |
+| 机器 | Deepin 25 aarch64，内核 `6.6.155-arm64-desktop-hwe`（143 也装了 DKMS 包，但不是启动内核），GPU `[0731:9100]` PCI 07:00.0，HDMI-1 1920×1080@100Hz，无免密 sudo（用 `printf '666\n' \| sudo -S`） |
 | 仓库 | `/home/admin/jm9100-oss`（git，远端 `git@github.com:MianJu28/jm9100-oss.git`，已推送同步） |
 | 源码 | `src/mwv207-umd/`（UMD，唯一可改处；上游树 `ref/oh-mesa/.../src/gallium/{drivers,winsys}/mwv207` 是指向它的符号链接）、`src/kernel-6.6/`（KMD，已并入本仓库） |
 | 已装栈 | `/usr/local/lib/mwv207-oss/`（r16，DRI md5 `01904e3a…`，EGL md5 `300daa41…`），`/lib/modules/…/updates/dkms/mwv207.ko`（自建 KMD） |

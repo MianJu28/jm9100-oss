@@ -331,6 +331,7 @@ N1 / N2 / K12 / K9-② / N9（见 §2.2）。剩下的是 N4 / K9-① / K11 / N1
 |---|---|---|
 | 2026-11-10 | KMD：sched 槽位撞车（N1）、3D 在飞上限撞事件表（N2）、超时路径 devfreq 多减（K12）、ISR 影子寄存器数据竞争（K9-②）、显示侧两处 `BUG_ON(irq == 0)`（N9） | `6502f19`（`src/kernel-6.6`；两内核已装、initramfs 已刷，重启后生效） |
 | 2026-11-10 | KMD：3D/2D/DEC/ENC `reset`/`destroy` 对在飞 fence 只 `dma_fence_put` 不 signal（N14），2D `destroy` 不排空 `fence_queue` | `22145e9`（`src/kernel-6.6`；模块已暂存，重启后生效） |
+| 2026-11-10 | UMD：HEVC `tile_buffer_size` 用位深当帧高（I-1），tile 缓冲按错误高度分配 | 本树 `mwv207_dec_hevc.c:1060`（只经 `/tmp/gd3` dev 驱动验证 8bit/Main10 2 tile 列逐位一致；**尚未做成载荷部署**） |
 | 2026-11-10 | Firefox 标签栏"微缩 chrome"：buffer 写入前等待 GPU（`mwv207_resource.c`） | `6ec1e17`（`src/mwv207-umd`） |
 | 2026-11-10 | mesa：`loader_dri3_query_buffer_age()` 恒 0（我们不做交换后缓冲保留） | `248659c`（`ref/oh-mesa`，本地） |
 | 2026-11-07 | Firefox 字形/图标撕裂：上传暂存 BO 延迟释放（`retired_staging` 环） | `f8f693a`（`src/mwv207-umd`） |

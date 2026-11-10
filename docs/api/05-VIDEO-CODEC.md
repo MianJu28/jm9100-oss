@@ -735,6 +735,11 @@ IDR 时调 `idr()` 清空 DPB 并复位 POC（`:1214-1227`，`idr()` 在 `:1163-
   三个 mem offset 也全为 0，于是 `mwv207_video_buffer_create_2(ctx, 0, STAGING)`（`:1082-1085`）
   分配**零字节缓冲**；10bit 时 `(2+63)&~63 = 64`。只有 `num_tile_cols > 1`（码流带 tile）才进入该分支，
   所以实测的 720p HEVC 很可能是无 tile 流而未暴露。**真实片源是否会因此出错未确认。**
+  **【2026-11-10 已修】**：改为取 `pic_param->pps.sps.pic_height_in_luma_samples`
+  （`height64` 即按 64 行对齐）。修前后对照：8bit 2 tile 列 720p / Main10 2 tile 列 720p
+  均与软件解码逐位一致（tile 三块 RAM 合计 3840 B，恰落在一个 4 KB 页内，所以此前
+  不暴露）；tile 列数 ≥3 或 1080p 时旧代码会写到 BO 之外，但**未故意构造该场景**
+  （越界写 VRAM 可能触发 GPU 故障，优先级低于先验证 KMD 批次）。
 - 疑点 2：`dec_hevc_set_picparam_reg()` 用 `pic_size_reg_unified` 在 `NUM_TILE_COLS/ROWS` 与
   `..._8K` 之间二选一（`:608-622`），而 `0x1F76` 的该位为 1。
 - 疑点 3：`dec_hevc_set_skip_length_reg()` 里 `rb.strm_curr_pos = slice_address + 2;`（`:689`）而
