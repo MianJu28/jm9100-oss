@@ -21,25 +21,29 @@
 两层的卡点性质不同：**UMD 卡在"要不要改 / 改了是否诚实"**，
 **KMD 已不再是卡点**（详见下）。
 
-### KMD 部署状态（2026-11-02 复核，已更正）
+### KMD 部署状态（2026-11-10 复核）
 
 此前本节写作"从未真机加载"，**已过时**。实测：
 
 ```
-cat /sys/module/mwv207/srcversion        -> D507FC2774D547E7BEBA182
+cat /sys/module/mwv207/srcversion        -> D507FC2774D547E7BEBA182（运行中）
 modinfo -n mwv207                        -> /lib/modules/6.6.155-…/updates/dkms/mwv207.ko
-modinfo src/kernel-6.6/mwv207.ko         -> srcversion D507FC2774D547E7BEBA182
-modinfo /lib/modules/…/updates/dkms/…    -> srcversion D507FC2774D547E7BEBA182
+modinfo src/kernel-6.6/mwv207.ko         -> srcversion 039F972EFE3279A155EE225（含 N14）
+modinfo /lib/modules/…/updates/dkms/…    -> srcversion 039F972EFE3279A155EE225（已暂存）
 ```
 
-三方一致 ⇒ **运行中的就是自建版**，且包含：
+运行中的是**上一次自建版**（含 K 系列与 N15），暂存的是 **N14 修复版**，两者
+只差本次提交；重启后 `/sys/module/mwv207/srcversion` 应变为 `039F972E…`，
+届时三项重新一致。运行中的版本包含：
 - `b0479ba` 移植的 K1 / K3 / K4 / K5 / K6 / K7 / K8 / K10；softdep 就是
   `src/kernel-6.6/mwv207_drv.c:543` 的 `MODULE_SOFTDEP("pre: governor_performance")`；
 - `28bc73d` 修的 N15（零重定位提交未初始化 `drm_sched_job` → `BUG_ON(!entity)`）。
 
 因此 **K 系列修复均已生效**，剩下的是从未做过修复的
-N1 / N14 / K11 / N2 / N4 / K9-① / K9-② / K12 / N10 / N9（见 §2）。
-自建模块会打印 `loading out-of-tree module taints kernel` 与
+N1 / K11 / N2 / N4 / K9-① / K9-② / K12 / N10 / N9（见 §2）。
+**N14 的修复（`22145e9`）已构建并暂存**：`/lib/modules/6.6.155-…/updates/dkms/mwv207.ko`
+的 srcversion 已是 `039F972EFE3279A155EE225`，但运行中的模块要重启后才换成它
+（见 §2.1）。自建模块会打印 `loading out-of-tree module taints kernel` 与
 `module verification failed: signature and/or required key missing`，属正常（未签名）；
 dmesg 里 GPU 相关错误计数为 0。
 
@@ -54,10 +58,10 @@ dmesg 里 GPU 相关错误计数为 0。
 | 1 | VAAPI/VP9 | **A5 10bit（Profile 2）与 4:2:2 未实现** | 只能解 Profile0 8bit；Profile1/2 被显式拒绝（放开会让 ASIC 自旋挂死整机） | `docs/HANDOVER-VP9.md` §10 A5 |
 | 2 | VAAPI/VP9 | **B3 intra-only 非关键帧样片缺** | 该分支未上机验证；本机编码器产不出 | `docs/HANDOVER-VP9.md` §10 B3 |
 | 3 | VAAPI/VP9 | **B2 真正的跨尺寸参考未验证** | 已有"缺参考/尺寸不同即拒绝"的保护（`72f9523`），缩放路径未跑通；需自写 VAAPI 客户端 | `docs/HANDOVER-VP9.md` §10 B2 |
-| 4 | KMD | **N14 reset 不 signal 在飞 fence** | 唯一可能卡死应用的 KMD 缺陷，需重启验证 | 本文 §2 |
+| 4 | KMD | **N14 已修，待重启生效** | 修复见 §2.1（`22145e9`）；新模块已暂存（`039F972EFE3279A155EE225`），当前运行仍是旧版 `D507FC2774D547E7BEBA182`，重启后需跑 GL/VAAPI 回归 | 本文 §2.1 |
 | 5 | KMD | N1/N2/N4/K9-①/K9-②/K11/K12/N10/N9 | 竞态/健壮性，多为低概率 | 本文 §2 |
 | 6 | 切换脚本 | **vendor 态端到端未实跑** | `stack vendor` 会重启，需人工确认；热切换已证不可行（refcnt 恒 2） | `switch-mwv207.sh` / §5 |
-| 7 | 打包 | **DKMS 一致性警告** | `dkms status` 报 `Diff between built and installed module!`（srcversion 与运行中一致）；KMD 改源码后必须重跑 `tools/dkms-sync.sh` | §5 |
+| 7 | 打包 | **DKMS 一致性警告（已解决）** | 2026-11-10 用 `tools/dkms-sync.sh` 重建后，6.6.155 与 6.6.143 的 `dkms status` 都不再报差异；KMD 改源码后仍须重跑该脚本 | §5 |
 | 8 | 性能 | buffer 写入等待的吞吐代价未量化 | 仅 glxgears（110 FPS）观测；重负载未测 | 本文 §4 性能 |
 | 9 | 依赖补丁 | `loader_dri3` buffer age 恒 0 只在本地 mesa 树提交 | 未推厂商镜像；重建 mesa 时需保留 | `ref/oh-mesa` `248659c` |
 | 10 | 测试 | 无自动化 GL 回归 | Firefox/GL 侧探针均为一次性脚本；VP9 有 `tools/vp9-regression.sh` | §7 |
@@ -154,12 +158,12 @@ dmesg 里 GPU 相关错误计数为 0。
 > 行号以 **6.6 树** `src/kernel-6.6/` 为准（与 5.10 树的行号不同）。
 > **自建 KMD 已经在跑**（`srcversion D507FC2774D547E7BEBA182`，见 §0），
 > 所以下表全部是**真实存在于当前系统上**的未修缺陷，不是"待部署"的纸上问题。
-> 下表之外，K1–K8/K10 与 N15 均已修好并在运行。
+> 下表之外，K1–K8/K10 与 N15 均已修好并在运行；N14 已修（见 §2.1），
+> 新模块已暂存、待重启生效。
 
 | # | 级别 | 位置 | 问题 |
 |---|---|---|---|
 | **N1** | **高** | `mwv207_sched.c:353-355` + `mwv207.h:61` | **比原记录更严重**：`sched[6]` 只有 **6 槽**，但拓扑需要 **7 个**（3d×2 + dec×2 + enc×1 + 2d×1 + dma×1）。`sched_3d=&sched[0]`、`sched_dec=&sched_3d[2]`、`sched_enc=&sched_dec[1]` → **`sched_dec[1]` 与 `sched_enc[0]` 同为 `&sched[3]`**，且 `sched_dma[0]` 落在**最后一槽**无余量。后果：enc0 的 scheduler 覆盖 dec1，而 `:390` 仍据 `sched_dec[1]` 非空报 `nr_dec = 2` → `INFO` 谎报；`engine_id=1` 的 DEC 提交会被 ENC 调度器执行。**当前 UMD `engine_id` 恒 0，故未触发**（高严重、零现网影响） |
-| **N14** | 中 | `mwv207_pipe_3d.c`、`pipe_2d.c`、`pipe_dec.c` | 三条管线 `reset` 都只 `dma_fence_put` 在飞 fence **而不 signal**；2D 的 `destroy` 还不排空 `fence_queue` → **用户态可能永久等待**。**唯一可能让应用卡死的条目**；若将来出现"某次 hang 后卡死"，先怀疑它 |
 | **K11** | 中 | `mwv207_drv.c:439` | `pci_clear_master` 位于移除流程最后；且与 `kms_fini` 必须先于 `irq_fini` 的次序耦合 |
 | **N2** | 中 | `mwv207_sched.c` `hw_submission=30` | 与硬件事件数 30 **相等**，违背源码注释 "must be lower than 30" → 事件位图满时有越界/`BUG_ON` 风险 |
 | **N4** | 中 | `mwv207_pipe_dma.c` | DMA 提交在 `run_job` 工作线程内**忙等最多 5 s** 并返回 **stub fence** → 调度器工作线程被长占、fence 语义退化 |
@@ -177,6 +181,35 @@ dmesg 里 GPU 相关错误计数为 0。
 > softdep（`src/kernel-6.6/mwv207_drv.c:543`）。
 > **刻意未移植 K2**：6.6 的 `ttm_bo_init_reserved()` 失败走 `err_put: ttm_bo_put(bo)`
 > → `bo->destroy` = 本驱动 `mwv207_ttm_bo_destroy()`（内部已 release+free），再补一次是 double free。
+
+### 2.1 N14：reset/destroy 时 signal 在飞 fence（已修，待重启生效）
+
+**提交 `22145e9`**（`src/kernel-6.6`），改法按 `docs/api/08-KMD.md:1067` 的规定
+"reset 内对在飞 fence `dma_fence_set_error(-EIO)` + signal"：
+
+| 管线 | 原实现 | 现实现 |
+|---|---|---|
+| 3D | `mwv207_pipe_3d_reset()` 清 `event_bitmap` 并 `dma_fence_put` 30 个 `event_fence`，**不 signal**；`destroy()` 不排空 | 新增 `pipe_3d_force_complete()`：`event_lock` 内快照 30 槽 + 清 bitmap，锁外 `set_error(-EIO)` + signal + put；`reset()` 先完成 fence 再复位硬件；`destroy()` 在 `free_irq()` 后调用 |
+| 2D | `pipe_2d_reset_ring()` 遍历 `fence_queue` 只 `dma_fence_put`，**不 signal**；`destroy()` 不排空 | 新增 `pipe_2d_force_complete()`：锁内 `list_splice_init()` 到本地链表，锁外完成；`reset()` 在 `hw_init()` 之前调用（hw_init 失败也要完成）；`destroy()` 在 `free_irq()` 后调用 |
+| DEC/ENC | 单槽 `current_fence`，`reset()` 只 `dma_fence_put`；`destroy()` 只 `kthread_stop` | 轮询线程与 reset 用 `xchg(&current_fence, NULL)` 抢槽（避免双重 put/UAF）；新增 `pipe_dec_force_complete()`/`pipe_enc_force_complete()`，reset/destroy 均调用 |
+
+行为变化只在 reset/卸载路径：原本永远不完成的 job 现在以 `-EIO` 结束；
+`drm_sched_stop()` 已摘除 job 回调，不会误触发 job done。
+
+**部署状态**：`tools/dkms-sync.sh` 已重建并安装到 6.6.155 与 6.6.143 两个内核，
+`switch-mwv207.sh kmd stage` 已刷新 initramfs 并暂存（srcversion
+`D507FC2774D547E7BEBA182` → `039F972EFE3279A155EE225`）。**重启后核对**：
+
+```bash
+cat /sys/module/mwv207/srcversion     # 应为 039F972EFE3279A155EE225
+dmesg | grep -i mwv207 | tail -20     # 无新增 WARN/BUG
+glxinfo -B | head -5                  # 硬件渲染仍正常
+tests/query/run-query-tests.sh        # 见测试环境变量
+```
+
+**残余验证缺口**：reset 通路本身未实跑（需构造 3D/2D/DEC 挂死，有挂死整机
+风险）；本次以编译 + 双内核安装 + 重启后常规回归验证。若将来出现"hang 后
+应用卡死"，按本条目的新行为应看到 fence 以 `-EIO` 返回，而不是永久等待。
 
 ---
 
@@ -244,6 +277,7 @@ dmesg 里 GPU 相关错误计数为 0。
 
 | 日期 | 项 | 提交 |
 |---|---|---|
+| 2026-11-10 | KMD：3D/2D/DEC/ENC `reset`/`destroy` 对在飞 fence 只 `dma_fence_put` 不 signal（N14），2D `destroy` 不排空 `fence_queue` | `22145e9`（`src/kernel-6.6`；模块已暂存，重启后生效） |
 | 2026-11-10 | Firefox 标签栏"微缩 chrome"：buffer 写入前等待 GPU（`mwv207_resource.c`） | `6ec1e17`（`src/mwv207-umd`） |
 | 2026-11-10 | mesa：`loader_dri3_query_buffer_age()` 恒 0（我们不做交换后缓冲保留） | `248659c`（`ref/oh-mesa`，本地） |
 | 2026-11-07 | Firefox 字形/图标撕裂：上传暂存 BO 延迟释放（`retired_staging` 环） | `f8f693a`（`src/mwv207-umd`） |

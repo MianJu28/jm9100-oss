@@ -1,6 +1,6 @@
 # JM9100 (景美 MWV207) 开源驱动适配仓库
 
-Deepin 25 aarch64 / 内核 6.6.143-arm64-desktop-hwe / JingjiaMicro JM9100
+Deepin 25 aarch64 / 内核 6.6.155-arm64-desktop-hwe（早前为 6.6.143）/ JingjiaMicro JM9100
 [0731:9100] @ PCI 0000:07:00.0 —— 开源驱动 (KMD+Mesa UMD) 逐行分析、缺陷修复、
 全功能栈构建与系统切换的完整工作区。
 
@@ -11,7 +11,7 @@ r16 修复 Firefox 两处渲染缺陷 —— 字形/图标撕裂（上传暂存 
 逐位一致（回归 18/18，含真实 720p/1080p 内容）。
 
 里程碑速览：全功能栈（GL/VAAPI/VDPAU/rusticl OpenCL）→ GLES 3.2 原生点亮 →
-自建 KMD 真机运行（srcversion `D507FC2774D547E7BEBA182`）→ Firefox 硬件渲染
+自建 KMD 真机运行（srcversion `D507FC2774D547E7BEBA182`；N14 修复版 `039F972EFE3279A155EE225` 已暂存、重启生效）→ Firefox 硬件渲染
 修复（WebRender 图元全丢根因 = VS 里 RGBA32F 取样只回 64 位）→ 性能优化
 （WebGL 36→42+ FPS，CSS 页到 vsync 上限 97–99 FPS；均约 llvmpipe 的 2 倍）→
 GBM/Wayland 平台打通 → 健壮性批次修复 → dual-source blend 崩溃修复。
@@ -39,7 +39,7 @@ sudo ./switch-mwv207.sh kmd install         # KMD 切换为自建带修复版 (�
 | `src/kernel-6.6/` | 我们维护的内核态驱动（2026-11-03 并入本仓库管理；原独立 git 仓历史在 `ref/kernel-6.6-old-git`。社区 6.6 移植基线 + K1–K8/K10 修复 + N15 零重定位 submit BUG 修复） |
 | `payload-40/`, `payload-41/` | 历史与当前活动载荷（`payload-41` = `24.1.2-fullstack-r16`，11 个实体文件含 glvnd ICD `libEGL_jm.so.0`，MANIFEST 校验）。历史载荷已清理，只在 `/var/lib/mwv207-oss/switch-history` 留最近 4 个回滚快照 |
 | `tools/` | `make-payload.sh`（从构建树组装载荷: 版本戳一致性自检/rpath/MANIFEST/与上游 md5 差异）；`build-umd.sh`（check/relink/build/sim）；`map-monitor.c`（X Map 死区缓解守护）；`enable-ssh-rescue.sh`（黑屏 SSH 救援通道） |
-| `docs/` | 驱动 API 与寄存器参考（19 文件 / 约 1.83 万行）+ `UNRESOLVED.md` 未修问题总账（40 项，含已修索引与批次推进表） |
+| `docs/` | 驱动 API 与寄存器参考（19 文件 / 约 1.83 万行）+ `UNRESOLVED.md` 未修问题总账（含 2026-11-10 速览、已修索引与批次推进表） |
 | `ref/` | 参考材料（不入库大文件除外）：上游 mesa-22.3.7 / oh-mesa(24.1.2) / kernel-5.10 / linux-source-6.6 / 厂商 1.8.0 / 旧 KMD git 仓 / `reverse-source/`（闭源栈反编译: 符号表、反汇编、寄存器映射 JSON、六篇文档） |
 | `tests/` | 硬件验证套件: run-all.sh / run-full-regression.sh + query 回归 + 源码与二进制 |
 | `reports/` | 阶段报告 15 份（见下索引）+ 火狐取证证据目录 |

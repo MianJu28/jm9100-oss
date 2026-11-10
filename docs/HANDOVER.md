@@ -6,10 +6,12 @@
 
 ## 1. 当前状态（一句话）
 
-**r16 已部署并验收通过**（`payload-41` / `24.1.2-fullstack-r16`，内核 `6.6.143-arm64-desktop-hwe`）。
+**r16 已部署并验收通过**（`payload-41` / `24.1.2-fullstack-r16`，当前启动内核 `6.6.155-arm64-desktop-hwe`；
+本文早前写的 6.6.143 是升级前的内核，两个版本的 DKMS 模块现在都已同步重建）。
 桌面零 env 下 GL 4.0 / GLES 3.2 / `Video memory: 2048MB`，glxgears 110 FPS；
 OpenCL/VA-API/VDPAU 全走我们的栈；自建 KMD 在跑（srcversion `D507FC2774D547E7BEBA182`，
-DKMS 包 `mwv207-oss/1.0.0`）。**VP9 Profile0 8bit 硬解已与软件逐位一致**（回归 18/18，
+DKMS 包 `mwv207-oss/1.0.0`；N14 修复版 `039F972EFE3279A155EE225` 已暂存到
+`updates/dkms` 并刷新 initramfs，**重启后生效**）。**VP9 Profile0 8bit 硬解已与软件逐位一致**（回归 18/18，
 含真实 720p/1080p 影视内容）。**Firefox 两处渲染缺陷已根治**：字形/图标撕裂（`f8f693a`）、
 标签栏"微缩 chrome"（`6ec1e17`）。剩余项见 §5。
 
@@ -96,6 +98,11 @@ DKMS 包 `mwv207-oss/1.0.0`）。**VP9 Profile0 8bit 硬解已与软件逐位一
   `loader_dri3_query_buffer_age()` 恒 0（`ref/oh-mesa` `248659c`，仅本地提交）。
 - **KMD 自建 + DKMS**：`mwv207-oss/1.0.0` 已注册，运行中 srcversion 与构建一致；
   切换脚本三态（builtin/oss/vendor）已实现，失败回滚 builtin。
+- **N14（KMD，`22145e9`）**：3D/2D/DEC/ENC 的 `reset`/`destroy` 不再丢弃在飞 fence ——
+  统一 `dma_fence_set_error(-EIO)` + signal；DEC/ENC 用 `xchg(&current_fence, NULL)`
+  与轮询线程抢槽，杜绝双重 put。新模块 `039F972EFE3279A155EE225` 已暂存，
+  重启后生效；reset 通路本身尚未实跑（构造 hang 有挂死整机风险），
+  见 `docs/UNRESOLVED.md` §2.1。
 
 ### 待办（按价值排序）
 1. **A5：VP9 10bit（Profile 2）/4:2:2** —— 当前 `vp_profile!=0 || bit_depth!=8` 直接拒绝
@@ -104,14 +111,15 @@ DKMS 包 `mwv207-oss/1.0.0`）。**VP9 Profile0 8bit 硬解已与软件逐位一
 3. **B2：真正的跨尺寸参考** —— 已有"缺参考/尺寸不同即拒绝"保护（`72f9523`）；要验证
    "参考自身几何 + hscale/vscale"路径，需要一个自写 VAAPI 客户端（ffmpeg 在分辨率变化时
    会重建 VA context，绕不过去）。
-4. **N14（KMD）**：reset 时不 signal 在飞 fence（唯一可能卡死应用的 KMD 缺陷，需重启验证）；
-   其余 N1/N2/N4/K9-①/K9-②/K11/K12/N10/N9 见 `docs/UNRESOLVED.md` §2。
+4. **其余 KMD 项（N14 已修，见上）**：N1/N2/N4/K9-①/K9-②/K11/K12/N10/N9 见
+   `docs/UNRESOLVED.md` §2。
 5. **vendor 态端到端验证**：`stack vendor` 会重启，尚未人工实跑；热切换已证不可行
    （`mwv207` refcnt 恒为 2，只有 reboot 才释放）。
 6. **性能**：buffer 写入等待的吞吐代价只做了 glxgears 观测（110 FPS 无回退），重负载未量化；
    Firefox WebGL 42–44 FPS 的剩余瓶颈在 WebRender 帧调度。
-7. **DKMS 一致性**：`dkms status` 有 `Diff between built and installed module!` 警告
-   （srcversion 与运行中一致）；KMD 源码改动后必须重跑 `tools/dkms-sync.sh`。
+7. **DKMS 一致性（已解决）**：2026-11-10 用 `tools/dkms-sync.sh` 重建后，6.6.155 与
+   6.6.143 的 `dkms status` 都不再报 `Diff between built and installed module!`。
+   之后每次改 KMD 源码仍必须重跑该脚本，并用 `switch-mwv207.sh kmd stage` 暂存。
 
 ### 不建议投入（沿用 2026-11-03 结论）
 C-2 16 位采样编码（硬件边界）、D7 Vulkan、C-5/C-6、N10/N9、openuuyc 单实例 UX。

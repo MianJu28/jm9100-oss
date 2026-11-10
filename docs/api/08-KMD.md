@@ -707,6 +707,10 @@ DMA 条目的地址填充（`mwv207_submit_patch_dma_entry`，`:391-428`）：VR
 | `drm_sched_resubmit_jobs` 重放路径无 job 完整性校验/上下文重置（重放前只 `pipe->reset`） | **成立** | `sched.c:205-208`；对比 `drm_sched_increase_karma` 只累计 guilty |
 | 管线 `reset` 是否丢弃在飞 fence | **三条管线都会丢**：① 3D 的 reset 先 `bitmap_zero(event_bitmap, 30)` 并 `dma_fence_put` 全部 30 个事件 fence，**不 signal**（`pipe_3d.c:301-307`）；② 2D 的 `mwv207_pipe_2d_reset` → `pipe_2d_hw_init` + `pipe_2d_reset_ring`（`:212-227` 遍历 `fence_queue` 只 `dma_fence_put`，**不 signal**）+ `pipe_2d_start`（`:265-272`）；③ DEC 的 reset 只 `dma_fence_put` 当前 fence，同样不 signal（`pipe_dec.c:136-141`）。→ 超时重置后，用户态若在等这些 fence，拿不到 signal（`dma_fence_put` 只减引用，且 deque 后对象可能已不可见） | `pipe_3d.c:296-314`、`pipe_2d.c:212-272`、`pipe_dec.c:136-141`（**实机复现待验证**，见 §10 U5） |
 
+> 注：上表 N14 已于 2026-11-10 修复（`22145e9`，四条管线 reset/destroy 统一以 `-EIO`
+> signal 在飞 fence，DEC/ENC 用 `xchg` 抢槽），新模块已暂存、重启后生效；详见
+> `docs/UNRESOLVED.md` §2.1。
+
 ### 5.10 提交路径的锁与并发
 
 | 保护对象 | 锁 | 行 |
@@ -1064,7 +1068,7 @@ PLL 硬件命令通道（`mwv207_vcmd.c`）：
 | N11 | 低 | `irq_enable_reg[]` 无锁共享（K9 的残留形态） | `irq.c:31` vs `:53-81` | ISR 内也持 `irq_lock` 读影子，或用 `READ_ONCE` |
 | N12 | 低 | `mwv207_i2c_put_byte` 非 static 但无头文件声明；`mwv207_i2c_set_addr` 恒返回 0（不校验 channel，靠 `create` 限 0..5） | `i2c.c:214-233`、`:171-212`、`:252` | 补声明、加校验 |
 | N13 | 低 | probe 第 14 步起的 5 条错误路径不调用 `mwv207_db_fini`（`db_fini` 的置 NULL 防护只在 `err_vbios` 生效） | `drv.c:369-373`、`:414-429` | 统一错误路径 |
-| N14 | 中 | 管线 `reset` 重置后丢弃在飞 fence 而不 signal（3D/2D/DEC），且 `pipe_2d_destroy` 不排空 `fence_queue` | `pipe_3d.c:301-307`、`pipe_2d.c:212-227`、`:424-448`、`pipe_dec.c:136-141` | reset 内对在飞 fence `dma_fence_set_error(-EIO)` + signal |
+| N14 | 中 | 管线 `reset` 重置后丢弃在飞 fence 而不 signal（3D/2D/DEC），且 `pipe_2d_destroy` 不排空 `fence_queue` | `pipe_3d.c:301-307`、`pipe_2d.c:212-227`、`:424-448`、`pipe_dec.c:136-141` | reset 内对在飞 fence `dma_fence_set_error(-EIO)` + signal —— **已修（2026-11-10，`22145e9`）**：四条管线（含 ENC）reset/destroy 都完成 fence，2D destroy 排空队列；模块已暂存，重启后生效 |
 
 （编号 N1–N14 为本轮新增，与既有 O1–O12（UMD 侧）不重叠。）
 
@@ -1087,7 +1091,7 @@ PLL 硬件命令通道（`mwv207_vcmd.c`）：
 | U2 | `struct mwv207_lli` 的字段布局与 `DMA_MAX_LLI_COUNT` 具体值 | 只在 `mwv207_pipe_dma.c` 内部使用，未逐行读取其定义段（`pipe_dma.c:189-209` 已见 `sar/dar/ts/ctl/llp` 用法） |
 | U3 | 3D 环形缓冲/2D 环形缓冲的"命令打包"格式（`pipe_2d_submit` / `pipe_3d_loadstate` 之前的指针运算） | 属 UMD↔硬件协议细节，已由 `docs/registers/` 系列覆盖；本轮只按依赖核查 |
 | U4 | `mwv207_pipe_codec_common.c` 的软后处理寄存器语义（`wb[i].reg` 表） | 只确认"提交时写、完成后回读"的行为，未逐项解码 |
-| U5 | 管线 `reset`（3D/2D/DEC）丢弃的在飞 fence 是否会导致用户态永久等待（N14） | 需要实机复现（构造 3D/2D/decoder 超时）才能确认；本文标为「疑点」 |
+| U5 | 管线 `reset`（3D/2D/DEC）丢弃的在飞 fence 是否会导致用户态永久等待（N14） | **已按 §9 的 N14 修法修好（2026-11-10，`22145e9`）**；reset 通路本身仍未实跑（构造 hang 有挂死整机风险），重启后先做常规 GL/VAAPI 回归 |
 | U6 | N1 在实机上是否真的导致 DEC id1 提交错路由 | 静态代码可证指针别名（`sched_dec[1] == sched_enc[0] == &sched[3]`）；实际影响取决于 UMD 是否使用 `engine_id=1` 的 DEC（`01-WINSYS-KMD.md` O 系列记录 UMD 当前 `engine_id` 恒 0，故当前可能不触发） |
 | U7 | HDMI 384–594 MHz 被拒是否有意为之（如 PHY/板级限制） | 无硬件文档；标为功能限制 |
 | U8 | `0x12c0000` lite 判据在先前的 91/92 变体上是否普遍成立 | 源码只给出该魔数比较；`hdmi.c:1078` 用同一处，逻辑自洽，但未见硬件文档 |
