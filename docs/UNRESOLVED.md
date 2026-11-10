@@ -312,6 +312,33 @@ inter 帧（1/5/6）也 DIFF、且它们的预测来自正确参考，说明问�
 `evidence/*.png`）：布局、色调、位置都对，一批 64×64 级区块整块是乱的，不是色度/范围
 变换，也不是整帧偏移。
 
+**2026-11-11 取证：官方包是 superframe，且问题只出现在"用 intra-only 帧当参考的 inter 帧"上**
+
+- 官方样片的首包 117963 B 其实是 **superframe，含 4 个子帧**（尺寸
+  `30299/35391/40875/11384`，和 117949 B + 14 B 索引正好对上），ffmpeg 会把它拆成 4 个
+  独立帧逐个送进驱动（临时插桩 `TMPBS/TMPBX/TMPEF` 证实每帧一次 begin/decode/end，
+  `streams_len[0]` 等于本次子帧长度）。⇒ 此前"驱动把 118 KB 截成 30 KB"的怀疑不成立：
+  `JMDEC_STREAM_LEN=30306` 就是第一个子帧的大小，`JMDEC_STRM_BUFFER_LEN=304080` 只是
+  `352*288*3-48` 的窗口。插桩用完已删除，工作树干净。
+- 4 个子帧的未压缩头（`tests/vp9-intraonly/vp9-parse-probe`）：
+  sub0/1/2 都是 `key=0 intra=1 show=0`，`refresh=0x01/0x02/0x04`，`txmode=3`；
+  sub3 是 **inter 帧**（`key=0 intra=0 show=1 refresh=0x08`，探针因缺参考尺寸报
+  `w=0 h=0`，属测试台局限）。所以这个向量的结构是"3 个 intra-only 隐藏帧轮流刷新
+  slot 0/1/2 → 第 4 个 inter 帧显示"。
+- **单独解 sub0（再跟一个 `0x88` show_existing 让它可见）→ 硬件与 libvpx IDENTICAL**
+  （152064 B）⇒ 单个 intra-only 帧的解码本身没有问题。
+- **逐个刷新位对照**：`refresh = 0x01/0x02/0x04/0x08/0x10/0x80` 各配一个对应的
+  `show_existing(idx)` → 六组全部 **IDENTICAL** ⇒ `refresh_frame_flags` 的
+  bit i → slot i 映射、以及从参考槽重建输出都正确。
+- **只解 [sub0, sub1, sub2, sub3]（prefix4）→ 只有 1 帧输出（就是这个 inter 的 sub3），
+  且 DIFF**；而"自产 intra-only(refresh 0xFF) 后跟一个 inter 帧"是 IDENTICAL。
+- 帧序检查：7 帧输出里 `sw2==hw2`、`sw3==hw3`、`sw4==hw4`（完全为 0），其余两两误差
+  14–27 ⇒ **不存在输出顺序错位**，差异就落在"这几帧的重建值"上。
+- 结论（收窄）：I-5 不是 intra-only 帧自身的解码问题，而是**"intra-only 帧作为参考、
+  随后 inter 帧使用它们"这条路径**在该流上的表现。下一步要在自产样片上复现这条路径
+  （本机编码器可控），再对照 `vp9_ref_slot_*` 的尺寸/stride 记账与
+  `vp9_write_ref_regs()` 的 `ref_slot_luma`/`refw`/`refh` 推导。
+
 **寄存器 dump 已恢复（2026-11-10 20:05）**：`mwv207_video_dec_reg.c` 的
 `mwv207_9200_dump_register()` 里那句无条件 `return;` 已去掉（上限放宽到 400 帧），
 并在 `mwv207_dec_vp9_set_regs()` 末尾加了一次 `reg_buf->dump_regs()`。用
