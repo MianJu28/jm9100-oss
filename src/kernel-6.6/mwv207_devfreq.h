@@ -24,6 +24,7 @@ int mwv207_devfreq_register(struct mwv207_pipe *pipe, unsigned long max_freq);
 
 void mwv207_devfreq_record_busy(struct mwv207_pipe *pipe);
 void mwv207_devfreq_record_idle(struct mwv207_pipe *pipe);
+void mwv207_devfreq_reset_busy(struct mwv207_pipe *pipe);
 
 int mwv207_devfreq_suspend(struct mwv207_pipe *pipe);
 int mwv207_devfreq_resume(struct mwv207_pipe *pipe);

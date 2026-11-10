@@ -185,7 +185,12 @@ int mwv207_kms_init(struct mwv207_device *jdev)
 		goto cleanup;
 
 	jdev->va_irq = irq_find_mapping(jdev->irq_domain, 42);
-	BUG_ON(jdev->va_irq == 0);
+	if (!jdev->va_irq) {
+		/* N9：显示侧原先用 BUG_ON，改成与 3D/2D 一致的可回退错误 */
+		pr_err("mwv207: no irq mapping for va (hwirq 42)\n");
+		ret = -ENODEV;
+		goto cleanup;
+	}
 	ret = request_irq(jdev->va_irq, mwv207_va_handle_vblank, 0, "mwv207_va", jdev);
 	if (ret)
 		goto cleanup;

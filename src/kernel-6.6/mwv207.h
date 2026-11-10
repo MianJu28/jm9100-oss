@@ -38,6 +38,14 @@ struct mwv207_vbios {
 
 #define  ddev_to_jdev(ddev) ((struct mwv207_device *) (ddev)->dev_private)
 #define  bdev_to_jdev(dev)  container_of(dev, struct mwv207_device, bdev)
+
+/*
+ * 每个引擎（不是每块卡）一个 drm_gpu_scheduler，拓扑为
+ * 3d0 3d1 dec0 dec1 enc0 2d0 dma0 —— 共 7 个。
+ * 原先数组只有 6 槽，且 sched_enc 被摆到 &sched_dec[1]，
+ * 与 dec1 撞在同一槽（N1）：enc0 覆盖 dec1，nr_dec 仍报 2。
+ */
+#define MWV207_MAX_SCHED_NR 7
 struct mwv207_device {
 	struct drm_device  base;
 	struct pci_dev    *pdev;
@@ -58,7 +66,7 @@ struct mwv207_device {
 	struct device    *dev;
 	struct drm_fb_helper *fb_helper;
 
-	struct drm_gpu_scheduler *sched[6];
+	struct drm_gpu_scheduler *sched[MWV207_MAX_SCHED_NR];
 
 	struct drm_gpu_scheduler **sched_3d;
 	struct drm_gpu_scheduler **sched_dec;

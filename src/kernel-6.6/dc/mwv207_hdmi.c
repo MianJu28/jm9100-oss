@@ -1061,7 +1061,12 @@ static int mwv207_hdmi_init_single(struct mwv207_device *jdev, int idx)
 		return ret;
 
 	hdmi->irq = irq_find_mapping(jdev->irq_domain, output->idx + 32);
-	BUG_ON(hdmi->irq == 0);
+	if (!hdmi->irq) {
+		/* N9：同上，BUG_ON 改成可回退错误 */
+		pr_err("mwv207: no irq mapping for hdmi-%d (hwirq %d)\n",
+		       output->idx, output->idx + 32);
+		return -ENODEV;
+	}
 
 	ret = request_threaded_irq(hdmi->irq,
 			mwv207_hdmi_hard_irq, mwv207_hdmi_irq,

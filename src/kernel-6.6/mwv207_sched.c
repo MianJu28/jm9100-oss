@@ -23,6 +23,9 @@
 #include "mwv207_db.h"
 #include "mwv207_devfreq.h"
 
+/* N2：3D 管线在飞 job 上限，必须小于 pipe_3d 的 30 个事件槽 */
+#define MWV207_3D_HW_SUBMISSION 28
+
 static int dump_hang_job = 1;
 module_param(dump_hang_job, int, 0644);
 MODULE_PARM_DESC(dump_hang_job, "dump time out job");
@@ -185,7 +188,6 @@ static enum drm_gpu_sched_stat mwv207_sched_timedout_job(struct drm_sched_job *j
 {
 	struct mwv207_sched *sched = to_mwv207_sched(job->sched);
 	struct mwv207_job *mjob = to_mwv207_job(job);
-	struct drm_sched_job *timedout_job;
 
 	pr_info("mwv207: job from '%s' to '%s', timed out!",
 			mjob->comm, sched->pipe->fname);
@@ -201,8 +203,13 @@ static enum drm_gpu_sched_stat mwv207_sched_timedout_job(struct drm_sched_job *j
 
 	sched->pipe->reset(sched->pipe);
 
-	list_for_each_entry(timedout_job, &sched->base.pending_list, list)
-		mwv207_devfreq_record_idle(sched->pipe);
+	/*
+	 * K12：复位后该管线已无在飞 job（N14 会把在飞 fence 全部完成），
+	 * 因此 busy_count 直接清零，而不是按 pending_list 逐个
+	 * record_idle() —— 后者会多减（队列里的 job 不都曾 record_busy），
+	 * 把 busy_count 压到负值并触发 WARN_ON。
+	 */
+	mwv207_devfreq_reset_busy(sched->pipe);
 
 	drm_sched_resubmit_jobs(&sched->base);
 
@@ -305,7 +312,7 @@ int mwv207_sched_suspend(struct mwv207_device *jdev)
 	struct mwv207_sched *sched;
 	int i, ret;
 
-	for (i = 0; i < 6; i++) {
+	for (i = 0; i < MWV207_MAX_SCHED_NR; i++) {
 		if (!jdev->sched[i])
 			continue;
 		sched = to_mwv207_sched(jdev->sched[i]);
@@ -331,7 +338,7 @@ int mwv207_sched_resume(struct mwv207_device *jdev)
 	struct mwv207_sched *sched;
 	int i, ret;
 
-	for (i = 0; i < 6; i++) {
+	for (i = 0; i < MWV207_MAX_SCHED_NR; i++) {
 		if (!jdev->sched[i])
 			continue;
 		sched = to_mwv207_sched(jdev->sched[i]);
@@ -350,19 +357,30 @@ int mwv207_sched_init(struct mwv207_device *jdev)
 {
 	struct mwv207_pipe *pipe;
 
+	/*
+	 * 槽位布局（N1）：3d×2 | dec×2 | enc×1 | 2d×1 | dma×1，共 7 个，
+	 * 必须与 MWV207_MAX_SCHED_NR 一致。这里用显式下标而不是
+	 * &sched_xxx[n] 递推，避免再出现 enc 与 dec1 撞槽。
+	 */
 	jdev->sched_3d  = &jdev->sched[0];
-	jdev->sched_dec = &jdev->sched_3d[2];
-	jdev->sched_enc = &jdev->sched_dec[1];
-	jdev->sched_2d  = &jdev->sched_enc[1];
-	jdev->sched_dma = &jdev->sched_2d[1];
+	jdev->sched_dec = &jdev->sched[2];
+	jdev->sched_enc = &jdev->sched[4];
+	jdev->sched_2d  = &jdev->sched[5];
+	jdev->sched_dma = &jdev->sched[6];
 
 	pipe = mwv207_pipe_3d_create(jdev, 0, 0x900000, "mwv207_3d0");
-	jdev->sched_3d[0] = mwv207_sched_create(jdev, 30, 5, 2000, pipe);
+	/*
+	 * N2：hw_submission 必须小于硬件事件槽数（30，见
+	 * pipe_3d.c 的 event_bitmap），否则 30 个在飞 job 恰好填满
+	 * 事件表，第 31 次 pipe_3d_event_push() 会命中 BUG_ON。
+	 * 留 2 个槽的余量。
+	 */
+	jdev->sched_3d[0] = mwv207_sched_create(jdev, MWV207_3D_HW_SUBMISSION, 5, 2000, pipe);
 	if (jdev->sched_3d[0] == NULL)
 		return -ENODEV;
 
 	pipe = mwv207_pipe_3d_create(jdev, 1, 0x910000, "mwv207_3d1");
-	jdev->sched_3d[1] = mwv207_sched_create(jdev, 30, 5, 2000, pipe);
+	jdev->sched_3d[1] = mwv207_sched_create(jdev, MWV207_3D_HW_SUBMISSION, 5, 2000, pipe);
 
 	pipe = mwv207_pipe_dec_create(jdev, 0, 0x930000, "mwv207_dec0");
 	jdev->sched_dec[0] = mwv207_sched_create(jdev, 1, 5, 2000, pipe);
@@ -407,7 +425,7 @@ void mwv207_sched_fini(struct mwv207_device *jdev)
 {
 	int i;
 
-	for (i = 0; i < 6; ++i) {
+	for (i = 0; i < MWV207_MAX_SCHED_NR; ++i) {
 		if (!jdev->sched[i])
 			continue;
 		mwv207_sched_destroy(jdev->sched[i]);

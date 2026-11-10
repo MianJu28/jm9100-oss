@@ -276,3 +276,30 @@ void mwv207_devfreq_record_idle(struct mwv207_pipe *pipe)
 
 	spin_unlock_irqrestore(&pipe->devfreq_lock, flags);
 }
+
+/*
+ * 管线被硬复位后，硬件与驱动里都不再有任何在飞 job（N14 已把在飞 fence
+ * 全部 signal/put），而 busy_count 是按“run_job 加一、ISR/轮询线程减一”
+ * 维护的，复位会把这些“减一”永远丢掉。原先 mwv207_sched_timedout_job()
+ * 用“遍历 pending_list 每个 job 记一次 idle”来补偿，但队列里的 job 不都
+ * 曾 record_busy（例如 parent 已被摘掉的、或 run_job 因 submit 失败提前
+ * 返回的），会多减 —— 于是 busy_count 变负、触发
+ * mwv207_devfreq_record_idle() 里的 WARN_ON（K12）。
+ *
+ * 复位的语义就是“此刻在飞 job 数为 0”，直接把计数清零即可；
+ * 之后 resubmit 的每个 job 会重新走 run_job -> record_busy。
+ */
+void mwv207_devfreq_reset_busy(struct mwv207_pipe *pipe)
+{
+	unsigned long flags;
+
+	if (!pipe->devfreq)
+		return;
+
+	spin_lock_irqsave(&pipe->devfreq_lock, flags);
+
+	mwv207_devfreq_update_utilization(pipe);
+	pipe->busy_count = 0;
+
+	spin_unlock_irqrestore(&pipe->devfreq_lock, flags);
+}

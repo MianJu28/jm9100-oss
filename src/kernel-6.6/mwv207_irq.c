@@ -31,8 +31,13 @@ static irqreturn_t mwv207_isr(int irq_unused, void *dev_id)
 	u32 stat;
 
 	for (i = 0; i < 2; ++i) {
+		/*
+		 * K9-②：irq_enable_reg[] 是 mask/unmask 在 irq_lock 下写的
+		 * 影子值，ISR 这里并发读取。单个 u32 在 aarch64 上不会撕裂，
+		 * 但仍是数据竞争（KCSAN 可报），用 READ_ONCE/WRITE_ONCE 标记。
+		 */
 		stat = jdev_read(jdev, (0x009A802c) + i * 4);
-		stat &= jdev->irq_enable_reg[i];
+		stat &= READ_ONCE(jdev->irq_enable_reg[i]);
 		while ((j = ffs(stat))) {
 			j--;
 			hwirq = i * 32 + j;
@@ -64,7 +69,7 @@ static void mwv207_irq_mask(struct irq_data *d)
 
 	spin_lock_irqsave(&jdev->irq_lock, flags);
 	jdev_modify(jdev, reg, 1 << (irq % 32), 0);
-	jdev->irq_enable_reg[irq / 32] = jdev_read(jdev, reg);
+	WRITE_ONCE(jdev->irq_enable_reg[irq / 32], jdev_read(jdev, reg));
 	spin_unlock_irqrestore(&jdev->irq_lock, flags);
 }
 
@@ -79,7 +84,7 @@ static void mwv207_irq_unmask(struct irq_data *d)
 
 	spin_lock_irqsave(&jdev->irq_lock, flags);
 	jdev_modify(jdev, reg, 1 << (irq % 32), 1 << (irq % 32));
-	jdev->irq_enable_reg[irq / 32] = jdev_read(jdev, reg);
+	WRITE_ONCE(jdev->irq_enable_reg[irq / 32], jdev_read(jdev, reg));
 	spin_unlock_irqrestore(&jdev->irq_lock, flags);
 }
 
@@ -88,8 +93,8 @@ void mwv207_irq_suspend(struct mwv207_device *jdev)
 	int i;
 
 	for (i = 0; i < 2; ++i)
-		jdev->irq_enable_reg[i] = jdev_read(jdev,
-				(0x009A8020) + i * 4);
+		WRITE_ONCE(jdev->irq_enable_reg[i],
+			   jdev_read(jdev, (0x009A8020) + i * 4));
 }
 
 void mwv207_irq_resume(struct mwv207_device *jdev)
@@ -99,7 +104,7 @@ void mwv207_irq_resume(struct mwv207_device *jdev)
 	for (i = 0; i < 2; ++i) {
 		jdev_write(jdev, (0x009A802c) + i * 4, 0xffffffff);
 		jdev_write(jdev, (0x009A8020) + i * 4,
-				jdev->irq_enable_reg[i]);
+				READ_ONCE(jdev->irq_enable_reg[i]));
 	}
 }
 
@@ -146,8 +151,8 @@ int mwv207_irq_init(struct mwv207_device *jdev)
 
 	for (i = 0; i < 64; ++i) {
 		/* K8: the return value used to be ignored; a failed mapping
-		 * surfaced later as BUG_ON(va_irq == 0) in the KMS init path or
-		 * as request_irq(0) failing with -ENOMEM. */
+		 * surfaced later as a broken KMS/HDMI init (va_irq == 0) or as
+		 * request_irq(0) failing with -ENOMEM. */
 		if (!irq_create_mapping(jdev->irq_domain, i)) {
 			ret = -ENOMEM;
 			goto free_mapping_partial;
