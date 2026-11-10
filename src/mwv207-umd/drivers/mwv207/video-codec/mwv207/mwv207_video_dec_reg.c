@@ -148,12 +148,15 @@ mwv207_9200_dump_register(struct mwv207_video_reg_buf *reg_buf)
 
    int i = 0;
    uint32_t value;
-   return;
 
-   
-
+   /* FIX(jm9100-oss): 这里原本是一句无条件的 `return;`，把整段寄存器 dump
+    * 关掉了——于是 `mwv207_debug=video` 只会生成一个空的
+    * `mwv207_video_reg.dump`，I-5（VP9 intra-only 官方向量解码不一致）没法
+    * 从寄存器层面取证。dump 只在 `MWV207_DEBUG_VIDEO` 时才有输出流
+    * （`dump_reg_stream_print()` 自己判 NULL），代价是每帧多一圈
+    * `get_dec_register()`，可以忽略。上限放宽到 400 帧，够覆盖几秒的码流。 */
    static int count = 0;
-   if (count > 1) {
+   if (count > 400) {
       return;
    }
    count++;

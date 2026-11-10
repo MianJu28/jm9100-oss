@@ -1482,6 +1482,13 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
    }
 
    reg_buf->set_reg(reg_buf, JMDEC_DEC_E, 1);
+
+   /* FIX(jm9100-oss): 与 H.264 一样把本帧编程的寄存器写进
+    * `mwv207_video_reg.dump`（只在 `mwv207_debug=video` 时产生输出），
+    * I-5 这一类"解码结果不对"的问题要靠它对照正常帧的寄存器取值。
+    * 注意要在所有 set_reg 之后、提交之前调用。 */
+   reg_buf->dump_regs(reg_buf);
+
    st->pending = buf;
    st->pending_flags = sh->refresh_frame_flags;
    st->pending_luma = vp9_luma_size;

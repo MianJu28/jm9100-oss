@@ -311,6 +311,21 @@ inter 帧（1/5/6）也 DIFF、且它们的预测来自正确参考，说明问�
 `evidence/*.png`）：布局、色调、位置都对，一批 64×64 级区块整块是乱的，不是色度/范围
 变换，也不是整帧偏移。
 
+**寄存器 dump 已恢复（2026-11-10 20:05）**：`mwv207_video_dec_reg.c` 的
+`mwv207_9200_dump_register()` 里那句无条件 `return;` 已去掉（上限放宽到 400 帧），
+并在 `mwv207_dec_vp9_set_regs()` 末尾加了一次 `reg_buf->dump_regs()`。用
+`mwv207_debug=video` 跑官方样片包 0 与自产 352×288 intra-only 样片，把两份
+`mwv207_video_reg.dump` 对齐比较：1802 个共有寄存器里 78 个取值不同，绝大多数是
+内容/码率差异（`JMDEC_QUANT_SEG*`、`JMDEC_FILT_LEVEL*`、`JMDEC_STRM_START_BIT`、
+`JMDEC_STREAM_LEN`、`JMDEC_INIT_RLIST_*` 等）。**唯一的结构性差异是
+`JMDEC_TRANSFORM_MODE`：官方样片 = 3（ALLOW_32X32），自产样片 = 4（SELECT）**；
+`JMDEC_SECOND_TRANSFORM_E`/`JMDEC_NONSQUARE_TRANSFORM_E`/`JMDEC_DMH_E` 看着也有差异，
+但查规格表（`mwv207_video_dec_8170table.h`）它们是同一个 word 11 的相邻位
+（shift 27/28/29，与 `TRANSFORM_MODE` 的 3 位字段重叠），只是别名，不是独立缺陷。
+所以下一步最该验的就是 `txmode=3`，而本机 ffmpeg/libvpx 都不暴露 `-tx-size`，
+造不出这种流 —— 要么装 `vpxenc`（Debian 的 `vpx-tools`）试 `--tx-size=32x32`，
+要么在同内容上手工比对"只差 txmode"的两条流。
+
 **待查方向**：① ~~`fpar=0`~~、~~`refresh_frame_flags=0x01`~~、~~高 QP~~ —— 均已被自产
 样片实验排除；② **`transform_mode`**：官方样片 `txmode=3`（ALLOW_32X32），本机编码器
 给 4（SELECT），驱动 `JMDEC_TRANSFORM_MODE` 直接写 `sh->transform_mode & 0x7`，需确认硬件
