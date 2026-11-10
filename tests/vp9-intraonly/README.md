@@ -53,10 +53,39 @@ tilecols=0 tilerows=0 seg=0 lossless=0 txmode=3 fpar=0 lf=6 sharp=0 qyac=53
   未压缩头后，解析器与 libvpx 都接受，但解码结果与关键帧不同；穷举 header 位数
   （`H_orig∈[130,190)`、tile 起点）都没有出现"等于关键帧"的候选。
 
+### 受控实验：自产 intra-only 样片（`make-intra-only.py`）
+
+既然关键帧的压缩头 + tile 数据与 intra-only 帧是同一套编码工具，就可以把关键帧的
+**未压缩头**换成 intra-only 形态，得到内容等价、位流合法的自产样片（改写规则见
+脚本头部注释；Profile 0 的 intra-only 头不带 color config，`reset_frame_context`
+要取 3，否则首帧会被 libvpx 以 `Uninitialized entropy context` 拒绝）。
+
+```sh
+./build-probe.sh                    # 编译解析探针（链接驱动自带的 VP9 头解析器）
+ffmpeg -f lavfi -i testsrc2=size=352x288:rate=30 -frames:v 1 \
+       -c:v libvpx-vp9 -g 1 -f ivf /tmp/kf.ivf
+./make-intra-only.py /tmp/kf.ivf /tmp/io.ivf [--refresh 0x01]
+```
+
+用这批自产样片做的对照（硬件 r20 载荷 vs libvpx 软件解码，全部逐位比对）：
+
+| 样片 | 关键参数 | 结果 |
+| --- | --- | --- |
+| 64×64 testsrc2 | refresh 0xFF / 0x01 / 0x02 / 0x80，rfc=3，fpar=1 | IDENTICAL |
+| 352×288 testsrc2 | refresh 0xFF 与 0x01，rfc=3，fpar=1 | IDENTICAL |
+| 352×288 testsrc2 CRF 50/55 | qyac 123/145，fpar=1 | IDENTICAL |
+| 352×288 testsrc2 `-frame-parallel 0` | fpar=0 | IDENTICAL |
+
+⇒ **intra-only 帧类型本身、部分刷新、高低 QP、`frame_parallel_decoding_mode`
+都不是触发条件**：驱动对自产 intra-only 帧的解码是正确的。与官方样片唯一剩下的
+差异是它特有的参数组合（`txmode=3`、`qyac=53`、`lf=6`、单帧 118 KB 的真实画面
+内容），I-5 只在这类流上出现，范围已收窄到该组合。
+
 ### 待查方向
 
-1. `frame_parallel_decoding_mode = 0` 与 `JMDEC_PROB_TAB_*`/计数器的交互（驱动只在
-   软件侧做概率自适应，硬件是否需要额外的"非并行"配置）。
+1. ~~`frame_parallel_decoding_mode = 0`~~ —— 已用 `-frame-parallel 0` 的自产样片排除
+   （见上表）。剩下的入口是官方样片的 `txmode=3`（本机编码器给 4=SELECT）与
+   `lf=6`/大体积 tile 组合。
 2. `refresh_frame_flags = 0x01`（关键帧是 0xFF）时 `REFRAME`/`REFSLOT` 寄存器的写法，
    以及 `JMDEC_IDR_PIC_E = 1` 与"intra-only 但刷新部分槽位"的组合。
 3. 单帧只有 1 个 tile 时 `JMDEC_TILE_BASE/`tile 长度与 `frame_tag_size + first_partition`

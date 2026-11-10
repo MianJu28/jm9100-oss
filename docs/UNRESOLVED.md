@@ -282,6 +282,27 @@ tilecols=0 tilerows=0 seg=0 lossless=0 txmode=3 fpar=0 lf=6 sharp=0 qyac=53
 - 尺寸/对齐：本机 libvpx 编的 **352×288 关键帧** 硬件与软件 **IDENTICAL**。
 - 解析层：`src/mwv207-umd/drivers/mwv207/video-codec/common/mwv207_decoder_vp9_slice_header.c:958-1000`
   的 intra_only 分支与 libvpx `read_uncompressed_header()` 一致。
+- **intra-only 帧类型本身**、部分刷新、高低 QP、`frame_parallel_decoding_mode`：
+  用 `tests/vp9-intraonly/make-intra-only.py` 把本机关键帧改写成内容等价的 intra-only
+  帧后逐位比对（见下节），全部 **IDENTICAL**。
+
+**受控实验（自产 intra-only 样片，2026-11-10 19:45）**：`tests/vp9-intraonly/` 新增
+`vp9-parse-probe.c` + `build-probe.sh`（链接驱动自带的 VP9 头解析器）与
+`make-intra-only.py`（把关键帧的未压缩头换成 intra-only 形态，保留原压缩头与 tile；
+Profile 0 的 intra-only 头不带 color config，`reset_frame_context` 取 3）。用同一编码器、
+同一内容生成样片，硬件（r20）与 libvpx 逐位比对：
+
+| 样片 | 关键参数 | 结果 |
+|---|---|---|
+| 64×64 testsrc2 | refresh 0xFF/0x01/0x02/0x80，rfc=3，fpar=1 | IDENTICAL |
+| 352×288 testsrc2 | refresh 0xFF 与 0x01，rfc=3，fpar=1 | IDENTICAL |
+| 352×288 testsrc2 CRF 50/55 | qyac 123/145 | IDENTICAL |
+| 352×288 testsrc2 `-frame-parallel 0` | **fpar=0** | IDENTICAL |
+
+⇒ 触发条件既不是 intra-only 帧类型、也不是 `fpar=0`/部分刷新/QP，而是官方样片特有的
+参数组合（`txmode=3`、`lf=6`、单帧 118 KB 的真实画面内容），范围已从"整类帧"收窄到
+"某类流"。**注意**：官方样片的 `txmode=3`（ALLOW_32X32）与本机编码器的 `txmode=4`
+（SELECT）不同，这是目前最大的未验证差异。
 
 **当前最可疑处**：`show_existing` 帧（2/3/4）逐字节一致，说明**参考槽里的重建是对的**，
 出问题的是"把重建结果写进应用 surface"这一路（PP/输出面），而不是参考管理；但
@@ -290,14 +311,17 @@ inter 帧（1/5/6）也 DIFF、且它们的预测来自正确参考，说明问�
 `evidence/*.png`）：布局、色调、位置都对，一批 64×64 级区块整块是乱的，不是色度/范围
 变换，也不是整帧偏移。
 
-**待查方向**：① `fpar=0` 与 `JMDEC_PROB_TAB_*`/计数器交互（驱动只在软件侧做概率自适应）；
-② `refresh_frame_flags = 0x01`（关键帧是 0xFF）时 `REFRAME`/参考槽寄存器的写法，以及
-`JMDEC_IDR_PIC_E = 1` 与"intra-only 但只刷新部分槽位"的组合；③ `frame_tag_size +
-first_partition` 得到的 tile 起点与 libvpx 的实际 partition 大小对账；④ 用
-`dump_state` 的 `current stat/addr/cmdl/cmdh` 对照"only0"与本机 352×288 关键帧的寄存器。
+**待查方向**：① ~~`fpar=0`~~、~~`refresh_frame_flags=0x01`~~、~~高 QP~~ —— 均已被自产
+样片实验排除；② **`transform_mode`**：官方样片 `txmode=3`（ALLOW_32X32），本机编码器
+给 4（SELECT），驱动 `JMDEC_TRANSFORM_MODE` 直接写 `sh->transform_mode & 0x7`，需确认硬件
+对 3 的语义与"非 SELECT 时块尺寸固定"的处理；③ `round-trip`：把官方样片的 tile 数据用
+本机编码器重编同内容、同 `txmode` 的流做对照；④ 硬件寄存器回读（当前
+`mwv207_9200_dump_register()` 里有一句 `return;` 把整段 dump 关掉了，
+`MWV207_DEBUG=video` 只能拿到空的 `mwv207_video_reg.dump`）——要 dump 得先恢复该函数。
 
 **复跑**：`tests/vp9-intraonly/run-vp9-intraonly.sh`（首次需联网下载样片；`--local DIR`
-可复用已下载文件）。
+可复用已下载文件）；自产样片用 `tests/vp9-intraonly/build-probe.sh` +
+`tests/vp9-intraonly/make-intra-only.py`。
 
 ---
 
