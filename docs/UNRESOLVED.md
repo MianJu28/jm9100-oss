@@ -236,6 +236,7 @@ Profile 1/3（4:2:2 / 4:4:4）与 H.264 422/444 同理**不可实现**——解�
 |---|---|
 | `vainfo` | 已列出 `VAProfileVP9Profile2`（与 Profile 0 并存），H.264 只剩 ConstrainedBaseline/Main/High，HEVC Main/Main10 |
 | 1080p30 Profile 2（30 帧，g=15） | 硬件解码 186624000 B 与软件解码 **IDENTICAL** |
+| 1080p30 Profile 2 压力（120 帧，g=30） | 746496000 B **IDENTICAL**，全程约 20 s（含 `hwdownload` 回读到用户态），dmesg 零新增超时 |
 | dmesg | 无新增 `timed out`（仅 `tests/n14-reset` 探针的 6 条 3D 超时），无 WARN/BUG |
 | 其余 | H.264 High 420 / HEVC 8bit / HEVC Main10 逐位一致；query 4/4；VP9 回归 18/18；N14 探针 PASS |
 
