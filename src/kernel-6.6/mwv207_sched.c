@@ -62,7 +62,14 @@ static void mwv207_job_fini(struct kref *kref)
 		mwv207_bo_unref(to_jbo(mtvb->base.bo));
 	}
 
-	if (mjob->nr_cmd_dat) {
+	/* N16: nr_cmd_dat 在 mwv207_submit_init_job() 里一进门就被赋值，而
+	 * cmd_dats 数组要等到 init_job_cmd_dat() 里 kvcalloc 成功才有内容；
+	 * 那个函数中途报错（比如 cmd_dats == NULL、dat_size <= 0）返回时，
+	 * 这里会拿到 "nr_cmd_dat != 0 && cmd_dats == NULL"，原实现直接
+	 * &mjob->cmd_dats[i] → 空指针解引用（一次畸形 submit 就能让内核 oops，
+	 * 实测 Call trace: mwv207_job_fini+0x12c ← mwv207_submit_ioctl）。
+	 */
+	if (mjob->nr_cmd_dat && mjob->cmd_dats) {
 		for (i = 0; i < mjob->nr_cmd_dat; ++i) {
 			dat = &mjob->cmd_dats[i];
 			kvfree(dat->dat);
