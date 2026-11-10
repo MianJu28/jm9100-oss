@@ -339,6 +339,32 @@ inter 帧（1/5/6）也 DIFF、且它们的预测来自正确参考，说明问�
   （本机编码器可控），再对照 `vp9_ref_slot_*` 的尺寸/stride 记账与
   `vp9_write_ref_regs()` 的 `ref_slot_luma`/`refw`/`refh` 推导。
 
+**2026-11-11 01:05 取证：错误发生在 inter 帧的解码本身，且已排除参考记账/自适应/txmode**
+
+- `tests/vp9-intraonly/vp9-parse-probe.c` 现在把 `active_ref_idx/ref_frame_map/sign_bias`
+  打到 **stderr**（打到 stdout 会破坏 `make-intra-only.py` 的 `key=value` 解析），并支持
+  `[fallback_width fallback_height]` 两个可选参数给缺失参考尺寸的帧用。
+- sub3 的探针（带 fallback）：`active_ref_idx=0,0,0`、`ref_frame_map=0,0,0`、
+  `sign_bias=0,0,0` ⇒ 三路参考**全指向 slot 0 同一张图**，"三路参考各需自己的 MV 图"
+  这条假设作废。
+- 概率自适应（`vp9_adapt_probs()`，仅 `!error_resilient && !frame_parallel_decoding`
+  时运行）：官方 sub3 是 `fpar=0`，而此前自产样片几乎都是 `fpar=1`。补做两组实验：
+  `fp0_10.ivf`（本机 352×288、10 帧、`-frame-parallel 0`）hw/sw **IDENTICAL**；
+  `[intra-only, inter]`（fpar=0）与 `[关键帧, inter]` 的 **inter 输出完全相同（mean 0.0）**
+  ⇒ 自适应与上下文重置无误，此假设排除。
+- `txmode=3` 的 **inter** 帧：`vpxenc --good --cpu-used=5 --end-usage=cq --cq-level=20`
+  编得 10 帧流（pkt1/pkt2 均为 `key=0 txmode=3`），hw/sw **IDENTICAL**（1520640 B）
+  ⇒ txmode（含 inter 帧）彻底排除。
+- **关键新证据**：把 `[sub0,sub1,sub2,sub3]` 尾部再加一包 `0x8b`（show_existing 显示
+  slot 3，即刚解完的 inter 帧）→ 两帧输出（直接输出 + 槽重放）**逐字节相同**，且都与
+  libvpx 差 mean 19.6。⇒ 参考槽里存的就是这份错图，**错误发生在解码阶段本身**，不是
+  PPU/输出路径；同时说明"用 show_existing 校验槽内容"只对 intra-only 槽有效。
+- 反向尝试（`[sub0,sub3]`、`[sub0,sub1,sub3]`）无效：libvpx 侧 0 帧输出（参考/色彩状态
+  不完整），无法作为对照。
+- 现状：I-5 收敛为"官方流里这个 inter 帧的解码结果错"，自产的同尺寸、同 txmode、
+  同 fpar 流都复现不出来；下一步需要逐宏块对照（segment id / last-partition / 参考帧
+  尺寸记账），或自写 VAAPI 客户端控制 surface 复用以隔离 ffmpeg 的影响。
+
 **寄存器 dump 已恢复（2026-11-10 20:05）**：`mwv207_video_dec_reg.c` 的
 `mwv207_9200_dump_register()` 里那句无条件 `return;` 已去掉（上限放宽到 400 帧），
 并在 `mwv207_dec_vp9_set_regs()` 末尾加了一次 `reg_buf->dump_regs()`。用

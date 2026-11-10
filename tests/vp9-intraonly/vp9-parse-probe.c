@@ -35,7 +35,8 @@ int
 main(int argc, char **argv)
 {
    if (argc < 2) {
-      fprintf(stderr, "用法: %s <packet.bin>\n", argv[0]);
+      fprintf(stderr, "用法: %s <packet.bin> [fallback_width fallback_height]\n",
+              argv[0]);
       return 2;
    }
 
@@ -44,8 +45,10 @@ main(int argc, char **argv)
 
    struct mwv207_vp9_slice_header sh;
    memset(&sh, 0, sizeof(sh));
+   uint32_t fbw = argc > 2 ? (uint32_t)strtoul(argv[2], NULL, 0) : 0;
+   uint32_t fbh = argc > 3 ? (uint32_t)strtoul(argv[3], NULL, 0) : 0;
    uint32_t used = mwv207_vp9_parse_frame(&sh, data, (uint32_t)size,
-                                          0, 0, NULL, 0, 0);
+                                          fbw, fbh, NULL, 0, 0);
 
    printf("used=%u tag=%u parts=%u key=%u intra=%u show=%u showex=%u err=%u "
           "prof=%u w=%u h=%u refresh=0x%02x txmode=%u fpar=%u lf=%u qyac=%u\n",
@@ -54,6 +57,11 @@ main(int argc, char **argv)
           sh.error_resilient, sh.vp_profile, sh.width, sh.height,
           sh.refresh_frame_flags, sh.transform_mode,
           sh.frame_parallel_decoding, sh.loop_filter_level, sh.qp_yac);
+   fprintf(stderr, "active_ref_idx=%u,%u,%u ref_map=%d,%d,%d sign_bias=%u,%u,%u\n",
+          sh.active_ref_idx[0], sh.active_ref_idx[1], sh.active_ref_idx[2],
+          sh.ref_frame_map[0], sh.ref_frame_map[1], sh.ref_frame_map[2],
+          sh.ref_frame_sign_bias[1], sh.ref_frame_sign_bias[2],
+          sh.ref_frame_sign_bias[3]);
 
    free(data);
    return used ? 1 : 0;
