@@ -326,6 +326,14 @@ inter 帧（1/5/6）也 DIFF、且它们的预测来自正确参考，说明问�
 造不出这种流 —— 要么装 `vpxenc`（Debian 的 `vpx-tools`）试 `--tx-size=32x32`，
 要么在同内容上手工比对"只差 txmode"的两条流。
 
+**txmode 已排除（2026-11-10 20:25）**：`vpxenc` 虽没有 `--tx-size`，但**编码模式会决定
+tx_mode** —— `--rt --cpu-used=8` 出 `tx_mode=2`（ALLOW_16X16），
+`--good --cpu-used=5 --end-usage=cq --cq-level=20` 出 `tx_mode=3`（ALLOW_32X32）。
+两条流的关键帧在硬件上解码都与 libvpx **逐位一致**；再用 `make-intra-only.py` 把
+tx_mode=3 的关键帧改写成 intra-only（`refresh=0x01`、352×288、101 KB 高码率），
+硬件同样 **IDENTICAL**。⇒ `tx_mode` 1/2/3、intra-only 与 `tx_mode=3` 的组合、
+分槽刷新、高码率都不再是嫌疑，I-5 只在这一份官方样片（`vp90-2-16-intra-only`）上复现。
+
 **待查方向**：① ~~`fpar=0`~~、~~`refresh_frame_flags=0x01`~~、~~高 QP~~ —— 均已被自产
 样片实验排除；② **`transform_mode`**：官方样片 `txmode=3`（ALLOW_32X32），本机编码器
 给 4（SELECT），驱动 `JMDEC_TRANSFORM_MODE` 直接写 `sh->transform_mode & 0x7`，需确认硬件
