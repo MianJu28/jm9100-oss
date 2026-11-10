@@ -510,7 +510,7 @@ static struct dma_fence *mwv207_pipe_dma_submit(struct mwv207_pipe *mpipe,
 	struct mwv207_pipe_dma *pipe = to_dma_pipe(mpipe);
 	struct mwv207_dma_cmd *cmd = (struct mwv207_dma_cmd *)mjob->cmds;
 	struct mwv207_dma_cursor src, dst;
-	struct dma_fence *fence;
+	struct dma_fence *fence, *ref;
 	u64 remain, len;
 
 	/* cmd_size 来自用户态提交：长度不符时不能 panic，直接报错让调度器
@@ -562,14 +562,31 @@ static struct dma_fence *mwv207_pipe_dma_submit(struct mwv207_pipe *mpipe,
 
 	pipe->pending_cmd = *cmd;
 
+	/*
+	 * N17: 返回给 drm_sched 的引用必须在 queue_work 之前取。
+	 * 否则 worker 可能在 queue_work 返回后、dma_fence_get() 之前就完成并
+	 * put 掉管线持有的那份，引用数归零后 fence 被释放，随后的
+	 * dma_fence_get() 就变成对已释放对象的 refcount_inc，内核日志里表现为
+	 * "refcount_t: addition on 0; use-after-free"，PC 落在
+	 * mwv207_pipe_dma_submit（实测 2026-11-10 一次桌面负载即触发）：
+	 * 更糟的是等待者可能永远等不到 signal，Xorg 会卡在不可中断等待里。
+	 */
+	ref = dma_fence_get(fence);
+
 	spin_lock_irq(&pipe->fence_lock);
 	pipe->current_fence = fence;
 	spin_unlock_irq(&pipe->fence_lock);
 
-	queue_work(pipe->complete_wq, &pipe->complete_work);
+	if (!queue_work(pipe->complete_wq, &pipe->complete_work)) {
+		/*
+		 * 串行假设下不该发生；真发生时说明等待上一次完成的工作项
+		 * 仍在队列里，它会来 xchg 并 signal 本 fence，这里只记一条。
+		 */
+		pr_warn_ratelimited("mwv207: %s DMA 完成工作项已在队列中\n",
+				pipe->base.fname);
+	}
 
-	/* 管线自己持有一份引用（worker/reset 里 put），返回的这份给 drm_sched */
-	return dma_fence_get(fence);
+	return ref;
 }
 
 static void mwv207_pipe_dma_dump_state(struct mwv207_pipe *mpipe)
