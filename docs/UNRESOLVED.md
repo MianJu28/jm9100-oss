@@ -2,7 +2,8 @@
 
 > 汇总截至 **2026-11-10**（运行中的 UMD 是 **r16**，`payload-41/VERSION = 24.1.2-fullstack-r16`；
 > 含 I-1/I-2/I-3/I-4 修复的 **`payload-42`（r19）已生成并预检通过、尚未安装**；内核
-> `6.6.155-arm64-desktop-hwe` 侧另有待重启生效的 `D5EEF36617A4D3FBF4AFD1D` 一批），
+> `6.6.155-arm64-desktop-hwe` 侧的 `D5EEF36617A4D3FBF4AFD1D` 一批已于 2026-11-10 13:29
+> 重启验证生效），
 > 对应外层仓库工作树（含 `src/mwv207-umd/` 分层）。
 > 取代散落在 `api/06-KNOWN-ISSUES.md`、`api/11-FIX-FEASIBILITY.md` 里的分散记录：
 > 本文件是**唯一索引**，那两个文件保留历史细节与推导过程。
@@ -28,21 +29,22 @@
 此前本节写作"从未真机加载"，**已过时**。实测：
 
 ```
-cat /sys/module/mwv207/srcversion        -> 039F972EFE3279A155EE225（运行中）
+cat /sys/module/mwv207/srcversion        -> D5EEF36617A4D3FBF4AFD1D（运行中）
 modinfo -n mwv207                        -> /lib/modules/6.6.155-…/updates/dkms/mwv207.ko
-modinfo src/kernel-6.6/mwv207.ko         -> srcversion 039F972EFE3279A155EE225
-modinfo /lib/modules/…/updates/dkms/…    -> srcversion 039F972EFE3279A155EE225
+modinfo src/kernel-6.6/mwv207.ko         -> srcversion D5EEF36617A4D3FBF4AFD1D
+modinfo /lib/modules/…/updates/dkms/…    -> srcversion D5EEF36617A4D3FBF4AFD1D
 ```
 
 三方一致 ⇒ **运行中的就是自建版**，且包含：
 - `b0479ba` 移植的 K1 / K3 / K4 / K5 / K6 / K7 / K8 / K10；softdep 就是
   `src/kernel-6.6/mwv207_drv.c:543` 的 `MODULE_SOFTDEP("pre: governor_performance")`；
 - `28bc73d` 修的 N15（零重定位提交未初始化 `drm_sched_job` → `BUG_ON(!entity)`）；
-- `22145e9` 修的 N14（reset/destroy 时 signal 在飞 fence，见 §2.1）。
+- `22145e9` 修的 N14（reset/destroy 时 signal 在飞 fence，见 §2.1）；
+- `6502f19` 修的 N1 / N2 / K12 / K9-② / N9（见 §2.2，运行中 srcversion 已是
+  `D5EEF36617A4D3FBF4AFD1D`，2026-11-10 13:29 重启后回归全过）。
 
-因此 **K 系列与 N14 的修复均已生效**。另有一批已构建待重启的修复（`6502f19`，
-新模块 `D5EEF36617A4D3FBF4AFD1D`，已装到两个内核、initramfs 已刷）：
-N1 / N2 / K12 / K9-② / N9（见 §2.2）。剩下的是 N4 / K9-① / K11 / N10（见 §2）。
+因此 **K 系列、N14 与 §2.2 的 5 条修复均已生效**。剩下的是 N4 / K9-① / K11 / N10
+（见 §2）。
 自建模块会打印 `loading out-of-tree module taints kernel` 与
 `module verification failed: signature and/or required key missing`（DKMS 签了名，
 但 MOK 证书没有 enroll 进内核信任链），属既有现象；dmesg 里 GPU 相关错误计数为 0。
@@ -59,7 +61,7 @@ N1 / N2 / K12 / K9-② / N9（见 §2.2）。剩下的是 N4 / K9-① / K11 / N1
 | 2 | VAAPI/VP9 | **B3 intra-only 非关键帧样片缺** | 该分支未上机验证；本机编码器产不出 | `docs/HANDOVER-VP9.md` §10 B3 |
 | 3 | VAAPI/VP9 | **B2 真正的跨尺寸参考未验证** | 已有"缺参考/尺寸不同即拒绝"的保护（`72f9523`），缩放路径未跑通；需自写 VAAPI 客户端 | `docs/HANDOVER-VP9.md` §10 B2 |
 | 4 | KMD | **N14 已修，重启后已验证生效** | 修复见 §2.1（`22145e9`）；运行中 srcversion 已是 `039F972EFE3279A155EE225`，GL/query/VP9 回归全过；reset 通路已用 `tests/n14-reset/` 探针实测（6 轮 TDR、force_complete 6/6） | 本文 §2.1 |
-| 4b | KMD | **N1/N2/K12/K9-②/N9 已修，待重启生效** | 修复见 §2.2（`6502f19`）；新模块 `D5EEF36617A4D3FBF4AFD1D` 已装到两个内核并刷新 initramfs，重启后需按 §2.2 判据验证 | 本文 §2.2 |
+| 4b | KMD | **N1/N2/K12/K9-②/N9 已修，重启后已验证生效** | 修复见 §2.2（`6502f19`）；2026-11-10 13:29 重启后 srcversion = `D5EEF36617A4D3FBF4AFD1D`，GL/query 4·4/VP9 18·18/H.264 8bit 逐位一致/N14 探针 6·6 全过，dmesg 无 WARN/BUG；引擎计数用 `tests/engines/` 核对（lite 机型 3d=1 dec=1 enc=0 2d=1 dma=1） | 本文 §2.2 |
 | 4c | UMD 视频 | **I-4：H.264 High10 已定案（2026-11-10 收回声明）** —— 按当前寄存器配置提交 10bit H.264 会让 DEC 管线挂死（6 次 TDR、输出全 0）；缺 Hantro 的 high10p 位流预转换 | 客户端现在对该类流直接回退（`hwaccel initialisation returned error`），DEC 零超时；原厂闭源驱动同样不声明 High10 | 本文 §1.2 / `api/05-VIDEO-CODEC.md` §6.7 |
 | 5 | KMD | 剩余 N4/K9-①/K11/N10 | 竞态/健壮性/显示边界，多为低概率；刻意留到下一批（需重构或硬件实测，见 §2.2 末尾） | 本文 §2 |
 | 6 | 切换脚本 | **vendor 态端到端未实跑** | `stack vendor` 会重启，需人工确认；热切换已证不可行（refcnt 恒 2） | `switch-mwv207.sh` / §5 |
@@ -186,10 +188,10 @@ ffmpeg `-hwaccel vaapi` 能建 device，但 `hwdownload` 报 `Function not imple
 ## 2. KMD — 未修复缺陷
 
 > 行号以 **6.6 树** `src/kernel-6.6/` 为准（与 5.10 树的行号不同）。
-> **自建 KMD 已经在跑**（`srcversion 039F972EFE3279A155EE225`，见 §0），
+> **自建 KMD 已经在跑**（`srcversion D5EEF36617A4D3FBF4AFD1D`，见 §0），
 > 所以下表全部是**真实存在于当前系统上**的未修缺陷，不是"待部署"的纸上问题。
-> 下表之外，K1–K8/K10、N15、N14 已修好并在运行；N1/N2/K12/K9-②/N9 已修
-> （`6502f19`，见 §2.2），新模块 `D5EEF36617A4D3FBF4AFD1D` 已装、**待重启生效**。
+> 下表之外，K1–K8/K10、N15、N14、N1/N2/K12/K9-②/N9 已修好并在运行
+> （N14 见 §2.1、`6502f19` 一批见 §2.2，均已于 2026-11-10 重启后验证）。
 
 | # | 级别 | 位置 | 问题 |
 |---|---|---|---|
@@ -258,7 +260,7 @@ ffmpeg `-hwaccel vaapi` 能建 device，但 `hwdownload` 报 `Function not imple
 - 2D / DEC / ENC 三条管线的 force_complete 与 destroy 路径未被探针覆盖
   （需分别让 2D/解码引擎挂死或在有在飞 fence 时卸载驱动，风险更高）。
 
-### 2.2 调度器槽位/在飞上限/超时计数与显示侧 BUG_ON（已修，待重启生效）
+### 2.2 调度器槽位/在飞上限/超时计数与显示侧 BUG_ON（已修，2026-11-10 重启后验证生效）
 
 **提交 `6502f19`**（`src/kernel-6.6`，5 条一起改，都在"结构性/边界"这一类）：
 
@@ -273,18 +275,19 @@ ffmpeg `-hwaccel vaapi` 能建 device，但 `hwdownload` 报 `Function not imple
 **部署状态**：`tools/dkms-sync.sh` 重建并安装到 6.6.155；6.6.143 另外
 `dkms build/install --force` + `depmod`；两个内核的 initramfs 都已
 `update-initramfs -u`（解包核对 `updates/dkms/mwv207.ko` 的 srcversion 均为
-`D5EEF36617A4D3FBF4AFD1D`），`dkms status` 两个内核均干净。运行中仍是
-`039F972EFE3279A155EE225`，**重启后生效**。
+`D5EEF36617A4D3FBF4AFD1D`），`dkms status` 两个内核均干净。2026-11-10 13:29
+重启后运行中已是 `D5EEF36617A4D3FBF4AFD1D`，**验证结果见下方小节**。
 
 > 注：`update-initramfs -u -k 6.6.143…` 第一次调用时 `update-initramfs`
 > 自身 segfault（exit 139），目标文件未被改动（mtime 未变），重跑一次即成功；
 > 已核对解包后的模块 srcversion。属工具偶发问题，与驱动无关。
 
 **这一批为什么能改、怎么验证**：
-- N1 只动槽位分配，不改变任何对外接口；`nr_dec` 仍是 2，UMD 的
-  `engine_id` 语义不变（所以不需要改 UMD）。重启后可用 `dmesg | grep mwv207`
-  与 `/sys/kernel/debug/dri/*/…`（如有）确认 7 个 scheduler 都建起来了，
-  并用 `engine_id=1` 的自写提交验证 DEC1 走的是 dec1 而不是 enc0。
+- N1 只动槽位分配，不改变任何对外接口，UMD 的 `engine_id` 语义不变（所以不需要
+  改 UMD）；`nr_*` 由"对应 sched 是否建成"推出，lite 机型上仍是 1/1/0/1/1
+  （见下方验证）。重启后用 `tests/engines/run-engines.sh` 读
+  `DRM_IOCTL_MWV207_INFO` 的引擎计数，并用 `engine_id=1` 的自写提交验证 DEC1
+  走的是 dec1 而不是 enc0（这一条本机做不了，见残余缺口）。
 - N2 只降低在飞上限，判据是"压测 28+ 个 3D 提交不再出现
   `kernel BUG at ...mwv207_pipe_3d.c` 的事件表满"；正常桌面负载在飞数远小于 28。
 - K12 的判据：`tests/n14-reset/` 探针再跑一遍（它会连做 6 轮超时复位），
@@ -292,7 +295,31 @@ ffmpeg `-hwaccel vaapi` 能建 device，但 `hwdownload` 报 `Function not imple
 - K9-②/N9 属防御性改动，判据是编译 + 常规启动无回归；`BUG_ON` 一旦命中
   已是不可恢复，改后最多是 probe 失败退驱动，不再 panic。
 
-**残余验证缺口**：以上 5 条都要重启后才生效，本节写作时尚未重启验证。
+**重启后验证（2026-11-10 13:29 重启，模块 `D5EEF36617A4D3FBF4AFD1D`）**：
+
+| 项 | 证据 | 结论 |
+|---|---|---|
+| 部署 | `cat /sys/module/mwv207/srcversion` = `D5EE…`；`modinfo -n` 指向 `updates/dkms`；`dkms status -m mwv207-oss` 两内核 `installed`、无 `Diff between built and installed module!` | ✅ |
+| 基线 | `glxinfo -B` → MWV207 / Mesa 24.1.2 / GL 4.0 / accelerated yes / 2048MB；`glxgears` 99.98 FPS | ✅ |
+| GL/GLES | `DRI_DIR=/usr/local/lib/mwv207-oss tests/query/run-query-tests.sh` → PASS=4 FAIL=0 | ✅ |
+| VP9 | `tools/vp9-regression.sh` → pass=18 fail=0 | ✅ |
+| H.264 8bit | 640×360 30 帧 `libx264` 样片 → 与软件解码**逐位一致**，`timed out!` 计数 0 | ✅ |
+| N14 reset 通路 | `tests/n14-reset/run-n14-reset.sh` → TDR 6 次、`pipe_3d_force_complete` 6 次、探针未阻塞 | ✅ |
+| K12 | 上述 6 轮超时复位期间 `dmesg` 无 `busy_count`/`WARN`/`BUG`（只有一次无关的 `hwinfo` wireless 警告） | ✅（修复前该路径会打 `WARN_ON(--busy_count < 0)`） |
+| N1 | 新增 `tests/engines/run-engines.sh`（经 `DRM_IOCTL_MWV207_INFO` 读引擎计数）→ `3d=1 dec=1 enc=0 2d=1 dma=1`，与 lite 机型能力一致 | ✅ |
+| K9-② / N9 | 启动与全流程无 IRQ/显示侧报错，`BUG_ON` 未命中（改后为 `pr_err`+`-ENODEV`） | ✅（防御性，无正向触发场景） |
+
+**这条验证带来一个重要事实**：本机（JM9100）是 **lite** 版 —— `jdev->lite` 由
+`mwv207_drv.c:344` 读寄存器 `0x12c0000` 是否等于 `0x21` 决定，本机不等于，故
+`mwv207_pipe_3d_create()`/`mwv207_pipe_dec_create()` 对 `unit > 0` 直接返回 NULL、
+`mwv207_pipe_enc_create()` 也返回 NULL ⇒ **dec1 / enc0 / 3d1 的 pipe 根本不存在**。
+因此 N1 的槽位撞车在 lite 机型上没有运行时可观测后果（`nr_dec` 之前也只有 1），
+真正受影响的是非 lite 的完整 MWV207（2×3D、2×DEC、1×ENC）；这次修的是**布局正确性**，
+不是本机的功能回归。新加的 `tests/engines/` 让这条以后可以一键核对。
+
+**残余验证缺口**：① N2 的 `credit_limit=28` 无法直接观测，也没有做 28+ 在飞压测
+（正常桌面在飞数远小于 28，`BUG_ON` 未命中即为间接证据）；② `engine_id=1` 的
+DEC1 提交路径在 lite 机型上不存在，无法实测，只能靠非 lite 硬件或代码审查。
 
 ---
 
@@ -395,7 +422,8 @@ ffmpeg `-hwaccel vaapi` 能建 device，但 `hwdownload` 报 `Function not imple
 - 反编译与寄存器：[ref/reverse-source/docs/README.md](ref/reverse-source/docs/README.md)、
   [ref/reverse-source/docs/05-OCCLUSION-QUERY.md](ref/reverse-source/docs/05-OCCLUSION-QUERY.md)
 - KMD 6.6 移植：[../reports/KMD-6.6-PORT-REPORT.md](../reports/KMD-6.6-PORT-REPORT.md)
-- 验证工具：`tests/query/run-query-tests.sh`、`tests/run-all.sh`
+- 验证工具：`tests/query/run-query-tests.sh`、`tests/engines/run-engines.sh`（引擎计数，N1）、
+  `tests/n14-reset/run-n14-reset.sh`（reset 通路，N14/K12）、`tests/run-all.sh`
 
 ## 火狐浏览器自身 UI 的文字错位（r8 起可见）—— 已修（2026-11-07）
 

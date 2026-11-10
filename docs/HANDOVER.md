@@ -11,7 +11,8 @@
 桌面零 env 下 GL 4.0 / GLES 3.2 / `Video memory: 2048MB`，glxgears 110 FPS；
 OpenCL/VA-API/VDPAU 全走我们的栈；自建 KMD 在跑（srcversion `039F972EFE3279A155EE225`，
 含 N14 的 reset/fence 修复；下一批 N1/N2/K12/K9-②/N9 已构建为
-`D5EEF36617A4D3FBF4AFD1D` 并装到两个内核，**待重启生效**；DKMS 包 `mwv207-oss/1.0.0`）。**VP9 Profile0 8bit 硬解已与软件逐位一致**（回归 18/18，
+`D5EEF36617A4D3FBF4AFD1D` 并装到两个内核，**2026-11-10 13:29 重启后已验证生效**；
+DKMS 包 `mwv207-oss/1.0.0`）。**VP9 Profile0 8bit 硬解已与软件逐位一致**（回归 18/18，
 含真实 720p/1080p 影视内容）。**Firefox 两处渲染缺陷已根治**：字形/图标撕裂（`f8f693a`）、
 标签栏"微缩 chrome"（`6ec1e17`）。剩余项见 §5。
 
@@ -105,13 +106,16 @@ OpenCL/VA-API/VDPAU 全走我们的栈；自建 KMD 在跑（srcversion `039F972
   117 FPS 全过；reset 通路已用 `tests/n14-reset/` 探针实测：6 轮 TDR、
   `pipe_3d_force_complete` 命中 6/6、用户 fence 12.3 s 完成、复位后 GPU 正常。
   2D/DEC/ENC 与 destroy 路径仍未被探针覆盖，见 `docs/UNRESOLVED.md` §2.1。
-- **KMD 结构/边界批次（`6502f19`，待重启生效）**：N1 sched 槽位撞车（6 槽放 7 个
+- **KMD 结构/边界批次（`6502f19`，已重启验证生效）**：N1 sched 槽位撞车（6 槽放 7 个
   引擎，enc0 覆盖 dec1）→ `MWV207_MAX_SCHED_NR 7` + 显式下标；N2 3D `hw_submission`
   30→28（等于事件槽数会命中 `BUG_ON(event >= 30)`）；K12 超时路径 devfreq 多减 →
   新增 `mwv207_devfreq_reset_busy()` 清零；K9-② ISR 影子寄存器改
   `READ_ONCE`/`WRITE_ONCE`；N9 显示侧两处 `BUG_ON(irq == 0)` 改可回退错误。
-  两内核已装、initramfs 已刷（srcversion `D5EEF36…`），重启后按
-  `docs/UNRESOLVED.md` §2.2 的判据验证。
+  两内核已装、initramfs 已刷（srcversion `D5EEF36…`）。2026-11-10 13:29 重启后
+  运行中即 `D5EEF36617A4D3FBF4AFD1D`，glxinfo / query 4·4 / VP9 18·18 /
+  H.264 8bit 逐位一致 / `tests/n14-reset/` 6·6 / dmesg 无 WARN·BUG 全过；
+  引擎计数用新增的 `tests/engines/run-engines.sh` 核对（本机 lite：
+  3d=1 dec=1 enc=0 2d=1 dma=1，见 `docs/UNRESOLVED.md` §2.2）。
 - **UMD 视频批次（`385ed81`/`a5a938b`/`4ecca0d`，载荷 r19 待安装）**：I-1 HEVC tile 缓冲按真实帧高
   分配（原先拿 `bit_depth_chroma_minus8` 当高度，8bit 时高度为 0）；I-2 H.264 路径删掉
   `set_reg(BITPLANE1_E, 0)`（与原厂 1840 行表核对：BITPLANE0/1/2 与
@@ -133,7 +137,7 @@ OpenCL/VA-API/VDPAU 全走我们的栈；自建 KMD 在跑（srcversion `039F972
 3. **B2：真正的跨尺寸参考** —— 已有"缺参考/尺寸不同即拒绝"保护（`72f9523`）；要验证
    "参考自身几何 + hscale/vscale"路径，需要一个自写 VAAPI 客户端（ffmpeg 在分辨率变化时
    会重建 VA context，绕不过去）。
-4. **其余 KMD 项**：N1/N2/K12/K9-②/N9 已修（`6502f19`，待重启验证）；剩下
+4. **其余 KMD 项**：N1/N2/K12/K9-②/N9 已修并重启验证（`6502f19`）；剩下
    N4（DMA 忙等改真 fence，属重构）、K9-①（vblank 逐位 W1C 需硬件语义）、
    K11（`pci_clear_master` 与 kms/irq 收尾次序耦合，卸载路径需可卸载环境才能验证）、
    N10（HDMI 需显示侧实测），见 `docs/UNRESOLVED.md` §2/§2.2。

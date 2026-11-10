@@ -332,21 +332,21 @@ K8/K9/K12 引自原报告，本树未复核（KMD 的 `irq.c`/`sched.c`/`ttm.c` 
 | 缺陷 | 结论 | 证据 |
 |---|---|---|
 | **K8** | **已修** | `irq.c:146-153` 已检查 `irq_create_mapping` 返回值并回退；`kms.c:172` 的 `BUG_ON(va_irq==0)` 由上游保证不触发 |
-| **K8 残留** | **已修（2026-11-10 `6502f19`，待重启生效）** | `kms.c`/`hdmi.c` 的 `BUG_ON(irq == 0)` 改成 `pr_err` + `-ENODEV` 回退，与 3D/2D 范式一致 → N9 |
+| **K8 残留** | **已修（2026-11-10 `6502f19`，重启后已验证）** | `kms.c`/`hdmi.c` 的 `BUG_ON(irq == 0)` 改成 `pr_err` + `-ENODEV` 回退，与 3D/2D 范式一致 → N9 |
 | **K9** | **原机制不成立** | demux 清位是**逐位 W1C** `jdev_write(reg, 1UL<<j)`（`irq.c:44`），不会清掉读后新置位的 bit |
 | **K9 等价风险** | 两处真实（其一已修） | ① VA vblank 处理器**整字回写** `0x9907f4`（`va.c:634-655`，影响 bit12–15）→ K9-①，仍需硬件语义确认；② `irq_enable_reg[]` 被 ISR 无锁读（`irq.c:31`）而 mask/unmask 在 `irq_lock` 内写 → K9-②，**已修（2026-11-10 `6502f19`，`READ_ONCE`/`WRITE_ONCE`）** |
 | **K11** | 仍在 | 与 `01-WINSYS-KMD.md` 一致；耦合解释：**`kms_fini` 必须先于 `irq_fini`** |
-| **K12** | **已修（2026-11-10 `6502f19`，待重启生效）** | 原 `sched.c:203-204` 按 `pending_list` 逐个 `devfreq_record_idle` 会多减 `busy_count`；改为新增 `mwv207_devfreq_reset_busy()` 直接清零。"重放无完整性校验"属 `drm_sched` 设计（resubmit 重放 + `hang_limit` 收敛） |
+| **K12** | **已修（2026-11-10 `6502f19`，重启后已验证：6 轮 TDR 无 `busy_count` WARN）** | 原 `sched.c:203-204` 按 `pending_list` 逐个 `devfreq_record_idle` 会多减 `busy_count`；改为新增 `mwv207_devfreq_reset_busy()` 直接清零。"重放无完整性校验"属 `drm_sched` 设计（resubmit 重放 + `hang_limit` 收敛） |
 
 ### H.2 新增发现 N1–N14（择要）
 
 | # | 级别 | 位置 | 问题 |
 |---|---|---|---|
-| **N1** | **高** | `sched.c:310-314` | 指针算术使 `sched_dec[1]` 与 `sched_enc[0]` **同为 `&sched[3]`** → enc0 的 scheduler 覆盖 dec1，而 `INFO` 仍报 DEC=2；`engine_id=1` 的 DEC 提交会被 **ENC 调度器**执行（丢失 hang_karma 隔离）。当前 UMD `engine_id` 恒 0，故可能尚未触发。**已修：2026-11-10 `6502f19`**（`MWV207_MAX_SCHED_NR 7` + 显式下标，待重启生效） |
-| **N2** | 中 | 3D 管线 | `hw_submission = 30` 与硬件事件数 30 **相等**，与源码注释 "must be lower than 30" 冲突 → 事件位图满时存在越界/`BUG_ON` 风险。**已修：2026-11-10 `6502f19`**（降为 28，待重启生效） |
+| **N1** | **高** | `sched.c:310-314` | 指针算术使 `sched_dec[1]` 与 `sched_enc[0]` **同为 `&sched[3]`** → enc0 的 scheduler 覆盖 dec1，而 `INFO` 仍报 DEC=2；`engine_id=1` 的 DEC 提交会被 **ENC 调度器**执行（丢失 hang_karma 隔离）。当前 UMD `engine_id` 恒 0，故可能尚未触发。**已修：2026-11-10 `6502f19`**（`MWV207_MAX_SCHED_NR 7` + 显式下标；重启后 `tests/engines/` 核对 lite 机型 3d=1 dec=1 enc=0 2d=1 dma=1） |
+| **N2** | 中 | 3D 管线 | `hw_submission = 30` 与硬件事件数 30 **相等**，与源码注释 "must be lower than 30" 冲突 → 事件位图满时存在越界/`BUG_ON` 风险。**已修：2026-11-10 `6502f19`**（降为 28，重启后无事件表满 `BUG_ON`） |
 | **N4** | 中 | `pipe_dma.c:177-186,366` | DMA 提交在 `run_job` 工作线程内忙等最多 **5 s** 并返回 **stub fence** → 调度器工作线程被长占、fence 语义退化 |
 | **N14** | 中 | `pipe_3d.c:301-307`、`pipe_2d.c:212-227`、`pipe_dec.c:136-141` | 三条管线 `reset` 都只 `dma_fence_put` 在飞 fence **而不 signal**；2D 的 `destroy` 还不排空 `fence_queue`（`pipe_2d.c:424-448`）→ **用户态可能永久等待**。**已修：2026-11-10 `22145e9`**（含 ENC），重启后已生效（运行中 `039F972E…`） |
-| **N9** | 低 | `kms.c:172`、`hdmi.c:1057` | 仍保留 `BUG_ON`（K8 残留）。**已修：2026-11-10 `6502f19`**（`pr_err` + `-ENODEV`，待重启生效） |
+| **N9** | 低 | `kms.c:172`、`hdmi.c:1057` | 仍保留 `BUG_ON`（K8 残留）。**已修：2026-11-10 `6502f19`**（`pr_err` + `-ENODEV`，重启后启动无报错） |
 | **N10** | 低 | HDMI | `mode_valid` 首个条件 `clock >= 384000` 先命中 → **384–594 MHz 全部被拒**；`phy_configure` 恒传 `bpp=8`，PHY 表 10/12 bpp 项不可达 |
 
 ### H.3 结构澄清（回答任务书疑问）
@@ -434,5 +434,5 @@ K8/K9/K12 引自原报告，本树未复核（KMD 的 `irq.c`/`sched.c`/`ttm.c` 
   同日定案并收回声明见 `4ecca0d`。
   `W6`/`W7`/`W12`/`O5`/`E2`–`E10`/`F.3` 已修（见 `UNRESOLVED.md` §1.1/§1.4）；
   `N14` 已于 2026-11-10 修好见 `22145e9`，`N1`/`N2`/`K12`/`K9-②`/`N9` 同日修好见
-  `6502f19`（待重启生效）；`I-1` 同日修好（HEVC tile 缓冲高度）—— 分级与批次见
+  `6502f19`（2026-11-10 重启后已验证）；`I-1` 同日修好（HEVC tile 缓冲高度）—— 分级与批次见
   `11-FIX-FEASIBILITY.md`。
