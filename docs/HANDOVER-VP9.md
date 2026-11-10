@@ -1,8 +1,10 @@
 # VP9 硬解（D1）交接文档
 
-2026-11-06 · 状态：**VP9 Profile0 8bit 全部样片（单 tile / 多 tile-columns / tile rows / 隐藏
-alt-ref 帧 / 1080p）已与软件解码逐位一致**。修复过程与最终结论见 §8、§9；
-**尚未解决的问题、已知限制与后续优先级见 §10（接手先看这一节）。**
+2026-11-10 · 状态：**VP9 Profile0 8bit 已完成并随 r16 交付** —— 单 tile / 多 tile-columns /
+tile rows / 隐藏 alt-ref 帧 / 1080p / 真实影视内容（Big Buck Bunny 720p、1080p）全部与软件
+解码逐位一致；`tools/vp9-regression.sh` 18/18。修复过程见 §8、§9；
+**剩余项只有 §10 的 A5（10bit/4:2:2）、B3（intra-only 样片）、B2（真正的跨尺寸参考）**，
+其中 B2 已有"缺参考/尺寸不同即拒绝"的保护（`72f9523`）。
 
 目标：VP9 Profile0 8bit 硬解输出与软件解码逐位一致后提交。
 
