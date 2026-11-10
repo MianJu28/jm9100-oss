@@ -431,6 +431,13 @@ mwv207_transfer_map(struct pipe_context *pctx,
    trans->base.box = *box;
 
    if (pres->target == PIPE_BUFFER) {
+      /* FIX(jm9100-oss): P6 —— 缓冲区写入（glBufferSubData / 映射写）必须
+       * 等 GPU 吃完该 BO。WebRender 每帧往 UBO 里写大量"每 draw 的变换矩阵"，
+       * 如果上一批命令还在流水线里，CPU 的新写入会让在途 draw 用上新矩阵，
+       * 表现为某一批图元被缩放/平移到别处（Firefox 标签栏出现"微缩 chrome"）。
+       * 只在纯写时等待：读路径本身已有 valid_buffer_range 判断。 */
+      if ((usage & PIPE_MAP_WRITE) && !(usage & PIPE_MAP_UNSYNCHRONIZED))
+         mwv207_wait_resource(pctx, pres);
       if ((usage & PIPE_MAP_READ) ||
            util_ranges_intersect(&res->valid_buffer_range,
                                  box->x,box->x + box->width))

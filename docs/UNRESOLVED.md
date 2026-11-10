@@ -352,3 +352,29 @@ dmesg 里 GPU 相关错误计数为 0。
 - 备选（未采用）：KMD 侧把 `mwv207_ioctls_drm[]` 的 `DRM_AUTH` 去掉只留
   `DRM_RENDER_ALLOW`。能一次解决，但放宽了权限（未认证客户端也能分配显存/提交），
   且要重新部署模块才生效 —— 既然 UMD 侧已验证可行，就不动 KMD ABI。
+
+## 火狐标签栏"微缩 chrome"错乱 —— 已修（2026-11-10，r16）
+
+- 现象：上一节修完字形/图标撕裂后，**标签栏**仍残留错乱：标签标题尾部出现
+  `− × ●`、`←`、Bing 图标、彩色块等一簇"微缩的整套 chrome"，静止不动（同一时刻
+  反复抓图 md5 相同），页面正文与地址栏正常。只在 GPU WebRender 出现，SWGL/llvmpipe
+  正常。
+- 定位：把活动 profile（`q3gcvghy.default-release-1`）拷到 `/tmp/ffx/prof_r` 后可
+  稳定复现；逐项关闭 partial present / SSBO / GL 版本降级 / dual-source blending
+  都**无效**（此前的"开关"结论都是巧合）；`xdotool windowmove` 强制整幅重绘后地址栏
+  恢复但标签栏仍错 ⇒ 不是旧内容残留，是这一帧就画错。4× 放大可见是某批 prim 被
+  缩放/平移到一小块（几何/变换层面），实例属性抓取本身经 `inst3/inst4` 探针验证正确
+  （含单 VBO 混排与 `gl_InstanceID`）。
+- **根因：`PIPE_BUFFER` 写路径不等 GPU。** `mwv207_transfer_map()` 对 buffer 只在
+  `PIPE_MAP_READ` 或写入区间与 `valid_buffer_range` 相交时才 `mwv207_wait_resource()`，
+  纯写直接把 BO 的 CPU 地址返回。WebRender 每帧往 UBO（`glBufferSubData`）写入大量
+  每-draw 的变换矩阵/参数，上一批命令还在流水线里时 CPU 覆盖了同一块 BO，在途 draw
+  于是用了新矩阵 → 某一批图元被缩放到别处。实验佐证：`MWV207_SYNC_DRAW=1`（每 draw
+  同步提交）与"buffer 写前等待"两种方式都能立刻修好，`glxgears` 仍 ~100–117 FPS。
+- 修法（`mwv207_resource.c`）：buffer 的 `PIPE_MAP_WRITE`（且非 `UNSYNCHRONIZED`）
+  路径先 `mwv207_wait_resource()` 再 `bo_map`，避免 CPU 覆盖 GPU 仍在读取的 BO。
+- 验证：复现实例标签栏完全正常（favicon、×、+、书签栏图标、地址栏全对）；系统驱动
+  （无任何 env）同样正常；`glxgears` 110 FPS；VP9 回归 18/18；
+  `switch-mwv207.sh umd verify` 全通过（载荷 `payload-41` / `24.1.2-fullstack-r16`）。
+- 相关：mesa 侧 `loader_dri3_query_buffer_age()` 恒 0 的改动（`ref/oh-mesa` 树，
+  见 r15 payload）用于避免 WebRender 依赖我们并不保证的"交换后缓冲保留"。
