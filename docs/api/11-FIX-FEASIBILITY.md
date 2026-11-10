@@ -99,7 +99,7 @@
 | C3 | **C3** `ARB_ES3_compatibility` 建立在这 6 个格式声明上，其中 3 个实际不可采样 | **决策问题** | **已拍板（2026-11-03）：随 C1 取 A，保留并注明** |
 | C4 | **F.1** ISA 常量头 `INST_OPCODE_*`/`INST_TYPE_*`/`INST_EXT_OPCODE_*` 在本树无定义（`include/hw/*.h` 是空壳） | **部分可救** | 扩展操作码**已有厂商枚举**（`SH_EXTENDED/CMPLX/IMG_ATOM/VISION_OPCODE`）→ 可据此**生成** `INST_EXT_OPCODE_*` 头，给 101 条 opcode 里的扩展部分一个厂商依据；**基础 ALU 操作码仍未找到厂商枚举** |
 | C5 | **I.4** 视频解码块的 `word → 厂商名` 无法反查（厂商 1392 条寄存器里**没有视频解码块**，`MWV207REG_DEC*` 只有 2D/3D 的 `DEC400`） | **数据源缺口**，不可修 | 只能沿用驱动自己的三张表（1840 行，已全量还原） |
-| C6 | **I-2** `JMDEC_BITPLANE1_E` 与 `JMDEC_BLACKWHITE_E` **同占 word7 bit30** | **可查证** | 用已还原的 1840 行表核对 bit30 的归属定义；若属笔误 → 改动极小；若真复用 → 只能择一 |
+| ~~C6~~ | **I-2** `JMDEC_BITPLANE1_E` 与 `JMDEC_BLACKWHITE_E` **同占 word7 bit30** | **已做（2026-11-10，`a5a938b`）** | 查证结果＝**真复用**：原厂 `{word,width,shift}` 表里 BITPLANE0/1/2 与 CABAC/BLACKWHITE/DIR_8X8_INFER 在 word7 上逐位同名同址（31/30/29），是按 codec 复用的物理位；H.264 不走 bitplane，故删掉那句 `set_reg(BITPLANE1_E, 0)`（它等于取消单色模式） |
 
 ---
 
@@ -137,7 +137,14 @@ C1/C3（16 位格式 A/B/C）、C2（混合 8/15 是否保留超额声明）、D
 **B10/N14 已修并实测 3D reset 通路**（`22145e9`）；若将来出现"某次 hang 后应用卡死"，仍应首先怀疑它在 2D/DEC/ENC 与 destroy 路径上的残余风险。
 
 **批次 5 — 视频**
-`I-1`（`mwv207_dec_hevc.c:1060` 位深当图像高）与 `I-2` 都是**一行级修复**，但需要真实 HEVC 8 bit 码流做解码验证（可用 ffmpeg 生成 + 逐帧比对）。
+`I-1`（`mwv207_dec_hevc.c:1060` 位深当图像高）与 `I-2` 都是**一行级修复**，已完成
+（`385ed81` / `a5a938b`，验证＝HEVC 8bit/Main10 2 tile 列与软件解码逐位一致、VP9 18/18）。
+`I-3`（H.264 High422/444）**不可实现**，已收回声明：解码寄存器表里没有色度采样格式
+选择器、原厂 `jmgpu_drv_video.so` 的文档串只写 `0=4:0:0 1=4:2:0` 且 `QueryConfigProfiles`
+不声明 422/444、libva 也没有对应 VAProfile —— 三条互相独立（详见 `UNRESOLVED.md` §1.5）。
+`I-4`（H.264 High10 输出全 0）是新发现的**驱动缺陷**：原厂特性表对 `hw_build_id 0x1F76`
+写 `h264_high10_support = 1`，硬件支持，问题在本驱动的位深/输出配置（
+`dec_param.bit_depth` 置位晚于使用、`JMDEC_BIT_DEPTH_OUT_MINUS8` 未写）。
 `D1`（VP9）是独立的、有明确模板的中型实现。
 
 ---

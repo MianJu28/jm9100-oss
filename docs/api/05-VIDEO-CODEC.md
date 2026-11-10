@@ -147,8 +147,8 @@ mwv207_context_video_codec_init(&ctx->base);
 | `PIPE_VIDEO_PROFILE_MPEG4_AVC_EXTENDED` | 44 | ✅ |
 | `PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH` | 45 | ✅ |
 | `PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH10` | 46 | ✅ |
-| `PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH422` | 47 | ⚠️ 声明支持，但解码路径强制 4:2:0（`mwv207_dec_h264.c:1184`） |
-| `PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH444` | 48 | ⚠️ 同上 |
+| ~~`PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH422`~~ | 47 | **已收回声明（2026-11-10，`a5a938b`）**：本机 H.264 硬解只有 4:0:0/4:2:0，422 不可实现，见 `UNRESOLVED.md` §1.5 |
+| ~~`PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH444`~~ | 48 | **已收回声明**，同上 |
 | `PIPE_VIDEO_PROFILE_HEVC_MAIN` | 49 | ✅ |
 | `PIPE_VIDEO_PROFILE_HEVC_MAIN_10` | 50 | ✅ |
 | 其它（含 HEVC_MAIN_12/444、VP9、AV1、VC1…） | 54 | ❌ `return false` |
@@ -584,7 +584,11 @@ H.264 特有部分（`:459-480`）：
 IDR 时调 `idr()` 清空 DPB 并复位 POC（`:1214-1227`，`idr()` 在 `:1163-1170`）、
 算 `my_field_order_cnt[0..1]`（`:1232-1243`）。对 `streams_num > 1` 的每一段额外 stream 都会重新解析
 一次以取 `num_ref_idx_active`（`:1272-1315`）。**`pic_param->pps.sps.chroma_format_idc` 被硬置为 1**
-（`:1184`）——所以 4:2:2/4:4:4 声明（`mwv207_video_codec.c:47-48`）实际跑不出正确结果。
+（`:1184`）——过去据此声明了 4:2:2/4:4:4，但**2026-11-10 已收回**（`a5a938b`）：
+解码寄存器表 1840 项里没有色度采样格式选择器，原厂 `jmgpu_drv_video.so` 的文档串
+也只写 `0=4:0:0 1=4:2:0`、其 `QueryConfigProfiles` 不声明 422/444，libva 更是连对应
+VAProfile 都没有 → 本机物理上只有 4:0:0 与 4:2:0（详见 `UNRESOLVED.md` §1.5）。
+另外 `end_frame` 现在对 `chroma_format_idc > 1` 的码流记一次 ERROR 并跳过解码。
 
 ### 6.5 参考槽寄存器族（`:1964-2084` 与 `RPL`）
 
@@ -634,6 +638,14 @@ IDR 时调 `idr()` 清空 DPB 并复位 POC（`:1214-1227`，`idr()` 在 `:1163-
 
 > `DEC_TAB_SWAP` 在公共块里被置为"非 0"（H.264 分支），而 `JMDEC_DEC_TAB_SWAP` 正好落在 **word 2**——
 > 这就是提交时为什么要把 word 2 单独作为一条命令（§5.2 第 3 条）紧随 word 1 之前发送。
+>
+> **I-4（2026-11-10 新发现，未修）**：H.264 10bit（High10）硬解输出**全 0** —— 10 帧
+> 352×288 样片经 `hwdownload,format=p010` 得到 3041280 B 全零面，而软件解码正常；
+> r16 与当前构建一致，故预先存在。原厂特性表对 `hw_build_id 0x1F76` 写
+> `h264_high10_support = 1`（`mwv207_video_dec_vpu_features_list.h:39`）⇒ 硬件支持，
+> 属本驱动缺陷。可疑点：`dec_param.bit_depth` 直到 `:2330` 才置位，而 `:597`/`:1337`/`:1892`
+> 先用它算尺寸；`JMDEC_BIT_DEPTH_OUT_MINUS8`（word 8，见上表旁）只有 VP9 在
+> `mwv207_dec_vp9.c:1265` 写，H.264/HEVC 都没写。详见 `UNRESOLVED.md` §1.2 的 I-4。
 
 ---
 
@@ -1079,7 +1091,7 @@ refresh flags、frame_context_idx、loop filter、量化 delta、segmentation、
 | 11 | `mwv207_9200_dump_register()`（`reg.c:143-174`） | 函数体开头 `return;`（`:151`）→ dump 被禁用 |
 | 12 | `MWV207DEC_STREAM_SWAP` 展开为 0 | 名字暗示字节序交换，但三个 SWAP 寄存器全写 0。`cfg.h:170-179` 里有一个 `#if 0` 的"原本意图"版本：`SWAP_8\|SWAP_16\|SWAP_32`（= 1\|2\|4 = 7），最终 `#else` 分支写死 0；H.264 的 `DEC_TAB_SWAP` 则取 `SWAP_8\|SWAP_16` = **3**（`video_dec.c:42-49`，`cfg.h:53-55`）。大小端设置实际由 `JMDEC_DEC_OUT_ENDIAN` 承担，而**该寄存器 word=0（空操作）** |
 | 13 | PPU 的 rotation/dither 寄存器 | 驱动会写（`dec_ppu.c` 的 `ROTATION_MODE_U`/`DITHER_SELECT_*_U`），但 `0x1F76` 的 `rotation_support=0`、`dither_support=0` |
-| 14 | `JMDEC_BITPLANE1_E` 与 `JMDEC_BLACKWHITE_E` | 二者都映射到 word 7 的 **bit30**（`BLACKWHITE_E` 由 H.264 在 `:587` 写入，随后 `:2083` 被 `BITPLANE1_E=0` 覆盖）——**疑似寄存器表串行/重复，影响未确认** |
+| ~~14~~ | ~~`JMDEC_BITPLANE1_E` 与 `JMDEC_BLACKWHITE_E` 同占 word 7 bit30~~ | **已查证并已修（2026-11-10，`a5a938b`）**：按原厂 `{word,width,shift}` 表逐条比对，BITPLANE0/1/2 与 CABAC/BLACKWHITE/DIR_8X8_INFER 在 word7 上**逐位同名同址**（bit31/30/29 各 3 个），是**按 codec 复用的同一物理位**，不是串行/重复；H.264 不走 bitplane 模式，故 `:2083` 的 `BITPLANE1_E=0` 等于把单色标志清零 —— 该句已删 |
 | 15 | `MWV207_DEBUG_VIDEO` 调试通路 | 打开时会同步等 fence 并 dump 寄存器流（`cs.c:118-129`），但对解码结果的影响未测 |
 | 16 | `-DUSE_FAKE_RFC_TABLE`（`dec_hevc.c:50`） | 宏定义存在但未见条件编译使用点，作用未确认 |
 

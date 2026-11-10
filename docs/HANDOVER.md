@@ -22,8 +22,8 @@ OpenCL/VA-API/VDPAU 全走我们的栈；自建 KMD 在跑（srcversion `039F972
 | 机器 | Deepin 25 aarch64，内核 `6.6.155-arm64-desktop-hwe`（143 也装了 DKMS 包，但不是启动内核），GPU `[0731:9100]` PCI 07:00.0，HDMI-1 1920×1080@100Hz，无免密 sudo（用 `printf '666\n' \| sudo -S`） |
 | 仓库 | `/home/admin/jm9100-oss`（git，远端 `git@github.com:MianJu28/jm9100-oss.git`，已推送同步） |
 | 源码 | `src/mwv207-umd/`（UMD，唯一可改处；上游树 `ref/oh-mesa/.../src/gallium/{drivers,winsys}/mwv207` 是指向它的符号链接）、`src/kernel-6.6/`（KMD，已并入本仓库） |
-| 已装栈 | `/usr/local/lib/mwv207-oss/`（r16，DRI md5 `01904e3a…`，EGL md5 `300daa41…`；r17 目标值 DRI `2a7c3855…` / VA `1532a20e…`），`/lib/modules/…/updates/dkms/mwv207.ko`（自建 KMD） |
-| 载荷 | 运行中 `payload-41`（`24.1.2-fullstack-r16`）；**`payload-42`（`24.1.2-fullstack-r17`，含 I-1 修复）已生成、`umd check` 通过、未安装**，装用 `sudo ./switch-mwv207.sh umd install`（会重启 lightdm，在本地终端/TTY 执行）；历史快照在 `/var/lib/mwv207-oss/switch-history` |
+| 已装栈 | `/usr/local/lib/mwv207-oss/`（r16，DRI md5 `01904e3a…`，EGL md5 `300daa41…`；**r18 目标值** DRI `7ee8b982…` / VA `b77d9377…`），`/lib/modules/…/updates/dkms/mwv207.ko`（自建 KMD） |
+| 载荷 | 运行中 `payload-41`（`24.1.2-fullstack-r16`）；**`payload-42`（`24.1.2-fullstack-r18`，含 I-1/I-2/I-3）已生成、`umd check` 与预验证通过、未安装**，装用 `sudo ./switch-mwv207.sh umd install`（会重启 lightdm，在本地终端/TTY 执行）；历史快照在 `/var/lib/mwv207-oss/switch-history` |
 | 快速回归副本 | `/tmp/gd3/`（测试用；`/tmp` 是 7.8G tmpfs，重启即空，记得清理大文件）。实验构建流程：改 `src/mwv207-umd` → `ninja -C ref/oh-mesa/User_source_code/mesa-24.1.2/build-full src/gallium/targets/dri/libmwv207_dri.so` → `cp` 到 `/tmp/gd3/` → 用 `LIBGL_DRIVERS_PATH=/tmp/gd3 MESA_LOADER_DRIVER_OVERRIDE=mwv207` 测 |
 | 出包安装 | `./tools/make-payload.sh -v 24.1.2-fullstack-rN` → `printf '666\n' \| sudo -S ./switch-mwv207.sh umd install --force`（**install 调用常显示 interrupted，实装已完成——必须用 `status` + md5 比对确认，勿盲目重跑**） |
 | 构建陷阱 | 性能实验必须用 `build-full`（`build-glvnd` 是旧二进制）；`meson setup --wipe` 会把 glvnd 从 auto 变 enabled → 必须显式 `-Dglvnd=false -Dgles1/2=enabled` |
@@ -112,6 +112,15 @@ OpenCL/VA-API/VDPAU 全走我们的栈；自建 KMD 在跑（srcversion `039F972
   `READ_ONCE`/`WRITE_ONCE`；N9 显示侧两处 `BUG_ON(irq == 0)` 改可回退错误。
   两内核已装、initramfs 已刷（srcversion `D5EEF36…`），重启后按
   `docs/UNRESOLVED.md` §2.2 的判据验证。
+- **UMD 视频批次（`385ed81`/`a5a938b`，载荷 r18 待安装）**：I-1 HEVC tile 缓冲按真实帧高
+  分配（原先拿 `bit_depth_chroma_minus8` 当高度，8bit 时高度为 0）；I-2 H.264 路径删掉
+  `set_reg(BITPLANE1_E, 0)`（与原厂 1840 行表核对：BITPLANE0/1/2 与
+  CABAC/BLACKWHITE/DIR_8X8_INFER 在 word7 上逐位同名同址，是按 codec 复用的物理位，
+  该句把单色标志清掉）；I-3 收回 H.264 High422/High444 声明 —— 寄存器/原厂驱动/libva
+  三重证据表明本机只有 4:0:0 与 4:2:0（细节 `docs/UNRESOLVED.md` §1.5）。
+  验证：HEVC 8bit/Main10 2 tile 列逐位一致、H.264 High 420 逐位一致、VP9 18/18、
+  query 4/4。**新发现 I-4：H.264 High10 输出全 0**（硬件 `h264_high10_support=1`，
+  属本驱动缺陷，非能力缺口），已记入 `docs/UNRESOLVED.md` §1.2。
 
 ### 待办（按价值排序）
 1. **A5：VP9 10bit（Profile 2）/4:2:2** —— 当前 `vp_profile!=0 || bit_depth!=8` 直接拒绝
@@ -128,12 +137,14 @@ OpenCL/VA-API/VDPAU 全走我们的栈；自建 KMD 在跑（srcversion `039F972
    （`mwv207` refcnt 恒为 2，只有 reboot 才释放）。
 6. **性能**：buffer 写入等待的吞吐代价只做了 glxgears 观测（110 FPS 无回退），重负载未量化；
    Firefox WebGL 42–44 FPS 的剩余瓶颈在 WebRender 帧调度。
-7. **UMD r17（I-1）待安装**：`payload-42` 已生成、`umd check` 通过，预验证用的是载荷
-   内的同一份二进制（`libmwv207_dri.so` 跑 glxinfo/glxgears/query 4-4，
-   `libEGL_mwv207` 跑 EGL/GBM smoke 全 OK，`libmwv207_drv_video.so` 跑 8bit/Main10
-   2 tile 列逐位一致与 VP9 回归 18/18）。安装命令 `sudo ./switch-mwv207.sh umd install`
-   **会重启 lightdm**，因此要在本地终端/TTY 执行（在 dsh web 会话里执行会连带杀掉
-   本会话）；装完 `umd status` 应显示 r17，DRI md5 `2a7c3855…`、VA md5 `1532a20e…`。
+7. **UMD r18（I-1/I-2/I-3）待安装**：`payload-42` 已重新生成（r17→r18，原文 r17 载荷被
+   本次修复取代）、`umd check` 通过，预验证用的是载荷内的同一份二进制
+   （`libmwv207_dri.so` 跑 glxinfo/glxgears（~100 FPS）/query 4-4，
+   `libEGL_mwv207` 跑 EGL/GBM smoke 全 OK，`libmwv207_drv_video.so` 跑 HEVC 8bit/Main10
+   2 tile 列逐位一致、H.264 High 420 逐位一致、VP9 回归 18/18）。安装命令
+   `sudo ./switch-mwv207.sh umd install` **会重启 lightdm**，因此要在本地终端/TTY 执行
+   （在 dsh web 会话里执行会连带杀掉本会话）；装完 `umd status` 应显示 r18，
+   DRI md5 `7ee8b982…`、VA md5 `b77d9377…`。
 8. **DKMS 一致性**：改 KMD 源码后必须重跑 `tools/dkms-sync.sh`（它会 dkms build/install
    两个内核）。注意 `switch-mwv207.sh kmd stage` 会用仓库构建的 .ko 覆盖 DKMS 安装路径，
  `dkms status` 会因此重新报 `Diff between built and installed module!`——差异来自
@@ -152,7 +163,7 @@ C-2 16 位采样编码（硬件边界）、D7 Vulkan、C-5/C-6、N10、openuuyc 
 |---|---|---|
 | C1/C3 | R16G16_UNORM/R16_SNORM/R16G16_SNORM 采样恒 0。**2026-11-03 已定位为硬件边界**：把正常纹理强制换码 0x36 也读 0，而码 7/24–26 正常，tiling/align/NORM/new-mode/bit23/31 全无效 → 0x1F76 不解码归一化 16 位码 0x32–0x36。10bit **解码面**已随 `f0c7605` 启用（P010/P016 + DRM_PRIME_2 导出逐位验证） | A 保留声明+文档注明 / B 回退只留 R16_UNORM / C 继续逆向（已证伪：非编码问题，2026-11-03） |
 | C2 | 高级混合 8/15（7 种方程静默不混合） | 保留声明 = 原生 GLES 3.2 的必要代价 / 撤销则 GLES 3.2 退回 3.1 |
-| I-3 | H264 High422/444 声明 vs `chroma_format_idc=1` 硬置 | 修 set_regs 传真实 chroma_format（硬件能力需实测）/ 删两行 vainfo 声明 |
+| ~~I-3~~ | ~~H264 High422/444 声明 vs `chroma_format_idc=1` 硬置~~ | **已定案（2026-11-10，`a5a938b`）**：硬件只有 4:0:0/4:2:0（寄存器表无采样格式选择器、原厂驱动只声明 ConstrainedBaseline/Main/High、libva 无对应 VAProfile）→ **不可实现，已收回声明**；细节见 `docs/UNRESOLVED.md` §1.5。另新增 **I-4**：H.264 High10 输出全 0（硬件 `h264_high10_support=1`，属本驱动缺陷） |
 
 ## 7. 每次交付的标准流程
 

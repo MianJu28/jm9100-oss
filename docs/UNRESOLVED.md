@@ -1,8 +1,9 @@
 # 未修复缺陷与未实现功能 · 总清单
 
 > 汇总截至 **2026-11-10**（运行中的 UMD 是 **r16**，`payload-41/VERSION = 24.1.2-fullstack-r16`；
-> 含 I-1 修复的 **`payload-42`（r17）已生成并预检通过、尚未安装**；内核
-> `6.6.155-arm64-desktop-hwe`），对应外层仓库工作树（含 `src/mwv207-umd/` 分层）。
+> 含 I-1/I-2/I-3 修复的 **`payload-42`（r18）已生成并预检通过、尚未安装**；内核
+> `6.6.155-arm64-desktop-hwe` 侧另有待重启生效的 `D5EEF36617A4D3FBF4AFD1D` 一批），
+> 对应外层仓库工作树（含 `src/mwv207-umd/` 分层）。
 > 取代散落在 `api/06-KNOWN-ISSUES.md`、`api/11-FIX-FEASIBILITY.md` 里的分散记录：
 > 本文件是**唯一索引**，那两个文件保留历史细节与推导过程。
 >
@@ -59,6 +60,7 @@ N1 / N2 / K12 / K9-② / N9（见 §2.2）。剩下的是 N4 / K9-① / K11 / N1
 | 3 | VAAPI/VP9 | **B2 真正的跨尺寸参考未验证** | 已有"缺参考/尺寸不同即拒绝"的保护（`72f9523`），缩放路径未跑通；需自写 VAAPI 客户端 | `docs/HANDOVER-VP9.md` §10 B2 |
 | 4 | KMD | **N14 已修，重启后已验证生效** | 修复见 §2.1（`22145e9`）；运行中 srcversion 已是 `039F972EFE3279A155EE225`，GL/query/VP9 回归全过；reset 通路已用 `tests/n14-reset/` 探针实测（6 轮 TDR、force_complete 6/6） | 本文 §2.1 |
 | 4b | KMD | **N1/N2/K12/K9-②/N9 已修，待重启生效** | 修复见 §2.2（`6502f19`）；新模块 `D5EEF36617A4D3FBF4AFD1D` 已装到两个内核并刷新 initramfs，重启后需按 §2.2 判据验证 | 本文 §2.2 |
+| 4c | UMD 视频 | **I-4：H.264 High10 硬解输出全 0**（硬件 `h264_high10_support=1`，属本驱动缺陷；旧驱动同样） | 10bit H.264 无法解出画面（VA 仍声明 High10，客户端会拿到全 0 面）；判据＝与软件解码逐位一致 | 本文 §1.2 / `api/05-VIDEO-CODEC.md` §6.7 |
 | 5 | KMD | 剩余 N4/K9-①/K11/N10 | 竞态/健壮性/显示边界，多为低概率；刻意留到下一批（需重构或硬件实测，见 §2.2 末尾） | 本文 §2 |
 | 6 | 切换脚本 | **vendor 态端到端未实跑** | `stack vendor` 会重启，需人工确认；热切换已证不可行（refcnt 恒 2） | `switch-mwv207.sh` / §5 |
 | 7 | 打包 | **DKMS 一致性警告（走 stage 时会复现，已记录处理步骤）** | `tools/dkms-sync.sh` 重建后两个内核都干净；`kmd stage` 直接覆盖仓库构建的 .ko 会让 6.6.155 重新报 `Diff between built and installed module!`，用 `dkms install --force` + `depmod` + `update-initramfs` 恢复即可 | §2.1、§5 |
@@ -118,6 +120,7 @@ N1 / N2 / K12 / K9-② / N9（见 §2.2）。剩下的是 N4 / K9-① / K11 / N1
 
 | # | 位置 | 问题 | 当前证据 | 建议 |
 |---|---|---|---|---|
+| **I-4** | H.264 10bit 解码路径（`video-codec/mwv207/mwv207_dec_h264.c` = `dec_param.bit_depth` 在 `:2330` 才置位，`:597`/`:1337`/`:1892` 先用了它；`JMDEC_BIT_DEPTH_OUT_MINUS8` 只有 VP9 在写） | **H.264 High10（10bit）硬解输出全 0**：10 帧 352×288 High10 样片，`hwdownload,format=p010` 得到的 3041280 B 里 1520640 个 u16 采样**全为 0**，而软件解码同文件正常（≈290 起）。新旧驱动（r16 与当前构建）行为一致 ⇒ 不是本次改动引入 | **【实测】硬件支持**：原厂 `mwv207_video_dec_vpu_features_list.h:39` 对 `hw_build_id = 0x1F76` 写 `h264_high10_support = 1`，`h264_support = 3`；故属本驱动实现缺陷而非能力缺口。VA 侧 High10 声明暂保留（待修 I-4） | 按 `JMDEC_BIT_DEPTH_OUT_MINUS8` + 位深相关的 buffer/PPU 配置排查；判据＝与软件解码逐位一致（HEVC Main10 同法已通过） |
 | **E1** | `mwv207_draw.c:751-754` | `color_8` 四个分量都 `<< 8` | **【实测更正】不是高位覆盖**：`/tmp/blendcolor` 用 `glBlendFunc(GL_CONSTANT_COLOR, GL_ZERO)` + `glBlendColor(0.5,0.25,0.125,1.0)` 实测，llvmpipe `(26,26,19,204)`（= 期望值），我们 `(25,25,19,204)` —— **只差 1 LSB，A 通道完全正确**，说明硬件确实按"低 8 位 + 某个位宽"解释了该寄存器，没有互相覆盖。原文档"高位互相覆盖"的判断作废 | 不改（按目标字段宽度改移位缺乏验证手段，可能引入真错）；如需精确到 0 LSB 再查 `0x509` 定义 |
 | ~~E2~~ | `mwv207_draw.c` | ~~`static uint32_t draw_count` 跨 context 共享~~ | **已修**（2026-11-02）：移入 `struct mwv207_context` 的 `uint32_t draw_count;`，`mwv207_config_draw()` 读写 context 字段 | — |
 | **E6** | `mwv207_query.c:108,201,284` | `TIMESTAMP` / `TIMESTAMP_DISJOINT` 用 **CPU** `os_time_get_nano()`，不是 GPU 时间戳 | 【复核】三处均 `os_time_get_nano()`；【实测】`GL_TIMESTAMP` 返回 ≈31.7 小时 = CPU 开机时长 | **不改**（复核：与 llvmpipe 同为 CPU 时钟语义，行为一致；硬件时间戳寄存器 `0x00490/0x00494` 虽存在，切换属功能改动而非缺陷修复，且需整条 query 路径验证） |
@@ -134,7 +137,7 @@ N1 / N2 / K12 / K9-② / N9（见 §2.2）。剩下的是 N4 / K9-① / K11 / N1
 | **C1** | `R16G16_UNORM` / `R16_SNORM` / `R16G16_SNORM` **采样恒 0**。数据本身已字节精确（强制 LINEAR 修好了上传）。**【2026-11-03 定位：硬件不解码，非编码未解】**把工作正常的 `R16_FLOAT` 纹理强制换成扩展码 `0x36`（R16_SNORM）后也读 0，而同一纹理/同一描述符用码 `7`（RF16）正常；`0x32–0x36`（RGBA16/RG16/R16 归一化）全为 0。16 位**整数**码 `24/25/26` 与 16 位浮点码 `7/8/9` 均取数正确（R16UI 0x3C00 读出 0.234379=15360/65535），上传/读回字节精确；tiling 与 LINEAR、`align`、`TX_CONFIG2.NORM_*`、`TX_CONFIG3.ENABLE_NEW_MODE`、`TX_EXT_CONFIG` bit23/bit31 逐位试验均无变化 → 0x1F76 对归一化 16 位取样返回 0。**【2026-11-03】10bit 解码面已启用**：`f0c7605` 让 P010/P016 在 R16/R16G16 `SAMPLER_VIEW` 受支持时通过（VA 前端据此广播 YUV420_10BPP）；真机 HEVC Main10 硬解 + DRM_PRIME_2 导出与软件解码逐位一致。**仍剩**：这些格式的 GL 采样恒 0 → 10bit 帧经 GL 采样/缩放仍错（`hwdownload` 走导出，不受影响）；`src/mwv207-umd/drivers/mwv207/mwv207_format.c` 已加注释记录该结论 | **A（已采纳 2026-11-03，用户要求“尽可能保留完整功能”）** 保留声明并注明（采样不可用但上传/读回/渲染目标可用）/ **B** 回退到只留 `R16_UNORM` / **C** 继续追编码（已证伪） |
 | **C2** | 高级混合**只有 8/15** 个方程。硬件仅实现 MULTIPLY/SCREEN/OVERLAY/DARKEN/LIGHTEN/HARDLIGHT/DIFFERENCE/EXCLUSION；`0x9–0xF` 实测**把帧缓冲清零** | 【实测】属真实硬件缺口 | **保留超额声明（已采纳 2026-11-03，用户要求“尽可能保留完整功能”）：维持原生 GLES 3.2**，文档注明 7 个方程不可用；撤销 cap 会丢 GLES 3.2 |
 | **C3** | `ARB_ES3_compatibility` 建立在 C1 那 6 个格式声明上，其中 3 个实际不可采样 → 用 ETC2/EAC 的应用**渲染错误但不崩** | 依赖 C1 | **随 C1 采 A（2026-11-03）：保留声明并注明**；如改 B 则同步回退 |
-| **I-3** | 能力表宣告 H264 含 **High422 / High444**，但解码器**硬置** `chroma_format_idc = 1`（`video-codec/mwv207/mwv207_dec_h264.c:1184`）→ 实际只走 4:2:0 | 【复核】硬置行仍在 | 诚实路线：取消两个 profile 声明；实现路线：改硬置值（大，需硬件验证） |
+| ~~I-3~~ | ~~能力表宣告 H264 含 **High422 / High444**，但解码器**硬置** `chroma_format_idc = 1`~~ | **已定（2026-11-10，`a5a938b`）：不可实现，已收回声明**。证据见 §1.5 | — |
 
 ### 1.4 编译器 / 工具链（不影响渲染正确性）
 
@@ -150,6 +153,32 @@ N1 / N2 / K12 / K9-② / N9（见 §2.2）。剩下的是 N4 / K9-① / K11 / N1
 > F 类只影响**反汇编输出可读性**（调试工具），不影响编译与渲染。
 > 但因为 ISA 常量头缺失（F.1），反汇编表是 opcode 数值的**唯一交叉验证来源**，所以修它有额外价值。
 > 现况（2026-11-03）：F.3.1–F.3.3 已修，F 类只剩上表 **F.4 的残余条目**。
+
+### 1.5 H.264 4:2:2 / 4:4:4 不可实现（I-3，2026-11-10 已收回声明）
+
+**结论**：本机 H.264 硬解只有 **4:0:0** 与 **4:2:0** 两种色度采样，"做真正的 4:2:2/4:4:4 支持"在寄存器层面无法实现；`a5a938b` 已从 `mwv207_profile_supported()` 与
+`mwv207_is_video_format_supported()` 收回 `PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH422/HIGH444`，并在 `end_frame` 加一道 `chroma_format_idc > 1` 就记 ERROR 并跳过解码的防线。
+
+**证据链**（三条互相独立）：
+
+1. **解码寄存器表没有采样格式选择字段**：`mwv207_video_dec_8170table.h` 全部 1840 项里与色度相关的只有 word7 bit30 的
+   `JMDEC_BLACKWHITE_E`（语义＝`chroma_format_idc == 0` 单色）；没有任何 420/422/444 选择器。HEVC 侧同样没有。
+2. **原厂闭源驱动自己也不声明**：从 `ref/vendor-1.8.0/mwv207-dev_1.8.0.uos_arm64.deb` 解出的 `jmgpu_drv_video.so`（1.8.0），
+   `strings` 里寄存器文档写明 `chroma format idc. 0=4:0:0. 1=4:2:0`；反汇编 `jmgpu_QueryConfigProfiles`（符号 `0x127b0`）得到
+   其 H.264 profile 表 = `(13, 6)` 即 ConstrainedBaseline + Main，再追加 `7`＝High；其余仅有 JPEG(12)、HEVC Main/Main10(17/18)、
+   VP9 P0/P1/P2(19/20/21) 与条件性的 15/16。**没有 422/444。**
+3. **libva 侧根本无法表达**：`/usr/include/va/va.h`（libva 1.22）的 `VAProfile` 枚举里不存在 `VAProfileH264High422/High444`
+   （只有 `VAProfileH264High10 = 36` 与 HEVC 的 422/444 系列 24–28）⇒ 原声明在 VAAPI 上本就是**不可达的死代码**。
+
+**实测（`LIBVA_DRIVERS_PATH=/tmp/gd3`，High422 样片 `libx264 -profile:v high422 -pix_fmt yuv422p`）**：
+ffmpeg `-hwaccel vaapi` 能建 device，但 `hwdownload` 报 `Function not implemented`（exit 218）取不出画面；
+给驱动 `end_frame` 临时插桩后计数为 **0** —— 该流根本走不到驱动解码入口，`5 frames decoded / 0 decode errors` 是 ffmpeg 侧的假计数。
+收回声明前后此行为一致（VAAPI 前端只向驱动要 `is_video_format_supported()` 认可的 NV12/P010 面，422 面从未被广播）。
+
+**回归**（同一次构建）：HEVC 720p 8bit/Main10 各 2 tile 列与软件逐位一致；H.264 High 420 逐位一致；VP9 18/18；
+`vainfo` 只剩 ConstrainedBaseline/Main/High/High10 + HEVC Main/Main10 + VP9P0；GL 侧 glxinfo/glxgears/query 4/4 均无变化。
+
+> 相关新发现见 §1.2 的 **I-4**（H.264 High10 输出全 0，硬件其实支持，属本驱动缺陷）。
 
 ---
 
@@ -271,7 +300,7 @@ N1 / N2 / K12 / K9-② / N9（见 §2.2）。剩下的是 N4 / K9-① / K11 / N1
 | # | 目标 | 可行性 | 状态 / 缺口 |
 |---|---|---|---|
 | **D1** | **VP9 解码** | **中-高**（最可行） | 切片解析器 + bool 解码器**已编入库但零调用者**；唯一缺口是 `mwv207_video_dec.c` 里 `mwv207_dec_vp9_set_regs()` **无 VP9 分支**（`grep vp9 mwv207_video_dec.c` 仅命中注释/头文件）。有 H264（10 个 `set_regs`）/HEVC（7 个）作模板，1840 行解码寄存器表已全量还原。**本机芯片档位已确认**：`mwv207_dec_h264.c:2321` 与 `mwv207_dec_hevc.c:1231` 都硬编码调用 `mwv207_video_dec_get_hw_features_by_id(0x00001F76, ...)`，而 `mwv207_video_dec_vpu_features_list.h:29-36` 的 `0x00001F76` 档 `vp9_support=1`、`vp9_profile2_support=1` → **硬件确实支持 VP9（含 Profile 2）**。需真实 VP9 码流验证 |
-| **D2** | **H264 4:2:2 / 4:4:4** | 二选一 | 见 1.3 的 I-3：要么取消声明，要么改 `chroma_format_idc` 硬置并做硬件验证 |
+| ~~D2~~ | ~~**H264 4:2:2 / 4:4:4**~~ | **已定案（2026-11-10）：不可实现** | 原 I-3 二选一已终结 —— 硬件只有 4:0:0/4:2:0，已收回声明（`a5a938b`），见 §1.5；`chroma_format_idc` 硬置保持 1，另加 `chroma_format_idc>1` 即跳过解码的防线 |
 | **D3** | **编码（H264/HEVC）** | 大（从零） | UMD 侧 `base.encode_bitstream` **从未安装**（全树 0 处）；KMD 有 `mwv207_pipe_enc.c`。硬件侧有 HEVC 编码证据（闭源串含 `jmenc/source/hevc/hevcencapi.c`） |
 | **D4** | 4 个未实现的扩展 opcode：`WAIT_GROUP_EVENT`(0x11) / `TD_OP`(0x12) / `TEX_INVALIDATE`(0x14) / `PRE_NORM`(0x15) | 小-中 | 厂商枚举齐全（`MWV207REG_SH_EXTENDED_OPCODE`），需逐个确定语义 |
 | **D5** | 开启三个窥孔 `OPT_DIV` / `OPT_FFMA` / `OPT_SET`（默认全关） | 小改动 + 大验证 | 潜在性能收益，需全量着色器回归 |
@@ -289,7 +318,7 @@ N1 / N2 / K12 / K9-② / N9（见 §2.2）。剩下的是 N4 / K9-① / K11 / N1
 | **C-4** | ISA 常量头 `INST_OPCODE_*` / `INST_TYPE_*` 在本树无定义（`include/hw/*.h` 是空壳） | 部分可救 | **扩展**操作码已有厂商枚举（`SH_EXTENDED/CMPLX/IMG_ATOM/VISION_OPCODE`）→ 可据此生成 `INST_EXT_OPCODE_*`；**基础 ALU 操作码仍未找到厂商枚举** |
 | **C-5** | 视频解码块 `word → 厂商名` 无法反查 | 数据源缺口 | 厂商 1392 条寄存器里**没有视频解码块**（`MWV207REG_DEC*` 只有 2D/3D 的 `DEC400`）。只能沿用驱动自己的三张表（1840 行，已全量还原） |
 | **C-6** | 开源驱动 219 个命令寄存器号里 **49 个** 在厂商库中查不到（含 `0xE00–0xEFF` 段） | 部分可解 | 32 个已由闭源 HAL **函数名**给出语义推断（`0x191`=ProgramIndex、`0x401–0x404`=着色器计数、`0x594/0x595/0x596`=tile status 三件套、`0xE05`=绘制使能…）；**17 个闭源也不用**（`0x192/0x281/0x283/0x284/0x28B/0x301–0x306/0x502/0x507/0x509/0x50A/0x6D0/0xE13`）→ 标未确认 |
-| **C-7** | `I-2`：`JMDEC_BITPLANE1_E` 与 `JMDEC_BLACKWHITE_E` **同占 word7 bit30** | 可查证 | 用已还原的 1840 行表核对 bit30 归属；若属笔误则改动极小，若真复用只能择一 |
+| ~~C-7~~ | `I-2`：`JMDEC_BITPLANE1_E` 与 `JMDEC_BLACKWHITE_E` **同占 word7 bit30** | **已查证并已修（2026-11-10，`a5a938b`）**：原厂 `{word,width,shift}` 表里 BITPLANE0/1/2 与 CABAC/BLACKWHITE/DIR_8X8_INFER 逐位同名同址（7/31、7/30、7/29），是**按 codec 复用的同一物理位**，不是笔误；H.264 路径末尾那句 `set_reg(BITPLANE1_E, 0)` 相当于取消单色模式，已删除 | — |
 
 ### 统计口径提醒（避免重蹈覆辙）
 
@@ -308,7 +337,7 @@ N1 / N2 / K12 / K9-② / N9（见 §2.2）。剩下的是 N4 / K9-① / K11 / N1
 | ~~**1**~~ | ~~1.1 全部（W6/W7/W12/E4）+ E9/E10 拼写 + F.3.2/F.3.3~~ | — | **已完成（2026-11-02）** |
 | ~~**2**~~ | ~~E2 / E7 / O4 + GBM-Wayland `err=-13`~~ | — | **已完成（2026-11-02）** |
 | ~~**2b**~~ | ~~E1（降级为 1 LSB，不改）/ E6（复核不改）/ E8（复核不改）/ E3（复核：不可达）/ O5（flush 失败路径已修）~~ | 每条配一个针对性探针 | **已完成（2026-11-03）**：O5 修（`4a19713`）；E1/E6/E8/E3 复核后不改 |
-| **3** | 1.3 的 C1/C2/C3/I-3 | **C1/C2/C3 已拍板（2026-11-03）：全部取“保留声明 + 注明”**（用户要求“尽可能保留完整功能”）；I-3 仍待定 | 不是技术难度，是诚实性取舍 |
+| **3** | 1.3 的 C1/C2/C3/I-3 | **C1/C2/C3 已拍板（2026-11-03）：全部取“保留声明 + 注明”**（用户要求“尽可能保留完整功能”）；**I-3 已定案（2026-11-10）**：用户先选“做真正的支持”，但寄存器/原厂驱动/libva 三重证据表明 4:2:2、4:4:4 在本机 H.264 上不可实现 → 已收回声明，见 §1.5 | C1/C2/C3 是取舍；I-3 是物理不可能 |
 | ~~**4**~~ | ~~真机 `kmd install`（解锁全部 KMD 条目）~~ | — | **已完成（2026-11-02）**：自建模块已在运行（§0），§2 剩余条目均为真实待修缺陷 |
 | **5** | VP9 解码（D1） | 真实 VP9 码流 | 中-大，但模板齐全、可行性最高 |
 | **6** | 编码（D3） | 需真实编码管线（UMD 侧从零） | 大 |
@@ -332,7 +361,8 @@ N1 / N2 / K12 / K9-② / N9（见 §2.2）。剩下的是 N4 / K9-① / K11 / N1
 |---|---|---|
 | 2026-11-10 | KMD：sched 槽位撞车（N1）、3D 在飞上限撞事件表（N2）、超时路径 devfreq 多减（K12）、ISR 影子寄存器数据竞争（K9-②）、显示侧两处 `BUG_ON(irq == 0)`（N9） | `6502f19`（`src/kernel-6.6`；两内核已装、initramfs 已刷，重启后生效） |
 | 2026-11-10 | KMD：3D/2D/DEC/ENC `reset`/`destroy` 对在飞 fence 只 `dma_fence_put` 不 signal（N14），2D `destroy` 不排空 `fence_queue` | `22145e9`（`src/kernel-6.6`；模块已暂存，重启后生效） |
-| 2026-11-10 | UMD：HEVC `tile_buffer_size` 用位深当帧高（I-1），tile 缓冲按错误高度分配 | `385ed81`（`src/mwv207-umd`）；载荷 `payload-42`（r17）已生成并通过 `umd check`，**安装需 `sudo ./switch-mwv207.sh umd install`（会重启 lightdm）** |
+| 2026-11-10 | UMD：HEVC `tile_buffer_size` 用位深当帧高（I-1），tile 缓冲按错误高度分配 | `385ed81`（`src/mwv207-umd`） |
+| 2026-11-10 | UMD：收回 H.264 High422/High444 声明（不可实现，见 §1.5）＋ word7 bit30 复用导致的单色标志被清零（I-2/I-3） | `a5a938b`（`src/mwv207-umd`）；载荷 `payload-42`（r18）已重新生成并通过 `umd check`/预验证，**安装需 `sudo ./switch-mwv207.sh umd install`（会重启 lightdm）** |
 | 2026-11-10 | Firefox 标签栏"微缩 chrome"：buffer 写入前等待 GPU（`mwv207_resource.c`） | `6ec1e17`（`src/mwv207-umd`） |
 | 2026-11-10 | mesa：`loader_dri3_query_buffer_age()` 恒 0（我们不做交换后缓冲保留） | `248659c`（`ref/oh-mesa`，本地） |
 | 2026-11-07 | Firefox 字形/图标撕裂：上传暂存 BO 延迟释放（`retired_staging` 环） | `f8f693a`（`src/mwv207-umd`） |
