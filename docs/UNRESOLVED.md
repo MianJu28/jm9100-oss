@@ -69,7 +69,7 @@ modinfo /lib/modules/…/updates/dkms/…    -> srcversion 0EFB7F4433EA5311B08E8
 | # | 领域 | 未解决项 | 影响 | 位置 |
 |---|---|---|---|---|
 | 1 | VAAPI/VP9 | **A5：Profile 2（10bit 4:2:0）已支持；4:2:2/4:4:4 定案不可实现** | 2026-11-10 `82e7b02`：Profile 2 与软件解码**逐位一致**（64x64/640x360/720p60/1080p30，含 inter 帧，零 TDR），默认声明，`MWV207_VP9_10BIT_DISABLE=1` 可关。Profile 1/3 与 H.264 422/444 同理不可实现：解码器没有色度采样格式选择字段（§1.5）。**残余**：12bit VP9 未验证（代码只放行 10bit） | 本文 §1.6 |
-| 2 | VAAPI/VP9 | **B3 intra-only 非关键帧样片缺** | 该分支未上机验证；本机编码器产不出 | `docs/HANDOVER-VP9.md` §10 B3 |
+| 2 | VAAPI/VP9 | **B3 样片到手，但暴露 I-5：官方 intra-only 向量硬件解码与 libvpx 不一致**（4 个解码帧 DIFF、3 个 `show_existing` 帧一致；已排除比对方法/尺寸/解析层） | 本机编码器产不出 intra-only 帧，已改用 WebM 官方向量并做成 `tests/vp9-intraonly/` 诊断脚本；**I-5 未定位**，暂不能宣告 B3 通过 | 本文 §1.7 |
 | 3 | VAAPI/VP9 | **B2 真正的跨尺寸参考未验证** | 已有"缺参考/尺寸不同即拒绝"的保护（`72f9523`），缩放路径未跑通；需自写 VAAPI 客户端 | `docs/HANDOVER-VP9.md` §10 B2 |
 | 4 | KMD | **N14 已修，重启后已验证生效** | 修复见 §2.1（`22145e9`）；运行中 srcversion 已是 `039F972EFE3279A155EE225`，GL/query/VP9 回归全过；reset 通路已用 `tests/n14-reset/` 探针实测（6 轮 TDR、force_complete 6/6） | 本文 §2.1 |
 | 4b | KMD | **N1/N2/K12/K9-②/N9 已修，重启后已验证生效** | 修复见 §2.2（`6502f19`）；2026-11-10 13:29 重启后 srcversion = `D5EEF36617A4D3FBF4AFD1D`，GL/query 4·4/VP9 18·18/H.264 8bit 逐位一致/N14 探针 6·6 全过，dmesg 无 WARN/BUG；引擎计数用 `tests/engines/` 核对（lite 机型 3d=1 dec=1 enc=0 2d=1 dma=1） | 本文 §2.2 |
@@ -78,6 +78,7 @@ modinfo /lib/modules/…/updates/dkms/…    -> srcversion 0EFB7F4433EA5311B08E8
 | 4e | KMD | **20 处 `BUG_ON` 已收敛为可恢复错误，重启后已验证生效** | `53b3229`：用户提交路径仍可能触发的那几处（`mem_type` 非 VRAM/TT、`reloc->idx` 越界、DMA `cmd_size` 不符、3D 事件槽耗尽）现在返回 `-EINVAL`/`-EIO`/`-EBUSY`；寄存器/ring 描述符类改 `WARN_ON_ONCE` + 跳过，由 TDR 回收 | 本文 §2.4 |
 | 4f | KMD | **N16 已修，重启后已验证生效**（新发现）：畸形 submit（`nr_cmd_dat>0` 而 `cmd_dats==NULL`）会让 `mwv207_job_fini()` 空指针解引用 → 内核 oops，任何本地进程可触发 | `c01af40`：清理条件加 `&& mjob->cmd_dats`；配套 `tests/bad-submit/` 9 个用例（默认不跑，老模块会 oops）。两内核已装 `5A5B4018…` | 本文 §2.5 |
 | 4g | KMD | **N17 已修，重启后已验证生效**（新发现）：N4 的异步 DMA 在 `queue_work()` 之后才 `dma_fence_get()`，worker 抢跑时对已释放 fence 做 refcount_inc（`refcount_t: addition on 0; use-after-free`，PC 在 `mwv207_pipe_dma_submit`），等待者可能永远收不到 signal —— 与 16:30 整屏卡死（Xorg 收 SIGTERM 不退、只能 SIGKILL）症状一致 | `1fc9b21`：给调度器的引用在 `queue_work` 之前取；运行中已是 `8DFC520FB8FCDECFBC911AA`，17:55 重启后 `verify-installed.sh --bad-submit` PASS=25，kprobe 压测 submit/complete 2052·2052 平衡、refcount 告警 0、X 最大延迟 5 ms | 本文 §2.6 |
+| 4h | UMD 视频 | **I-5：VP9 intra-only 样片解码不一致（新发现，待定位）** | 官方向量 `vp90-2-16-intra-only.webm`：硬件 7 帧与 libvpx 软件解码比，4 个解码帧全 DIFF、3 个 `show_existing` 一致；参考槽重建正确、输出面可疑 | 本文 §1.7 |
 | 5 | KMD | 只剩 N10（决定只文档化） | K9-① 已核实为与厂商一致（非缺陷）；N10 改为只记录 | 本文 §2.3 |
 | 6 | 切换脚本 | **vendor 态端到端未实跑** | `stack vendor` 会重启，需人工确认；热切换已证不可行（refcnt 恒 2） | `switch-mwv207.sh` / §5 |
 | 7 | 打包 | **DKMS 一致性警告（走 stage 时会复现，已记录处理步骤）** | `tools/dkms-sync.sh` 重建后两个内核都干净；`kmd stage` 直接覆盖仓库构建的 .ko 会让 6.6.155 重新报 `Diff between built and installed module!`，用 `dkms install --force` + `depmod` + `update-initramfs` 恢复即可 | §2.1、§5 |
@@ -244,6 +245,59 @@ Profile 1/3（4:2:2 / 4:4:4）与 H.264 422/444 同理**不可实现**——解�
 | 1080p30 Profile 2 压力（120 帧，g=30） | 746496000 B **IDENTICAL**，全程约 20 s（含 `hwdownload` 回读到用户态），dmesg 零新增超时 |
 | dmesg | 无新增 `timed out`（仅 `tests/n14-reset` 探针的 6 条 3D 超时），无 WARN/BUG |
 | 其余 | H.264 High 420 / HEVC 8bit / HEVC Main10 逐位一致；query 4/4；VP9 回归 18/18；N14 探针 PASS |
+
+### 1.7 B3：intra-only 非关键帧样片到手，硬件解码与 libvpx 不一致（I-5，待定位）
+
+B3 要的是 **intra-only 非关键帧**（`show_frame = 0` 且 `intra_only = 1`；Profile 0 时
+未压缩头不带 color config，按规范默认 BT.601/studio/4:2:0/8bit）。本机 libvpx 产不出
+这种帧 —— `-auto-alt-ref 1` 编 320×240 40 帧，只有 4 个隐藏帧且**全是 inter**，所以在
+`tests/vp9-intraonly/` 里改用 WebM 官方测试向量并做成可复跑的诊断脚本。
+
+**样片**：`vp90-2-16-intra-only.webm`（<https://storage.googleapis.com/downloads.webmproject.org/test_data/libvpx/>，
+175807 B，md5 `70d4afd231a41dd0f0364fec8121fa09`，352×288 Profile 0 8bit）。7 个包，
+包 0 用驱动自带解析器确认为 intra-only 隐藏帧：
+
+```
+res=0 used=19 key=0 intra=1 show=0 showex=0 err=0 prof=0 352x288 refresh=0x01
+tilecols=0 tilerows=0 seg=0 lossless=0 txmode=3 fpar=0 lf=6 sharp=0 qyac=53
+```
+
+注意 `fpar=0`（`frame_parallel_decoding_mode = 0`），而本机 libvpx 编出的关键帧是 `fpar=1`。
+
+**比对结果（r20 载荷，`LIBVA_DRIVER_NAME=mwv207`）**：
+
+| 帧 | 内容 | 硬件 vs libvpx |
+|---|---|---|
+| 0 | intra-only 隐藏帧 | **DIFF**（Y max 244，mean 19.4） |
+| 1 | inter（可见） | **DIFF**（Y max 255，mean 21.5） |
+| 2/3/4 | 单字节 `show_existing_frame` | **IDENTICAL** |
+| 5/6 | inter（可见） | **DIFF**（Y max 255/249，mean 26.8/25.9） |
+
+软件侧 `-c:v libvpx-vp9` 与 `-c:v vp9` 两种解码器逐帧一致，可作参考。
+最小复现：只留包 0（单帧、无任何参考）→ 两边都是 1 帧 152064 B，但**不一致**。
+
+**已排除**：
+- 比对方法：同批次的 `vp90-2-10-show-existing-frame.webm` 硬件与软件 **IDENTICAL**
+  （7 帧 2585088 B）⇒ `hwdownload` 通路、隐藏帧与 `show_existing` 都正常。
+- 尺寸/对齐：本机 libvpx 编的 **352×288 关键帧** 硬件与软件 **IDENTICAL**。
+- 解析层：`src/mwv207-umd/drivers/mwv207/video-codec/common/mwv207_decoder_vp9_slice_header.c:958-1000`
+  的 intra_only 分支与 libvpx `read_uncompressed_header()` 一致。
+
+**当前最可疑处**：`show_existing` 帧（2/3/4）逐字节一致，说明**参考槽里的重建是对的**，
+出问题的是"把重建结果写进应用 surface"这一路（PP/输出面），而不是参考管理；但
+inter 帧（1/5/6）也 DIFF、且它们的预测来自正确参考，说明问题更可能在**输出面写入**或
+**intra 帧的重建在写入输出面时才出错**。目视对比（`tests/vp9-intraonly/` 脚本产出的
+`evidence/*.png`）：布局、色调、位置都对，一批 64×64 级区块整块是乱的，不是色度/范围
+变换，也不是整帧偏移。
+
+**待查方向**：① `fpar=0` 与 `JMDEC_PROB_TAB_*`/计数器交互（驱动只在软件侧做概率自适应）；
+② `refresh_frame_flags = 0x01`（关键帧是 0xFF）时 `REFRAME`/参考槽寄存器的写法，以及
+`JMDEC_IDR_PIC_E = 1` 与"intra-only 但只刷新部分槽位"的组合；③ `frame_tag_size +
+first_partition` 得到的 tile 起点与 libvpx 的实际 partition 大小对账；④ 用
+`dump_state` 的 `current stat/addr/cmdl/cmdh` 对照"only0"与本机 352×288 关键帧的寄存器。
+
+**复跑**：`tests/vp9-intraonly/run-vp9-intraonly.sh`（首次需联网下载样片；`--local DIR`
+可复用已下载文件）。
 
 ---
 
@@ -721,6 +775,8 @@ initramfs 已刷并解包核对（`modinfo -F srcversion` 均为 `8DFC52…`）�
   全跑，普通用户跑会自动跳过需要 root 的两项）、`tests/query/run-query-tests.sh`、
   `tests/engines/run-engines.sh`（引擎计数，N1）、
   `tests/n14-reset/run-n14-reset.sh`（reset 通路，N14/K12）、
+  `tests/vp9-intraonly/run-vp9-intraonly.sh`（B3 诊断：官方 intra-only 向量硬件 vs libvpx
+  逐帧比对，见 §1.7）、
   `tests/bad-submit/run-badsubmit.sh`（畸形提交防御，N16；**老模块上跑会让内核
   oops**，故默认不跑，只在确认模块含 `c01af40` 后用
   `tests/verify-installed.sh --bad-submit` 带上）、`tests/run-all.sh`

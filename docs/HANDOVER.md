@@ -167,7 +167,10 @@ OpenCL/VA-API/VDPAU 全走我们的栈；自建 KMD 在跑（srcversion `D5EEF36
    一致（64x64~1080p，含 inter 帧，零 TDR），默认声明；`MWV207_VP9_10BIT_DISABLE=1`
    可关。4:2:2/4:4:4 定案不可实现（解码器无色度采样格式选择字段）。12bit 未验证。
    这一步**只需装 r20 载荷**，不需要改内核。
-2. **B3：VP9 intra-only 非关键帧样片** —— 本机编码器产不出，需外部样片或自写构造器。
+2. **B3 / I-5：VP9 intra-only** —— 样片已到手（WebM 官方向量 `vp90-2-16-intra-only.webm`，
+   本机编码器产不出该帧类型），但比对照出**新缺陷 I-5**：硬件解码 4 个解码帧与 libvpx
+   不一致（3 个 `show_existing` 帧一致），参考槽重建正确、输出面可疑。诊断脚本
+   `tests/vp9-intraonly/run-vp9-intraonly.sh`，细节见 `docs/UNRESOLVED.md` §1.7。
 3. **B2：真正的跨尺寸参考** —— 已有"缺参考/尺寸不同即拒绝"保护（`72f9523`）；要验证
    "参考自身几何 + hscale/vscale"路径，需要一个自写 VAAPI 客户端（ffmpeg 在分辨率变化时
    会重建 VA context，绕不过去）。
