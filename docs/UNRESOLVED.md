@@ -21,31 +21,28 @@
 两层的卡点性质不同：**UMD 卡在"要不要改 / 改了是否诚实"**，
 **KMD 已不再是卡点**（详见下）。
 
-### KMD 部署状态（2026-11-10 复核）
+### KMD 部署状态（2026-11-10 重启后复核）
 
 此前本节写作"从未真机加载"，**已过时**。实测：
 
 ```
-cat /sys/module/mwv207/srcversion        -> D507FC2774D547E7BEBA182（运行中）
+cat /sys/module/mwv207/srcversion        -> 039F972EFE3279A155EE225（运行中）
 modinfo -n mwv207                        -> /lib/modules/6.6.155-…/updates/dkms/mwv207.ko
-modinfo src/kernel-6.6/mwv207.ko         -> srcversion 039F972EFE3279A155EE225（含 N14）
-modinfo /lib/modules/…/updates/dkms/…    -> srcversion 039F972EFE3279A155EE225（已暂存）
+modinfo src/kernel-6.6/mwv207.ko         -> srcversion 039F972EFE3279A155EE225
+modinfo /lib/modules/…/updates/dkms/…    -> srcversion 039F972EFE3279A155EE225
 ```
 
-运行中的是**上一次自建版**（含 K 系列与 N15），暂存的是 **N14 修复版**，两者
-只差本次提交；重启后 `/sys/module/mwv207/srcversion` 应变为 `039F972E…`，
-届时三项重新一致。运行中的版本包含：
+三方一致 ⇒ **运行中的就是自建版**，且包含：
 - `b0479ba` 移植的 K1 / K3 / K4 / K5 / K6 / K7 / K8 / K10；softdep 就是
   `src/kernel-6.6/mwv207_drv.c:543` 的 `MODULE_SOFTDEP("pre: governor_performance")`；
-- `28bc73d` 修的 N15（零重定位提交未初始化 `drm_sched_job` → `BUG_ON(!entity)`）。
+- `28bc73d` 修的 N15（零重定位提交未初始化 `drm_sched_job` → `BUG_ON(!entity)`）；
+- `22145e9` 修的 N14（reset/destroy 时 signal 在飞 fence，见 §2.1）。
 
-因此 **K 系列修复均已生效**，剩下的是从未做过修复的
+因此 **K 系列与 N14 的修复均已生效**，剩下的是从未做过修复的
 N1 / K11 / N2 / N4 / K9-① / K9-② / K12 / N10 / N9（见 §2）。
-**N14 的修复（`22145e9`）已构建并暂存**：`/lib/modules/6.6.155-…/updates/dkms/mwv207.ko`
-的 srcversion 已是 `039F972EFE3279A155EE225`，但运行中的模块要重启后才换成它
-（见 §2.1）。自建模块会打印 `loading out-of-tree module taints kernel` 与
-`module verification failed: signature and/or required key missing`，属正常（未签名）；
-dmesg 里 GPU 相关错误计数为 0。
+自建模块会打印 `loading out-of-tree module taints kernel` 与
+`module verification failed: signature and/or required key missing`（DKMS 签了名，
+但 MOK 证书没有 enroll 进内核信任链），属既有现象；dmesg 里 GPU 相关错误计数为 0。
 
 ---
 
@@ -58,7 +55,7 @@ dmesg 里 GPU 相关错误计数为 0。
 | 1 | VAAPI/VP9 | **A5 10bit（Profile 2）与 4:2:2 未实现** | 只能解 Profile0 8bit；Profile1/2 被显式拒绝（放开会让 ASIC 自旋挂死整机） | `docs/HANDOVER-VP9.md` §10 A5 |
 | 2 | VAAPI/VP9 | **B3 intra-only 非关键帧样片缺** | 该分支未上机验证；本机编码器产不出 | `docs/HANDOVER-VP9.md` §10 B3 |
 | 3 | VAAPI/VP9 | **B2 真正的跨尺寸参考未验证** | 已有"缺参考/尺寸不同即拒绝"的保护（`72f9523`），缩放路径未跑通；需自写 VAAPI 客户端 | `docs/HANDOVER-VP9.md` §10 B2 |
-| 4 | KMD | **N14 已修，待重启生效** | 修复见 §2.1（`22145e9`）；新模块已暂存（`039F972EFE3279A155EE225`），当前运行仍是旧版 `D507FC2774D547E7BEBA182`，重启后需跑 GL/VAAPI 回归 | 本文 §2.1 |
+| 4 | KMD | **N14 已修，重启后已验证生效** | 修复见 §2.1（`22145e9`）；运行中 srcversion 已是 `039F972EFE3279A155EE225`，GL/query/VP9 回归全过；reset 通路仍未实跑 | 本文 §2.1 |
 | 5 | KMD | N1/N2/N4/K9-①/K9-②/K11/K12/N10/N9 | 竞态/健壮性，多为低概率 | 本文 §2 |
 | 6 | 切换脚本 | **vendor 态端到端未实跑** | `stack vendor` 会重启，需人工确认；热切换已证不可行（refcnt 恒 2） | `switch-mwv207.sh` / §5 |
 | 7 | 打包 | **DKMS 一致性警告（走 stage 时会复现，已记录处理步骤）** | `tools/dkms-sync.sh` 重建后两个内核都干净；`kmd stage` 直接覆盖仓库构建的 .ko 会让 6.6.155 重新报 `Diff between built and installed module!`，用 `dkms install --force` + `depmod` + `update-initramfs` 恢复即可 | §2.1、§5 |
@@ -156,10 +153,9 @@ dmesg 里 GPU 相关错误计数为 0。
 ## 2. KMD — 未修复缺陷
 
 > 行号以 **6.6 树** `src/kernel-6.6/` 为准（与 5.10 树的行号不同）。
-> **自建 KMD 已经在跑**（`srcversion D507FC2774D547E7BEBA182`，见 §0），
+> **自建 KMD 已经在跑**（`srcversion 039F972EFE3279A155EE225`，见 §0），
 > 所以下表全部是**真实存在于当前系统上**的未修缺陷，不是"待部署"的纸上问题。
-> 下表之外，K1–K8/K10 与 N15 均已修好并在运行；N14 已修（见 §2.1），
-> 新模块已暂存、待重启生效。
+> 下表之外，K1–K8/K10、N15 与 N14 均已修好并在运行。
 
 | # | 级别 | 位置 | 问题 |
 |---|---|---|---|
@@ -196,8 +192,12 @@ dmesg 里 GPU 相关错误计数为 0。
 行为变化只在 reset/卸载路径：原本永远不完成的 job 现在以 `-EIO` 结束；
 `drm_sched_stop()` 已摘除 job 回调，不会误触发 job done。
 
-**部署状态**：`tools/dkms-sync.sh` 已重建并安装到 6.6.155 与 6.6.143 两个内核，
-`switch-mwv207.sh kmd stage` 已刷新 initramfs 并暂存（srcversion
+**部署状态（2026-11-10 已重启验证生效）**：`tools/dkms-sync.sh` 重建并安装到
+6.6.155 与 6.6.143 两个内核；`switch-mwv207.sh kmd stage` 暂存到 `updates/dkms`
+并刷新 initramfs（srcversion `D507FC2774D547E7BEBA182` → `039F972EFE3279A155EE225`）。
+重启后实测 `/sys/module/mwv207/srcversion` = `039F972EFE3279A155EE225`，
+`modinfo -n mwv207` 指向 `updates/dkms`，`dkms status` 两个内核均干净。
+
 > **备注（DKMS 状态）**：`kmd stage` 是把仓库构建的 .ko 直接 `install` 到
 > `/lib/modules/$KVER/updates/dkms/`，与 DKMS 自己构建/签名的副本内容不同，
 > 因此 `dkms status` 会重新出现 `Diff between built and installed module!`。
@@ -206,14 +206,13 @@ dmesg 里 GPU 相关错误计数为 0。
 > 状态：两处 srcversion 均为 `039F…`，initramfs 内那份也已刷新为 `039F…`。
 > 以后每次 `kmd stage` 后若要 `dkms status` 干净，重复这三步。
 
-`D507FC2774D547E7BEBA182` → `039F972EFE3279A155EE225`）。**重启后核对**：
-
-```bash
-cat /sys/module/mwv207/srcversion     # 应为 039F972EFE3279A155EE225
-dmesg | grep -i mwv207 | tail -20     # 无新增 WARN/BUG
-glxinfo -B | head -5                  # 硬件渲染仍正常
-tests/query/run-query-tests.sh        # 见测试环境变量
-```
+**重启后回归（2026-11-10 10:39–10:43）**：
+- `glxinfo -B`：JingjiaMicro MWV207 / Mesa 24.1.2 / GL 4.0 / `Video memory: 2048MB`，accelerated yes；
+- `glxgears` 117 FPS；
+- `tests/query/run-query-tests.sh`（`DRI_DIR=/usr/local/lib/mwv207-oss`）4/4 PASS；
+- `tools/vp9-regression.sh`（系统安装驱动）18/18 OK；
+- `dmesg` 无新增 WARN/BUG/Call Trace；只有 boot 时的 out-of-tree 与未签名告警，
+  外加一条与驱动无关的 `sched: RT throttling activated`（上一轮启动同样出现）。
 
 **残余验证缺口**：reset 通路本身未实跑（需构造 3D/2D/DEC 挂死，有挂死整机
 风险）；本次以编译 + 双内核安装 + 重启后常规回归验证。若将来出现"hang 后

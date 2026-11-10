@@ -9,9 +9,8 @@
 **r16 已部署并验收通过**（`payload-41` / `24.1.2-fullstack-r16`，当前启动内核 `6.6.155-arm64-desktop-hwe`；
 本文早前写的 6.6.143 是升级前的内核，两个版本的 DKMS 模块现在都已同步重建）。
 桌面零 env 下 GL 4.0 / GLES 3.2 / `Video memory: 2048MB`，glxgears 110 FPS；
-OpenCL/VA-API/VDPAU 全走我们的栈；自建 KMD 在跑（srcversion `D507FC2774D547E7BEBA182`，
-DKMS 包 `mwv207-oss/1.0.0`；N14 修复版 `039F972EFE3279A155EE225` 已暂存到
-`updates/dkms` 并刷新 initramfs，**重启后生效**）。**VP9 Profile0 8bit 硬解已与软件逐位一致**（回归 18/18，
+OpenCL/VA-API/VDPAU 全走我们的栈；自建 KMD 在跑（srcversion `039F972EFE3279A155EE225`，
+含 N14 的 reset/fence 修复；DKMS 包 `mwv207-oss/1.0.0`）。**VP9 Profile0 8bit 硬解已与软件逐位一致**（回归 18/18，
 含真实 720p/1080p 影视内容）。**Firefox 两处渲染缺陷已根治**：字形/图标撕裂（`f8f693a`）、
 标签栏"微缩 chrome"（`6ec1e17`）。剩余项见 §5。
 
@@ -100,8 +99,9 @@ DKMS 包 `mwv207-oss/1.0.0`；N14 修复版 `039F972EFE3279A155EE225` 已暂存�
   切换脚本三态（builtin/oss/vendor）已实现，失败回滚 builtin。
 - **N14（KMD，`22145e9`）**：3D/2D/DEC/ENC 的 `reset`/`destroy` 不再丢弃在飞 fence ——
   统一 `dma_fence_set_error(-EIO)` + signal；DEC/ENC 用 `xchg(&current_fence, NULL)`
-  与轮询线程抢槽，杜绝双重 put。新模块 `039F972EFE3279A155EE225` 已暂存，
-  重启后生效；reset 通路本身尚未实跑（构造 hang 有挂死整机风险），
+  与轮询线程抢槽，杜绝双重 put。已在 2026-11-10 重启后生效（运行中即
+  `039F972EFE3279A155EE225`），重启后 glxinfo / query 4·4 / VP9 18·18 / glxgears
+  117 FPS 全过；reset 通路本身尚未实跑（构造 hang 有挂死整机风险），
   见 `docs/UNRESOLVED.md` §2.1。
 
 ### 待办（按价值排序）

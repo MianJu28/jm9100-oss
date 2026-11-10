@@ -1091,7 +1091,7 @@ PLL 硬件命令通道（`mwv207_vcmd.c`）：
 | U2 | `struct mwv207_lli` 的字段布局与 `DMA_MAX_LLI_COUNT` 具体值 | 只在 `mwv207_pipe_dma.c` 内部使用，未逐行读取其定义段（`pipe_dma.c:189-209` 已见 `sar/dar/ts/ctl/llp` 用法） |
 | U3 | 3D 环形缓冲/2D 环形缓冲的"命令打包"格式（`pipe_2d_submit` / `pipe_3d_loadstate` 之前的指针运算） | 属 UMD↔硬件协议细节，已由 `docs/registers/` 系列覆盖；本轮只按依赖核查 |
 | U4 | `mwv207_pipe_codec_common.c` 的软后处理寄存器语义（`wb[i].reg` 表） | 只确认"提交时写、完成后回读"的行为，未逐项解码 |
-| U5 | 管线 `reset`（3D/2D/DEC）丢弃的在飞 fence 是否会导致用户态永久等待（N14） | **已按 §9 的 N14 修法修好（2026-11-10，`22145e9`）**；reset 通路本身仍未实跑（构造 hang 有挂死整机风险），重启后先做常规 GL/VAAPI 回归 |
+| U5 | 管线 `reset`（3D/2D/DEC）丢弃的在飞 fence 是否会导致用户态永久等待（N14） | **已按 §9 的 N14 修法修好（2026-11-10，`22145e9`）**；2026-11-10 重启后已跑常规回归（GL/query/VP9）全过，reset 通路本身仍未实跑（构造 hang 有挂死整机风险） |
 | U6 | N1 在实机上是否真的导致 DEC id1 提交错路由 | 静态代码可证指针别名（`sched_dec[1] == sched_enc[0] == &sched[3]`）；实际影响取决于 UMD 是否使用 `engine_id=1` 的 DEC（`01-WINSYS-KMD.md` O 系列记录 UMD 当前 `engine_id` 恒 0，故当前可能不触发） |
 | U7 | HDMI 384–594 MHz 被拒是否有意为之（如 PHY/板级限制） | 无硬件文档；标为功能限制 |
 | U8 | `0x12c0000` lite 判据在先前的 91/92 变体上是否普遍成立 | 源码只给出该魔数比较；`hdmi.c:1078` 用同一处，逻辑自洽，但未见硬件文档 |

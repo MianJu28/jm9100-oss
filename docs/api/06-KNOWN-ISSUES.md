@@ -345,7 +345,7 @@ K8/K9/K12 引自原报告，本树未复核（KMD 的 `irq.c`/`sched.c`/`ttm.c` 
 | **N1** | **高** | `sched.c:310-314` | 指针算术使 `sched_dec[1]` 与 `sched_enc[0]` **同为 `&sched[3]`** → enc0 的 scheduler 覆盖 dec1，而 `INFO` 仍报 DEC=2；`engine_id=1` 的 DEC 提交会被 **ENC 调度器**执行（丢失 hang_karma 隔离）。当前 UMD `engine_id` 恒 0，故可能尚未触发 |
 | **N2** | 中 | 3D 管线 | `hw_submission = 30` 与硬件事件数 30 **相等**，与源码注释 "must be lower than 30" 冲突 → 事件位图满时存在越界/`BUG_ON` 风险 |
 | **N4** | 中 | `pipe_dma.c:177-186,366` | DMA 提交在 `run_job` 工作线程内忙等最多 **5 s** 并返回 **stub fence** → 调度器工作线程被长占、fence 语义退化 |
-| **N14** | 中 | `pipe_3d.c:301-307`、`pipe_2d.c:212-227`、`pipe_dec.c:136-141` | 三条管线 `reset` 都只 `dma_fence_put` 在飞 fence **而不 signal**；2D 的 `destroy` 还不排空 `fence_queue`（`pipe_2d.c:424-448`）→ **用户态可能永久等待**。**已修：2026-11-10 `22145e9`**（含 ENC），新模块已暂存、重启后生效 |
+| **N14** | 中 | `pipe_3d.c:301-307`、`pipe_2d.c:212-227`、`pipe_dec.c:136-141` | 三条管线 `reset` 都只 `dma_fence_put` 在飞 fence **而不 signal**；2D 的 `destroy` 还不排空 `fence_queue`（`pipe_2d.c:424-448`）→ **用户态可能永久等待**。**已修：2026-11-10 `22145e9`**（含 ENC），重启后已生效（运行中 `039F972E…`） |
 | **N9** | 低 | `kms.c:172`、`hdmi.c:1057` | 仍保留 `BUG_ON`（K8 残留） |
 | **N10** | 低 | HDMI | `mode_valid` 首个条件 `clock >= 384000` 先命中 → **384–594 MHz 全部被拒**；`phy_configure` 恒传 `bpp=8`，PHY 表 10/12 bpp 项不可达 |
 
