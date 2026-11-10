@@ -29,7 +29,7 @@
 
 ### KMD K1–K12
 
-K1/K2/K3/K4/K5/K6/K7/K10 已修复；**K11 仍在**（`mwv207_drv.c:445` 的 `pci_clear_master` 位于移除流程最后）。
+K1/K2/K3/K4/K5/K6/K7/K10 已修复；**K11 已修（2026-11-10 `fbed27f`）**：`mwv207_irq_fini()` 在 `free_irq()` 前硬件清中断使能/挂起，`mwv207_pci_remove()` 补 `pci_disable_device()`（`pci_clear_master` 位置与厂商一致，保留）。
 K8/K9/K12 引自原报告，本树未复核（KMD 的 `irq.c`/`sched.c`/`ttm.c` 本轮未逐行读；另注：系统实际加载的
 6.6 版 `mwv207.ko` 源码不在本仓库）。
 
@@ -334,8 +334,8 @@ K8/K9/K12 引自原报告，本树未复核（KMD 的 `irq.c`/`sched.c`/`ttm.c` 
 | **K8** | **已修** | `irq.c:146-153` 已检查 `irq_create_mapping` 返回值并回退；`kms.c:172` 的 `BUG_ON(va_irq==0)` 由上游保证不触发 |
 | **K8 残留** | **已修（2026-11-10 `6502f19`，重启后已验证）** | `kms.c`/`hdmi.c` 的 `BUG_ON(irq == 0)` 改成 `pr_err` + `-ENODEV` 回退，与 3D/2D 范式一致 → N9 |
 | **K9** | **原机制不成立** | demux 清位是**逐位 W1C** `jdev_write(reg, 1UL<<j)`（`irq.c:44`），不会清掉读后新置位的 bit |
-| **K9 等价风险** | 两处真实（其一已修） | ① VA vblank 处理器**整字回写** `0x9907f4`（`va.c:634-655`，影响 bit12–15）→ K9-①，仍需硬件语义确认；② `irq_enable_reg[]` 被 ISR 无锁读（`irq.c:31`）而 mask/unmask 在 `irq_lock` 内写 → K9-②，**已修（2026-11-10 `6502f19`，`READ_ONCE`/`WRITE_ONCE`）** |
-| **K11** | 仍在 | 与 `01-WINSYS-KMD.md` 一致；耦合解释：**`kms_fini` 必须先于 `irq_fini`** |
+| **K9 等价风险** | 均已定案 | ① VA vblank 处理器整字回写 `0x9907f4`（`va.c:634-655`）→ K9-①：**与厂商源码 `jmgpu_package.c:1158` 的 `j9_handle_attribute_commandery()` 对照后确认不是缺陷**（读值回写就是 W1C 标准清位，厂商连位掩码都相同）；② `irq_enable_reg[]` 被 ISR 无锁读（`irq.c:31`）而 mask/unmask 在 `irq_lock` 内写 → K9-②，**已修（2026-11-10 `6502f19`，`READ_ONCE`/`WRITE_ONCE`）** |
+| **K11** | 已修（`fbed27f`） | 关窗口侧在 `irq_fini()`：`free_irq` 前把 `0x009A8020/24` 使能位清零、按 W1C 清 `0x009A802c/34`；`pci_remove` 补 `pci_disable_device`。耦合解释仍成立：**`kms_fini` 必须先于 `irq_fini`** |
 | **K12** | **已修（2026-11-10 `6502f19`，重启后已验证：6 轮 TDR 无 `busy_count` WARN）** | 原 `sched.c:203-204` 按 `pending_list` 逐个 `devfreq_record_idle` 会多减 `busy_count`；改为新增 `mwv207_devfreq_reset_busy()` 直接清零。"重放无完整性校验"属 `drm_sched` 设计（resubmit 重放 + `hang_limit` 收敛） |
 
 ### H.2 新增发现 N1–N14（择要）
@@ -344,10 +344,10 @@ K8/K9/K12 引自原报告，本树未复核（KMD 的 `irq.c`/`sched.c`/`ttm.c` 
 |---|---|---|---|
 | **N1** | **高** | `sched.c:310-314` | 指针算术使 `sched_dec[1]` 与 `sched_enc[0]` **同为 `&sched[3]`** → enc0 的 scheduler 覆盖 dec1，而 `INFO` 仍报 DEC=2；`engine_id=1` 的 DEC 提交会被 **ENC 调度器**执行（丢失 hang_karma 隔离）。当前 UMD `engine_id` 恒 0，故可能尚未触发。**已修：2026-11-10 `6502f19`**（`MWV207_MAX_SCHED_NR 7` + 显式下标；重启后 `tests/engines/` 核对 lite 机型 3d=1 dec=1 enc=0 2d=1 dma=1） |
 | **N2** | 中 | 3D 管线 | `hw_submission = 30` 与硬件事件数 30 **相等**，与源码注释 "must be lower than 30" 冲突 → 事件位图满时存在越界/`BUG_ON` 风险。**已修：2026-11-10 `6502f19`**（降为 28，重启后无事件表满 `BUG_ON`） |
-| **N4** | 中 | `pipe_dma.c:177-186,366` | DMA 提交在 `run_job` 工作线程内忙等最多 **5 s** 并返回 **stub fence** → 调度器工作线程被长占、fence 语义退化 |
+| **N4** | 中 → **已修**（`fbed27f`） | `pipe_dma.c` | 原：DMA 提交在 `run_job` 工作线程内忙等最多 5 s 并返回 stub fence。现：submit 只启动 + 返回真 fence，完成走本管线有序工作队列睡眠轮询（1500 ms 上限，小于调度器 2000 ms 超时），reset/destroy 以 `-EIO` 收尾 |
 | **N14** | 中 | `pipe_3d.c:301-307`、`pipe_2d.c:212-227`、`pipe_dec.c:136-141` | 三条管线 `reset` 都只 `dma_fence_put` 在飞 fence **而不 signal**；2D 的 `destroy` 还不排空 `fence_queue`（`pipe_2d.c:424-448`）→ **用户态可能永久等待**。**已修：2026-11-10 `22145e9`**（含 ENC），重启后已生效（运行中 `039F972E…`） |
 | **N9** | 低 | `kms.c:172`、`hdmi.c:1057` | 仍保留 `BUG_ON`（K8 残留）。**已修：2026-11-10 `6502f19`**（`pr_err` + `-ENODEV`，重启后启动无报错） |
-| **N10** | 低 | HDMI | `mode_valid` 首个条件 `clock >= 384000` 先命中 → **384–594 MHz 全部被拒**；`phy_configure` 恒传 `bpp=8`，PHY 表 10/12 bpp 项不可达 |
+| **N10** | 低 | HDMI | `mode_valid` 阈值（6.6 树已是 594 MHz）与 `phy_configure` 恒传 `bpp=8`。**决定只文档化（2026-11-10）**：只挡 6K/8K，本机 1080p@100Hz 正常，改判据需显示侧实测、收益极低 |
 
 ### H.3 结构澄清（回答任务书疑问）
 
@@ -427,8 +427,10 @@ K8/K9/K12 引自原报告，本树未复核（KMD 的 `irq.c`/`sched.c`/`ttm.c` 
 - 回归：`tests/tri-test` → `HARDWARE TRIANGLE RENDER: PASS`；`tests/fbo-test` →
   `FBO status: 0x8cd5 COMPLETE` + `FBO HARDWARE RENDER: PASS`；`glxinfo` 仍为
   GL core 4.0 / **GLES 3.2 (git-6cb20bd761)**。
-- 仍未修（2026-11-10 复核）：UMD 的 `E1`/`E6`（实测后决定不改）、KMD 的
-  `N4`/`K9-①`/`K11`/`N10`。
+- 仍未修（2026-11-10 复核）：UMD 的 `E1`/`E6`（实测后决定不改）；KMD 只剩
+  `N10`（决定只文档化）与 20 处 `BUG_ON` 的防御性收敛 —— `N4`/`K11` 已于同日修好
+  （`fbed27f`，待重启生效），`K9-①` 经与厂商源码对照定为非缺陷，见
+  `UNRESOLVED.md` §2.3。
   `I-2`（word7 bit30 复用）与 `I-3`（H.264 422/444 声明）已于同日修好/定案见
   `a5a938b` 与 `UNRESOLVED.md` §1.5；`I-4`（H.264 High10 挂死 DEC 管线）
   同日定案并收回声明见 `4ecca0d`。

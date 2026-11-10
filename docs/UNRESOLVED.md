@@ -1,9 +1,10 @@
 # 未修复缺陷与未实现功能 · 总清单
 
-> 汇总截至 **2026-11-10**（运行中的 UMD 是 **r16**，`payload-41/VERSION = 24.1.2-fullstack-r16`；
-> 含 I-1/I-2/I-3/I-4 修复的 **`payload-42`（r19）已生成并预检通过、尚未安装**；内核
-> `6.6.155-arm64-desktop-hwe` 侧的 `D5EEF36617A4D3FBF4AFD1D` 一批已于 2026-11-10 13:29
-> 重启验证生效），
+> 汇总截至 **2026-11-10**（运行中的 UMD 已是 **r19**，`payload-42/VERSION = 24.1.2-fullstack-r19`，
+> 2026-11-10 13:25 安装、重启后复核 `vainfo` 只剩 ConstrainedBaseline/Main/High + HEVC
+> Main/Main10 + VP9Profile0，H.264 High10 流正确回退、HEVC 8bit 逐位一致；内核
+> `6.6.155-arm64-desktop-hwe` 侧运行中的 `D5EEF36617A4D3FBF4AFD1D` 一批已于 2026-11-10
+> 13:29 重启验证生效，**另有 `0EFB7F4433EA5311B08E88C`（N4/K11）已装待重启**），
 > 对应外层仓库工作树（含 `src/mwv207-umd/` 分层）。
 > 取代散落在 `api/06-KNOWN-ISSUES.md`、`api/11-FIX-FEASIBILITY.md` 里的分散记录：
 > 本文件是**唯一索引**，那两个文件保留历史细节与推导过程。
@@ -41,10 +42,12 @@ modinfo /lib/modules/…/updates/dkms/…    -> srcversion D5EEF36617A4D3FBF4AFD
 - `28bc73d` 修的 N15（零重定位提交未初始化 `drm_sched_job` → `BUG_ON(!entity)`）；
 - `22145e9` 修的 N14（reset/destroy 时 signal 在飞 fence，见 §2.1）；
 - `6502f19` 修的 N1 / N2 / K12 / K9-② / N9（见 §2.2，运行中 srcversion 已是
-  `D5EEF36617A4D3FBF4AFD1D`，2026-11-10 13:29 重启后回归全过）。
+  `D5EEF36617A4D3FBF4AFD1D`，2026-11-10 13:29 重启后回归全过）；
+- `fbed27f` 修的 N4 / K11（见 §2.3）**尚未重启生效**：两内核已装
+  `0EFB7F4433EA5311B08E88C`，initramfs 已刷，运行中仍是 `D5EE…`。
 
-因此 **K 系列、N14 与 §2.2 的 5 条修复均已生效**。剩下的是 N4 / K9-① / K11 / N10
-（见 §2）。
+因此 **K 系列、N14、§2.2 的 5 条修复均已生效**；N4/K11 已构建部署待重启。
+剩下的是 N10（决定只文档化）与 20 处 `BUG_ON` 的防御性收敛（见 §2 / §2.3）。
 自建模块会打印 `loading out-of-tree module taints kernel` 与
 `module verification failed: signature and/or required key missing`（DKMS 签了名，
 但 MOK 证书没有 enroll 进内核信任链），属既有现象；dmesg 里 GPU 相关错误计数为 0。
@@ -63,7 +66,8 @@ modinfo /lib/modules/…/updates/dkms/…    -> srcversion D5EEF36617A4D3FBF4AFD
 | 4 | KMD | **N14 已修，重启后已验证生效** | 修复见 §2.1（`22145e9`）；运行中 srcversion 已是 `039F972EFE3279A155EE225`，GL/query/VP9 回归全过；reset 通路已用 `tests/n14-reset/` 探针实测（6 轮 TDR、force_complete 6/6） | 本文 §2.1 |
 | 4b | KMD | **N1/N2/K12/K9-②/N9 已修，重启后已验证生效** | 修复见 §2.2（`6502f19`）；2026-11-10 13:29 重启后 srcversion = `D5EEF36617A4D3FBF4AFD1D`，GL/query 4·4/VP9 18·18/H.264 8bit 逐位一致/N14 探针 6·6 全过，dmesg 无 WARN/BUG；引擎计数用 `tests/engines/` 核对（lite 机型 3d=1 dec=1 enc=0 2d=1 dma=1） | 本文 §2.2 |
 | 4c | UMD 视频 | **I-4：H.264 High10 已定案（2026-11-10 收回声明）** —— 按当前寄存器配置提交 10bit H.264 会让 DEC 管线挂死（6 次 TDR、输出全 0）；缺 Hantro 的 high10p 位流预转换 | 客户端现在对该类流直接回退（`hwaccel initialisation returned error`），DEC 零超时；原厂闭源驱动同样不声明 High10 | 本文 §1.2 / `api/05-VIDEO-CODEC.md` §6.7 |
-| 5 | KMD | 剩余 N4/K9-①/K11/N10 | 竞态/健壮性/显示边界，多为低概率；刻意留到下一批（需重构或硬件实测，见 §2.2 末尾） | 本文 §2 |
+| 4d | KMD | **N4/K11 已修，待重启生效** | 修复见 §2.3（`fbed27f`）：DMA 提交改异步完成 + 真 fence；移除路径补 `pci_disable_device`。两内核已装、initramfs 已刷（srcversion `0EFB7F4433EA5311B08E88C`），运行中仍是 `D5EE…` | 本文 §2.3 |
+| 5 | KMD | 剩余 N10（只文档化）+ 20 处 `BUG_ON` | K9-① 已核实为与厂商一致（非缺陷）；N10 改为只记录；`BUG_ON` 属防御性收敛，非缺陷修复 | 本文 §2 / §2.3 |
 | 6 | 切换脚本 | **vendor 态端到端未实跑** | `stack vendor` 会重启，需人工确认；热切换已证不可行（refcnt 恒 2） | `switch-mwv207.sh` / §5 |
 | 7 | 打包 | **DKMS 一致性警告（走 stage 时会复现，已记录处理步骤）** | `tools/dkms-sync.sh` 重建后两个内核都干净；`kmd stage` 直接覆盖仓库构建的 .ko 会让 6.6.155 重新报 `Diff between built and installed module!`，用 `dkms install --force` + `depmod` + `update-initramfs` 恢复即可 | §2.1、§5 |
 | 8 | 性能 | buffer 写入等待的吞吐代价未量化 | 仅 glxgears（110 FPS）观测；重负载未测 | 本文 §4 性能 |
@@ -191,14 +195,13 @@ ffmpeg `-hwaccel vaapi` 能建 device，但 `hwdownload` 报 `Function not imple
 > **自建 KMD 已经在跑**（`srcversion D5EEF36617A4D3FBF4AFD1D`，见 §0），
 > 所以下表全部是**真实存在于当前系统上**的未修缺陷，不是"待部署"的纸上问题。
 > 下表之外，K1–K8/K10、N15、N14、N1/N2/K12/K9-②/N9 已修好并在运行
-> （N14 见 §2.1、`6502f19` 一批见 §2.2，均已于 2026-11-10 重启后验证）。
+> （N14 见 §2.1、`6502f19` 一批见 §2.2，均已于 2026-11-10 重启后验证）；
+> **N4/K11 已修（`fbed27f`，见 §2.3，待重启生效）**；K9-① 经与厂商源码对照
+> 确认**不是缺陷**（见 §2.3），N10 决定只文档化。
 
 | # | 级别 | 位置 | 问题 |
 |---|---|---|---|
-| **K11** | 中 | `mwv207_drv.c:439` | `pci_clear_master` 位于移除流程最后；且与 `kms_fini` 必须先于 `irq_fini` 的次序耦合 |
-| **N4** | 中 | `mwv207_pipe_dma.c` | DMA 提交在 `run_job` 工作线程内**忙等最多 5 s** 并返回 **stub fence** → 调度器工作线程被长占、fence 语义退化 |
-| **K9-①** | 中 | `dc/mwv207_va.c:634-655`（约） | vblank 处理器**整字回写** `0x9907f4`（影响 bit12–15），而 demux 清位本该是逐位 W1C |
-| **N10** | 低 | `dc/mwv207_hdmi.c:908-918` `mode_valid` | 6.6 树的判据是 `clock > 594000` → `MODE_CLOCK_HIGH`，另对非 HDMI sink 加 `clock >= 165000` 限制；`phy_configure` 恒传 `bpp=8` 使 PHY 表 10/12 bpp 项不可达。**实测本机 HDMI-A-1 走 1920x1080@100Hz**，未受影响。⚠ 原记录的"384–594 MHz 全被拒"出自 **5.10 树**，6.6 树判据已不同（阈值 594000，非 384000） |
+| **N10** | 低 | `dc/mwv207_hdmi.c:908-918` `mode_valid` | 6.6 树的判据是 `clock > 594000` → `MODE_CLOCK_HIGH`，另对非 HDMI sink 加 `clock >= 165000` 限制；`phy_configure` 恒传 `bpp=8` 使 PHY 表 10/12 bpp 项不可达。**实测本机 HDMI-A-1 走 1920x1080@100Hz**，未受影响。⚠ 原记录的"384–594 MHz 全被拒"出自 **5.10 树**，6.6 树判据已不同（阈值 594000，非 384000）。**决定只文档化**：现有阈值只挡 6K/8K 与深色非 HDMI sink，改判据需要显示侧实测，收益极低（见 §2.3） |
 | 其它 | — | 全树 | `BUG_ON`（不含 `BUILD_BUG_ON`）仍有 **20 处** |
 
 > **已修好并在运行**：K1（flags 位运算）、K3（copy_to_user 返回）、
@@ -321,6 +324,41 @@ ffmpeg `-hwaccel vaapi` 能建 device，但 `hwdownload` 报 `Function not imple
 （正常桌面在飞数远小于 28，`BUG_ON` 未命中即为间接证据）；② `engine_id=1` 的
 DEC1 提交路径在 lite 机型上不存在，无法实测，只能靠非 lite 硬件或代码审查。
 
+### 2.3 N4/K11 修复与 K9-①/N10 定案（2026-11-10，`fbed27f`）
+
+| 项 | 原实现 | 现实现 |
+|---|---|---|
+| **N4 DMA 忙等 + stub fence** | `pipe_dma_commit()` 在 drm_sched 的 `run_job` 工作线程里 `cpu_relax()` 自旋最多 5 s 等引擎完成，`mwv207_pipe_dma_submit()` 最后返回 `dma_fence_get_stub()`（提交即已 signal） | `commit` 拆成 `pipe_dma_start()`/`pipe_dma_wait()`/`pipe_dma_clear_chan()`；submit 只编程 LLI 并启动引擎，分配真实 `dma_fence`（自有 `fence_ops`）经 xchg 放入单槽 `current_fence`，再 `queue_work` 到本管线自己的 `WQ_MEM_RECLAIM` 有序队列；worker 睡眠式轮询（前 200 次短自旋走快路径，之后 `usleep_range`，上限 **1500 ms**，故意小于调度器 2000 ms 超时）→ 清通道 → 失效目的端缓存 → xchg 抢槽 signal+put；`reset`/`destroy` 按 N14 范式 `cancel_work_sync()` + xchg 后以 `-EIO` 完成 |
+| **K11 移除路径/中断窗口** | ① `mwv207_pci_remove()` 只做 `pci_clear_master(pdev)`，缺 `pci_disable_device(pdev)`；② `mwv207_irq_fini()` 直接 `free_irq()`，设备的使能位还在（`0x009A8020/0x24`），共享中断线上可能出一次 `nobody cared` | ① `pci_clear_master()` 之后补 `pci_disable_device()`（与厂商 `jmgpu_insert.c` 的 remove/probe 错误路径同序）；② `free_irq()` **之前**先把两路使能位清零、按 W1C 清掉 `0x009A802c/0x34` 的挂起状态，彻底关掉窗口。`clear_master` 仍留 teardown 末尾（与厂商一致，不再视为缺陷）；注释写明 `kms_fini()` 必须早于 `irq_fini()` 不能动 |
+| **K9-① vblank 整字回写** | 记为疑点：`dc/mwv207_va.c` 里读 `0x9907f4` 后整字写回，被怀疑会误清 bit12–15 之外的状态 | **核实不是缺陷，不改**。厂商源码 `ref/vendor-1.8.0` 解出的 `jmgpu_package.c` 里 `j9_handle_attribute_commandery()`（第 1158 行）正是"读 `0x990000 + J9_MURRHAS`（= `0x9907f4`，`mwv207_driver.h:434`）→ 把读到的值原样写回"，随后按 `(mask >> 12) & 0xf` 逐 crtc `drm_crtc_handle_vblank()`；写回读值就是 W1C 状态寄存器的标准清位。唯一差别：厂商还处理 bit26–29（overlay），我们丢弃这些事件——本驱动没有 overlay 面，无用户可见影响 |
+| **N10 HDMI `mode_valid`** | 记为低级别缺陷 | **决定只文档化，不改**：6.6 树阈值已是 594 MHz，只影响 6K/8K；`bpp=8` 硬编码使 PHY 的 10/12 bpp 项不可达，但改判据要显示侧实测，本机 1080p@100Hz 正常，收益极低 |
+
+**判断依据（N4 为什么值得改）**：DMA 管线承载 TTM 的所有搬移，原来"自旋 5 s + stub
+fence"意味着引擎一旦挂住，调度器工作线程被占死、fence 又永远显示"已完成"，问题会被
+静默吞掉；改成真 fence 后，超时以 `-ETIMEDOUT`、复位以 `-EIO` 显式上报。
+LLI 数组是复用的（`0x400000 / sizeof(lli)` 条），超过约 64 MB 的单次搬移会走中间批次，
+那条路径仍必须同步等待（否则会覆盖引擎正在读的 LLI），代码里保留了
+`pipe_dma_commit()` 并注明原因。
+
+**部署状态（2026-11-10，待重启生效）**：`tools/dkms-sync.sh` 重建并安装到 6.6.155，
+6.6.143 用 `dkms install --force` 补装；两内核 `dkms status` 均 `installed`、无 `Diff`
+警告；两个 initramfs 都已刷新，解包核对
+`updates/dkms/mwv207.ko` 的 srcversion 均为 **`0EFB7F4433EA5311B08E88C`**
+（143 的 `update-initramfs` 又出现一次既有的 `dracut-install` segfault/exit 139，
+重跑即成功，与上次同因，目标文件未被破坏）。运行中仍是 `D5EEF36617A4D3FBF4AFD1D`。
+
+**重启后的判据**：`cat /sys/module/mwv207/srcversion` 应为 `0EFB7F4433EA5311B08E88C`；
+随后 `glxinfo -B`、`tests/query/run-query-tests.sh`（`DRI_DIR=/usr/local/lib/mwv207-oss`）、
+`tools/vp9-regression.sh`、HEVC 8bit/Main10 与 H.264 High 逐位一致（**这三类测试的每一次
+缓冲搬移都走这条改动过的路径，是 N4 的主要功能覆盖**）、`tests/engines/run-engines.sh`
+仍为 `3d=1 dec=1 enc=0 2d=1 dma=1`、`tests/n14-reset/run-n14-reset.sh` 仍 PASS；
+`dmesg | grep -iE "DMA timeout|WARN|BUG"` 应为空（`WARN_ON(pipe->current_fence)`
+是本次新加的重入防御，命中即说明调度器串行假设被破坏）。
+
+**残余验证缺口**：① 异步完成路径只能在重启后验证，之前在运行中的 `D5EE…` 模块上无法
+预跑；② 没有构造"DMA 引擎真的挂住"的场景（需要让引擎停在半路，风险高），
+`-ETIMEDOUT` 分支只有代码审查；③ 中间批次（>64 MB 搬移）仍走同步等待，未单独压测。
+
 ---
 
 ## 3. 未实现功能（新功能，不是修缺陷）
@@ -387,6 +425,7 @@ DEC1 提交路径在 lite 机型上不存在，无法实测，只能靠非 lite 
 
 | 日期 | 项 | 提交 |
 |---|---|---|
+| 2026-11-10 | KMD：DMA 提交忙等 5 s + stub fence（N4）、移除路径缺 `pci_disable_device` 与 `free_irq` 前未在硬件侧关中断（K11） | `fbed27f`（`src/kernel-6.6`；两内核已装、initramfs 已刷，重启后生效） |
 | 2026-11-10 | KMD：sched 槽位撞车（N1）、3D 在飞上限撞事件表（N2）、超时路径 devfreq 多减（K12）、ISR 影子寄存器数据竞争（K9-②）、显示侧两处 `BUG_ON(irq == 0)`（N9） | `6502f19`（`src/kernel-6.6`；两内核已装、initramfs 已刷，重启后生效） |
 | 2026-11-10 | KMD：3D/2D/DEC/ENC `reset`/`destroy` 对在飞 fence 只 `dma_fence_put` 不 signal（N14），2D `destroy` 不排空 `fence_queue` | `22145e9`（`src/kernel-6.6`；模块已暂存，重启后生效） |
 | 2026-11-10 | UMD：HEVC `tile_buffer_size` 用位深当帧高（I-1），tile 缓冲按错误高度分配 | `385ed81`（`src/mwv207-umd`） |

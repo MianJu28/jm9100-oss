@@ -244,7 +244,12 @@
 顺序评估：
 
 - **与 probe 基本逆序，但 `kms_fini` 先于 `irq_fini`**，这不是笔误：`va_irq` 由 kms 自己 `request_irq`（`kms.c:173`），必须在 `irq_domain` 拆除（`irq.c:184-199`）之前释放，否则 `free_irq` 会作用到已析构的域。因此**该顺序在中断耦合上是正确的**。
-- **K11（⚠️ 本树仍在）**：`pci_clear_master` 位于第 10 步，即 `free_irq` 之后。`pci_clear_master` 的作用是清 `PCI_COMMAND_MASTER`、切断设备发起 DMA/中断请求的能力；放在最后意味着从 `free_irq` 到 `pci_clear_master` 之间存在一个窗口，设备仍可拉中断但没有任何 ISR 认领 → 共享中断线上出现未处理中断（`nobody cared` / `irq N: nobody cared`）。判定：**K11 = 仍在（本树确认，`mwv207_drv.c:445`）**，原报告（5.10）行号一致。
+- **K11（已修，2026-11-10 `fbed27f`）**：两处改动 —— ① `mwv207_irq_fini()` 在
+  `free_irq()` **之前**把 `0x009A8020/0x24` 的使能位清零、按 W1C 清掉 `0x009A802c/0x34`
+  的挂起状态，直接关掉"设备还能拉中断线但已没有 handler"的窗口；② `mwv207_pci_remove()`
+  在 `pci_clear_master()` 之后补 `pci_disable_device()`（与厂商 `jmgpu_insert.c` 的 remove
+  与 probe 错误路径同序）。`clear_master` 仍留 teardown 末尾——与厂商一致，不再视为缺陷。
+  以下是原始分析，保留作背景：`pci_clear_master` 位于第 10 步，即 `free_irq` 之后。`pci_clear_master` 的作用是清 `PCI_COMMAND_MASTER`、切断设备发起 DMA/中断请求的能力；放在最后意味着从 `free_irq` 到 `pci_clear_master` 之间存在一个窗口，设备仍可拉中断但没有任何 ISR 认领 → 共享中断线上出现未处理中断（`nobody cared` / `irq N: nobody cared`）。判定：**K11 = 仍在（本树确认，`mwv207_drv.c:445`）**，原报告（5.10）行号一致。
 - 严格逆序还差一点：probe 中 `db_init`（步 10）早于 `vbios_init`（步 11），remove 中 `vbios_fini` 早于 `db_fini`，一致，无需调整。
 
 ### 2.7 生命周期中值得记录的不对称/缺陷
@@ -1053,7 +1058,7 @@ PLL 硬件命令通道（`mwv207_vcmd.c`）：
 | K8 | `irq_create_mapping` 返回值被忽略 | ✅ **已修**；残留 `BUG_ON` 见 9.2 | `irq.c:146-153`、`:170-177` |
 | K9 | demux ISR 的 W1C 竞态丢事件 | ⚠️ **原机制不成立**；有真实但更小的等价问题（VA vblank 整字回写 + 影子无锁） | `irq.c:44`（逐位）vs `va.c:638-641`（整字）、`irq.c:31` |
 | K10 | `ctx.c` `scheds[6]` 无上界检查 | ✅ **已修** | `ctx.c:60`、`:66-67` |
-| K11 | remove 顺序：`pci_clear_master` 在最后 | ⚠️ **仍在** | `drv.c:445`（`free_irq` 之后） |
+| K11 | remove 顺序：`pci_clear_master` 在最后 | ✅ **已修（`fbed27f`）** | 窗口侧在 `irq_fini()` 硬件关中断；`pci_disable_device` 已补 |
 | K12 | timedout_job 循环体语义可疑；重放无完整性校验 | ✅ **已修（2026-11-10 `6502f19`）：改为 `mwv207_devfreq_reset_busy()` 清零 `busy_count`**；"重放无完整性校验"仍属设计限制（`drm_sched_resubmit_jobs` 会重放同一 hang job，靠 `hang_limit` 5 次后 `-ECANCELED` 收敛，`tests/n14-reset/` 实测 6 轮） | `sched.c:203-204`、`:205-208` |
 
 ### 9.2 K8 的残留与 K9/K12 的详细证据
@@ -1071,13 +1076,13 @@ PLL 硬件命令通道（`mwv207_vcmd.c`）：
 | N1 | 高 | `sched[3]` 槽位被 `sched_dec[1]`（dec1）与 `sched_enc[0]`（enc0）共用 → ENC scheduler 覆盖 DEC id1；dec1 的 scheduler 泄漏；INFO 报 DEC=2；`engine_id=1` 的 DEC 提交落到 ENC 调度器 | `sched.c:310-314`、`:335-339`、`:351-355`、`ctx.c:97-130` | **已修（2026-11-10，`6502f19`）**：`sched[]` 扩到 7 + 显式下标（3d=0..1、dec=2..3、enc=4、2d=5、dma=6），遍历用 `MWV207_MAX_SCHED_NR` |
 | N2 | 中 | 3D 的 `hw_submission = 30` 与硬件事件数 30 相等，与源码注释"must be lower"冲突 | `sched.c:319-323`、`pipe_3d.c:302-306` | **已修（2026-11-10，`6502f19`）**：降为 28（`MWV207_3D_HW_SUBMISSION`） |
 | N3 | 中 | DEC/ENC 用 1 ms 周期轮询内核线程推进 fence，无中断；完成延迟与 CPU 占用被动依赖轮询调度 | `pipe_dec.c:81-112`、`pipe_enc.c:90-116` | 改用事件中断（hwirq 表预留），或延长轮询间隔 |
-| N4 | 中 | DMA 提交在 `run_job` 上下文中忙等最多 5 s 并返回 stub fence → 调度器工作线程被长时间占用、fence 语义退化为"同步完成" | `pipe_dma.c:177-186`、`:366` | 改为真实 fence + 中断/轮询 |
+| N4 | 中 | DMA 提交在 `run_job` 上下文中忙等最多 5 s 并返回 stub fence → 调度器工作线程被长时间占用、fence 语义退化为"同步完成" | `pipe_dma.c:177-186`、`:366` | ✅ **已修（2026-11-10 `fbed27f`）**：submit 只启动 + 返回真 fence，完成走本管线有序工作队列睡眠轮询（1500 ms 上限），reset/destroy 以 `-EIO` 收尾 |
 | N5 | 中 | `pipe_dma_destroy`/`pipe_dma_reset` 是 `pr_info("todo")` 空壳；LLI 表靠 `dmam_alloc_coherent`（devres）兜住才不泄漏，但 DMA 通道未被停表 | `pipe_dma.c:129-138`、`:370-375`、`:402-408` | 实现 stop/reset |
 | N6 | 低 | primary plane 的 `rgb_formats[]` 未含 `ARGB2101010`，但 update 分支里有该格式 → 死代码/声明不一致 | `va.c:48-54` vs `:198-201` | 统一格式表 |
 | N7 | 低 | `mwv207_drm_fb_helper_init` 忽略 `crtc_count`/`max_conn_count` 参数（恒传 `num_crtcs`） | `fb.c:35-41`、`:135-139` | 参数生效或删参 |
 | N8 | 低 | `request_irq`/`free_irq` 用 `pdev->irq` 而非 `pci_irq_vector(pdev, 0)` | `irq.c:161`、`:189` | 统一取值方式 |
 | N9 | 低 | `kms.c:172` 与 `hdmi.c:1057` 保留 `BUG_ON(irq == 0)`（3D/2D 已用可回退写法） | `kms.c:172`、`hdmi.c:1057` vs `pipe_3d.c:589-592` | **已修（2026-11-10，`6502f19`）**：改 `pr_err` + `-ENODEV` 回退 |
-| N10 | 低 | HDMI `mode_valid` 的首个条件使 384–594 MHz 全部被拒；`phy_configure` 恒传 bpp = 8，PHY 表 10/12 bpp 项不可达 | `hdmi.c:903-916`、`:858` | 按 sink 能力放宽；按色深选 bpp |
+| N10 | 低 | HDMI `mode_valid` 阈值与 `phy_configure` 恒传 bpp = 8 | `hdmi.c:903-916`、`:858` | **决定只文档化（2026-11-10）**：6.6 树阈值已是 594 MHz（只挡 6K/8K），本机 1080p@100Hz 正常，改判据要显示侧实测、收益极低 |
 | N11 | 低 | `irq_enable_reg[]` 无锁共享（K9 的残留形态） | `irq.c:31` vs `:53-81` | ISR 内也持 `irq_lock` 读影子，或用 `READ_ONCE` |
 | N12 | 低 | `mwv207_i2c_put_byte` 非 static 但无头文件声明；`mwv207_i2c_set_addr` 恒返回 0（不校验 channel，靠 `create` 限 0..5） | `i2c.c:214-233`、`:171-212`、`:252` | 补声明、加校验 |
 | N13 | 低 | probe 第 14 步起的 5 条错误路径不调用 `mwv207_db_fini`（`db_fini` 的置 NULL 防护只在 `err_vbios` 生效） | `drv.c:369-373`、`:414-429` | 统一错误路径 |
@@ -1090,8 +1095,8 @@ PLL 硬件命令通道（`mwv207_vcmd.c`）：
 | 文档原状态 | 本文结论 |
 |---|---|
 | K1–K7、K10 已修 | 一致（逐条给出证据行） |
-| K11 仍在（`drv.c:445`） | 一致 |
-| **K8/K9/K12 未复核** | **本文补齐**：K8 已修（irq 侧）+ 两处残留 `BUG_ON`（N9，2026-11-10 已改为可回退错误）；K9 原机制不成立、但等价风险在 VA/影子两处（影子 K9-② 已于 2026-11-10 用 `READ_ONCE`/`WRITE_ONCE` 修掉，VA vblank K9-① 仍需硬件语义确认）；K12 已于 2026-11-10 改为 `mwv207_devfreq_reset_busy()` 清零（`6502f19`），另发现 3D/2D/DEC 三条管线 reset 丢在飞 fence 不 signal 的疑点（N14，已修 `22145e9`） |
+| K11 已修（`fbed27f`，`irq_fini` 硬件关中断 + `pci_disable_device`） | 一致（`clear_master` 位置与厂商相同，非缺陷） |
+| **K8/K9/K12 未复核** | **本文补齐**：K8 已修（irq 侧）+ 两处残留 `BUG_ON`（N9，2026-11-10 已改为可回退错误）；K9 原机制不成立、但等价风险在 VA/影子两处（影子 K9-② 已于 2026-11-10 用 `READ_ONCE`/`WRITE_ONCE` 修掉；VA vblank K9-① 已与厂商源码 `jmgpu_package.c` 的 `j9_handle_attribute_commandery()` 对照，确认"读值回写"就是 W1C 标准清位，**不是缺陷**）；K12 已于 2026-11-10 改为 `mwv207_devfreq_reset_busy()` 清零（`6502f19`），另发现 3D/2D/DEC 三条管线 reset 丢在飞 fence 不 signal 的疑点（N14，已修 `22145e9`） |
 | — | 新增 N1（sched[3] 槽位碰撞，高）等 14 条本树发现 |
 
 ---
