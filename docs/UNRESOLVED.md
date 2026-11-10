@@ -50,12 +50,12 @@ modinfo /lib/modules/…/updates/dkms/…    -> srcversion 0EFB7F4433EA5311B08E8
   对未分配的 `cmd_dats` 空指针解引用，见 §2.5）：2026-11-10 16:21 重启后**已验证生效**
   （运行中 `5A5B4018…`；畸形提交 9/9 干净返回 errno、dmesg 零 oops）；
 - `1fc9b21` 修的 N17（N4 的异步 DMA 在 `queue_work()` 之后才 `dma_fence_get()`，
-  worker 抢跑时对已释放 fence 做 `refcount_inc`，见 §2.6）：**两内核与两个 initramfs
-  已装 `8DFC520FB8FCDECFBC911AA`，待重启生效**；运行中的 `5A5B4018…` 带此缺陷，
-  普通桌面负载下就会打出 `refcount_t: addition on 0; use-after-free`。
+  worker 抢跑时对已释放 fence 做 `refcount_inc`，见 §2.6）：2026-11-10 17:55 重启后
+  **已验证生效**——运行中 `8DFC520FB8FCDECFBC911AA`，一键验收 PASS=25，kprobe 压测
+  submit/complete 2052·2052 平衡，`refcount_t` 告警 0（旧模块 209 s 即触发 3 条）。
 
-因此 **K 系列、N14、§2.2 的 5 条、§2.3 的 N4/K11、§2.4/§2.5 两批均已生效**；
-`8DFC52…` 目前只在磁盘上，运行中还没换。剩下的只有 N10（决定只文档化）。
+因此 **K 系列、N14、§2.2 的 5 条、§2.3 的 N4/K11、§2.4/§2.5 两批、§2.6 的 N17
+均已生效**。剩下的只有 N10（决定只文档化）。
 自建模块会打印 `loading out-of-tree module taints kernel` 与
 `module verification failed: signature and/or required key missing`（DKMS 签了名，
 但 MOK 证书没有 enroll 进内核信任链），属既有现象；dmesg 里 GPU 相关错误计数为 0。
@@ -77,7 +77,7 @@ modinfo /lib/modules/…/updates/dkms/…    -> srcversion 0EFB7F4433EA5311B08E8
 | 4d | KMD | **N4/K11 已修并重启验证生效** | 修复见 §2.3（`fbed27f`）：DMA 提交改异步完成 + 真 fence；移除路径补 `pci_disable_device` 与 `free_irq` 前硬件侧关中断。运行中 srcversion `0EFB7F4433EA5311B08E88C`，2026-11-10 14:36 重启后一键验收 `PASS=22 FAIL=0 SKIP=1` | 本文 §2.3 |
 | 4e | KMD | **20 处 `BUG_ON` 已收敛为可恢复错误，重启后已验证生效** | `53b3229`：用户提交路径仍可能触发的那几处（`mem_type` 非 VRAM/TT、`reloc->idx` 越界、DMA `cmd_size` 不符、3D 事件槽耗尽）现在返回 `-EINVAL`/`-EIO`/`-EBUSY`；寄存器/ring 描述符类改 `WARN_ON_ONCE` + 跳过，由 TDR 回收 | 本文 §2.4 |
 | 4f | KMD | **N16 已修，重启后已验证生效**（新发现）：畸形 submit（`nr_cmd_dat>0` 而 `cmd_dats==NULL`）会让 `mwv207_job_fini()` 空指针解引用 → 内核 oops，任何本地进程可触发 | `c01af40`：清理条件加 `&& mjob->cmd_dats`；配套 `tests/bad-submit/` 9 个用例（默认不跑，老模块会 oops）。两内核已装 `5A5B4018…` | 本文 §2.5 |
-| 4g | KMD | **N17 已修，待重启生效**（新发现）：N4 的异步 DMA 在 `queue_work()` 之后才 `dma_fence_get()`，worker 抢跑时对已释放 fence 做 refcount_inc（`refcount_t: addition on 0; use-after-free`，PC 在 `mwv207_pipe_dma_submit`），等待者可能永远收不到 signal —— 与 16:30 整屏卡死（Xorg 收 SIGTERM 不退、只能 SIGKILL）症状一致 | `1fc9b21`：给调度器的引用在 `queue_work` 之前取；两内核已装 `8DFC520FB8FCDECFBC911AA`、initramfs 已刷 | 本文 §2.6 |
+| 4g | KMD | **N17 已修，重启后已验证生效**（新发现）：N4 的异步 DMA 在 `queue_work()` 之后才 `dma_fence_get()`，worker 抢跑时对已释放 fence 做 refcount_inc（`refcount_t: addition on 0; use-after-free`，PC 在 `mwv207_pipe_dma_submit`），等待者可能永远收不到 signal —— 与 16:30 整屏卡死（Xorg 收 SIGTERM 不退、只能 SIGKILL）症状一致 | `1fc9b21`：给调度器的引用在 `queue_work` 之前取；运行中已是 `8DFC520FB8FCDECFBC911AA`，17:55 重启后 `verify-installed.sh --bad-submit` PASS=25，kprobe 压测 submit/complete 2052·2052 平衡、refcount 告警 0、X 最大延迟 5 ms | 本文 §2.6 |
 | 5 | KMD | 只剩 N10（决定只文档化） | K9-① 已核实为与厂商一致（非缺陷）；N10 改为只记录 | 本文 §2.3 |
 | 6 | 切换脚本 | **vendor 态端到端未实跑** | `stack vendor` 会重启，需人工确认；热切换已证不可行（refcnt 恒 2） | `switch-mwv207.sh` / §5 |
 | 7 | 打包 | **DKMS 一致性警告（走 stage 时会复现，已记录处理步骤）** | `tools/dkms-sync.sh` 重建后两个内核都干净；`kmd stage` 直接覆盖仓库构建的 .ko 会让 6.6.155 重新报 `Diff between built and installed module!`，用 `dkms install --force` + `depmod` + `update-initramfs` 恢复即可 | §2.1、§5 |
@@ -533,7 +533,7 @@ Call trace:
 + `run-badsubmit.sh`；已作为 `tests/verify-installed.sh --bad-submit` 的可选步骤
 接入（**默认不跑**：老模块没有 N16 修复时跑它会 oops 内核）。
 
-### 2.6 N17：DMA 完成 fence 的引用顺序错导致 UAF（2026-11-10，`1fc9b21`；待重启验证）
+### 2.6 N17：DMA 完成 fence 的引用顺序错导致 UAF（2026-11-10，`1fc9b21`；已重启验证生效）
 
 **怎么发现的**：§2.3 的 N4 把 DMA 提交从"忙等 5 s + stub fence"改成"启动后立刻返回真
 fence、完成与 invalidate 交给 workqueue"，构建出 `5A5B4018…` 并在 2026-11-10 16:21 重启。
@@ -581,17 +581,27 @@ job 永远收不到完成通知，该管线看起来"卡住"，等它的用户�
 一条 rate-limited 告警，工作项仍在队列里会来收这个 fence）。
 
 **部署状态**：新模块 srcversion `8DFC520FB8FCDECFBC911AA`，两内核 `installed`、两个
-initramfs 已刷并解包核对（`modinfo -F srcversion` 均为 `8DFC52…`）。**运行中仍是
-`5A5B4018…`（带 N17 缺陷），需重启生效**。
+initramfs 已刷并解包核对（`modinfo -F srcversion` 均为 `8DFC52…`）。
 
-**重启后判据**：
+**重启后验证（2026-11-10 17:55，已通过）**：
 
-1. `/sys/module/mwv207/srcversion` = `8DFC520FB8FCDECFBC911AA`；
-2. `sudo ./tests/verify-installed.sh 8DFC520FB8FCDECFBC911AA --bad-submit` 全过；
-3. 跑同样的桌面负载 + 大块 GEM 搬移（例如本仓库压力样片解码、`glxgears` 与桌面同时
-   使用）后 `dmesg | grep -c "refcount_t"` 必须为 **0**（旧模块在同一负载下 10 分钟内
-   必现）；
-4. 退出登录/重启 lightdm 时 Xorg 应能正常退出（不再需要 SIGKILL）。
+1. `/sys/module/mwv207/srcversion` = `8DFC520FB8FCDECFBC911AA`，`modinfo -n` 指向
+   `updates/dkms`；
+2. `sudo ./tests/verify-installed.sh 8DFC520FB8FCDECFBC911AA --bad-submit`
+   → **PASS=25 FAIL=0 SKIP=1**（SKIP 是 TDR 探针后预期的 6 条 `timed out`）；
+3. **引用计数平衡（kprobe 实测）**：给 `mwv207_pipe_dma_submit` 与
+   `pipe_dma_complete_work` 各挂一个 kprobe，用 4 路并发 1080p `tests/swap-thrash`
+   （每路 178 FPS / 1.48 GB/s）+ `glmark2` 压 2 分钟，命中数 **submit=2052、
+   complete_work=2052、差 0**；全程 `dmesg | grep -c refcount_t` = **0**，无
+   `BUG/WARNING/Oops/timed out/nobody cared`。旧模块（`5A5B4018…`）在同一桌面负载下
+   209 秒就打出 3 条 refcount 告警，对比明确；
+4. 负载期间每 0.5 s 探一次 `xdpyinfo`：**最大延迟 5 ms**，X 全程正常响应。
+
+**残余缺口**：① `pipe_dma_force_complete()` 与 worker 的竞态只有代码审查
+（`cancel_work_sync` + `xchg` 抢槽），没有构造 reset 与之并发的实测；②
+`pipe->pending_cmd` 的读写依赖"调度器串行 + worker 已在 cancel_work_sync 后结束"这条
+既有假设，若将来放开并发提交需重新审视；③ lightdm 重启能否正常退出 Xorg 未复测
+（会在当前会话下杀掉本 agent，需用户在自己终端验证）。
 
 **残余缺口**：worker 与 `force_complete()` 的竞态（`cancel_work_sync` + `xchg`）只有代码
 审查，没有做故障注入；`pending_cmd` 在"worker 还没来得及读、新的 submit 已覆盖"这条
@@ -665,7 +675,7 @@ initramfs 已刷并解包核对（`modinfo -F srcversion` 均为 `8DFC52…`）�
 
 | 日期 | 项 | 提交 |
 |---|---|---|
-| 2026-11-10 | KMD：N17 —— DMA 异步提交在 `queue_work()` 之后才 `dma_fence_get()`，worker 抢跑时对已释放 fence 做 `refcount_inc`（`refcount_t: addition on 0; use-after-free`，PC 在 `mwv207_pipe_dma_submit`），等待者可能永远收不到 signal；与 16:30 整屏卡死症状一致 | `1fc9b21`（`src/kernel-6.6`；两内核与两个 initramfs 已装 `8DFC520FB8FCDECFBC911AA`，**待重启验证**） |
+| 2026-11-10 | KMD：N17 —— DMA 异步提交在 `queue_work()` 之后才 `dma_fence_get()`，worker 抢跑时对已释放 fence 做 `refcount_inc`（`refcount_t: addition on 0; use-after-free`，PC 在 `mwv207_pipe_dma_submit`），等待者可能永远收不到 signal；与 16:30 整屏卡死症状一致 | `1fc9b21`（`src/kernel-6.6`；2026-11-10 17:55 重启后验证：`verify-installed.sh --bad-submit` PASS=25、kprobe 压测 2052·2052 平衡、`refcount_t` 告警 0） |
 | 2026-11-10 | KMD：N16 —— `mwv207_job_fini()` 对未分配的 `cmd_dats` 空指针解引用（畸形 submit 可让内核 oops） | `c01af40`（`src/kernel-6.6`；与下面 `53b3229` 同批部署为 `5A5B4018…`，2026-11-10 16:21 重启后验证：9/9 畸形提交返回 errno、dmesg 零 oops）＋ 新增 `tests/bad-submit/` |
 | 2026-11-10 | KMD：20 处 `BUG_ON` 收敛为可恢复错误（提交路径给 errno、内部不变量改 `WARN_ON_ONCE` + 跳过） | `53b3229`（`src/kernel-6.6`；两内核与两个 initramfs 已装 `5A5B4018…`，2026-11-10 16:21 重启后一键验收 `PASS=25 FAIL=0`） |
 | 2026-11-10 | KMD：DMA 提交忙等 5 s + stub fence（N4）、移除路径缺 `pci_disable_device` 与 `free_irq` 前未在硬件侧关中断（K11） | `fbed27f`（`src/kernel-6.6`；2026-11-10 重启后验证生效，一键验收 22 项全过） |

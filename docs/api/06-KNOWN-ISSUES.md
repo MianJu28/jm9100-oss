@@ -348,7 +348,7 @@ K8/K9/K12 引自原报告，本树未复核（KMD 的 `irq.c`/`sched.c`/`ttm.c` 
 | **N14** | 中 | `pipe_3d.c:301-307`、`pipe_2d.c:212-227`、`pipe_dec.c:136-141` | 三条管线 `reset` 都只 `dma_fence_put` 在飞 fence **而不 signal**；2D 的 `destroy` 还不排空 `fence_queue`（`pipe_2d.c:424-448`）→ **用户态可能永久等待**。**已修：2026-11-10 `22145e9`**（含 ENC），重启后已生效（运行中 `039F972E…`） |
 | **N9** | 低 | `kms.c:172`、`hdmi.c:1057` | 仍保留 `BUG_ON`（K8 残留）。**已修：2026-11-10 `6502f19`**（`pr_err` + `-ENODEV`，重启后启动无报错） |
 | **N16** | **高** | `mwv207_sched.c:65-72`（`mwv207_job_fini`） | 畸形 submit（`nr_cmd_dat>0` 而 `cmd_dats==NULL`）在 `mwv207_submit_init_job()` 里先赋 `nr_cmd_dat`、后分配 `cmd_dats`，中途报错返回后清理函数对未分配数组取 `&mjob->cmd_dats[i]` → **空指针解引用、内核 oops**（实测 `pc : mwv207_job_fini+0x12c/0x25c`，任何本地进程一次 ioctl 即可触发）。**已修：2026-11-10 `c01af40`**（条件加 `&& mjob->cmd_dats`；配套新增 `tests/bad-submit/`，9 个用例，默认不在验收脚本里跑） |
-| **N17** | **高** | `mwv207_pipe_dma.c` `mwv207_pipe_dma_submit()` | N4 的异步 DMA 在 `queue_work()` **之后**才为调度器取引用；worker 若在两者之间完成（DMA 搬移常只有几十微秒），fence 引用数已归零并释放，`dma_fence_get()` 变成对已释放对象的 `refcount_inc` → 内核 `refcount_t: addition on 0; use-after-free`（实测 `pc : mwv207_pipe_dma_submit+0x77c`，普通桌面负载即触发）。重则 parent fence 被回收、job 永不完成，用户态停在不可中断等待（与 2026-11-10 16:30 整屏卡死、Xorg 只能 SIGKILL 的症状一致）。**已修：`1fc9b21`**（引用提前到 `queue_work()` 之前取），`8DFC520FB8FCDECFBC911AA` 待重启生效 |
+| **N17** | **高** | `mwv207_pipe_dma.c` `mwv207_pipe_dma_submit()` | N4 的异步 DMA 在 `queue_work()` **之后**才为调度器取引用；worker 若在两者之间完成（DMA 搬移常只有几十微秒），fence 引用数已归零并释放，`dma_fence_get()` 变成对已释放对象的 `refcount_inc` → 内核 `refcount_t: addition on 0; use-after-free`（实测 `pc : mwv207_pipe_dma_submit+0x77c`，普通桌面负载即触发）。重则 parent fence 被回收、job 永不完成，用户态停在不可中断等待（与 2026-11-10 16:30 整屏卡死、Xorg 只能 SIGKILL 的症状一致）。**已修：`1fc9b21`**（引用提前到 `queue_work()` 之前取），运行中 `8DFC520FB8FCDECFBC911AA`，2026-11-10 17:55 重启后验证：PASS=25、kprobe 压测 submit/complete 2052·2052 平衡、`refcount_t` 告警 0 |
 | **N10** | 低 | HDMI | `mode_valid` 阈值（6.6 树已是 594 MHz）与 `phy_configure` 恒传 `bpp=8`。**决定只文档化（2026-11-10）**：只挡 6K/8K，本机 1080p@100Hz 正常，改判据需显示侧实测、收益极低 |
 
 ### H.3 结构澄清（回答任务书疑问）
@@ -442,7 +442,7 @@ K8/K9/K12 引自原报告，本树未复核（KMD 的 `irq.c`/`sched.c`/`ttm.c` 
   `a5a938b` 与 `UNRESOLVED.md` §1.5；`I-4`（H.264 High10 挂死 DEC 管线）
   同日定案并收回声明见 `4ecca0d`。随后又在普通桌面负载下抓到 **N17**（N4 异步 DMA 的
   fence 引用顺序错，`refcount_t: addition on 0; use-after-free`），已修 `1fc9b21`，
-  两内核已装 `8DFC520FB8FCDECFBC911AA`、待重启生效（`UNRESOLVED.md` §2.6）。
+  两内核装为 `8DFC520FB8FCDECFBC911AA`，17:55 重启后验证生效（`UNRESOLVED.md` §2.6）。
   `W6`/`W7`/`W12`/`O5`/`E2`–`E10`/`F.3` 已修（见 `UNRESOLVED.md` §1.1/§1.4）；
   `N14` 已于 2026-11-10 修好见 `22145e9`，`N1`/`N2`/`K12`/`K9-②`/`N9` 同日修好见
   `6502f19`（2026-11-10 重启后已验证）；`I-1` 同日修好（HEVC tile 缓冲高度）—— 分级与批次见

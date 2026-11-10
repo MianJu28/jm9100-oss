@@ -11,7 +11,7 @@ r16 修复 Firefox 两处渲染缺陷 —— 字形/图标撕裂（上传暂存 
 逐位一致（回归 18/18，含真实 720p/1080p 内容）。
 
 里程碑速览：全功能栈（GL/VAAPI/VDPAU/rusticl OpenCL）→ GLES 3.2 原生点亮 →
-自建 KMD 真机运行（运行中 srcversion `5A5B401802B79D560151210`，已装待重启 `8DFC520FB8FCDECFBC911AA`；含 N14 的 reset/fence 修复、N1/N2/K12/K9-②/N9 结构/边界批次、N4/K11 批次、20 处 `BUG_ON` 收敛、畸形提交触发的 `job_fini` 空指针（N16）与异步 DMA 的 fence 引用顺序（N17）修复，前几批均已在重启后回归通过（一键验收 25 项全过）含 N14 的 reset/fence 修复、N1/N2/K12/K9-②/N9 结构/边界批次、N4/K11 批次、20 处 `BUG_ON` 收敛与畸形提交触发的 `job_fini` 空指针（N16）修复，均已在重启后回归通过（一键验收 25 项全过））→ Firefox 硬件渲染
+自建 KMD 真机运行（运行中 srcversion `8DFC520FB8FCDECFBC911AA`；含 N14 的 reset/fence 修复、N1/N2/K12/K9-②/N9 结构/边界批次、N4/K11 批次、20 处 `BUG_ON` 收敛、畸形提交触发的 `job_fini` 空指针（N16）与异步 DMA 的 fence 引用顺序（N17）修复，各批均已在重启后回归通过（一键验收 25 项全过；N17 另有 kprobe 压测 submit/complete 2052·2052 平衡、`refcount_t` 告警 0））→ Firefox 硬件渲染
 修复（WebRender 图元全丢根因 = VS 里 RGBA32F 取样只回 64 位）→ 性能优化
 （WebGL 36→42+ FPS，CSS 页到 vsync 上限 97–99 FPS；均约 llvmpipe 的 2 倍）→
 GBM/Wayland 平台打通 → 健壮性批次修复 → dual-source blend 崩溃修复 →
