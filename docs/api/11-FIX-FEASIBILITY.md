@@ -80,7 +80,7 @@
 | B7 **E8** | `mwv207_state.c:335-354` 只保存单份视口，忽略 `num_viewports` | 存数组并逐视口编程 | 中-大 | **2026-11-03 复核：非缺陷**——cap=1、`ARB_viewport_array` 未暴露（`GL_MAX_VIEWPORTS` 查询 INVALID_ENUM）；多视口属新功能 D6 |
 | B8 **N2** | KMD 3D `hw_submission = 30` 与硬件事件数 30 相等，违背源码注释 "must be lower than 30" | 降到 29 或按事件数推导 | 小 | **【KMD·需部署路径】**；需硬件事件位图压满的场景验证 |
 | B9 **N10** | KMD HDMI `mode_valid` 首个条件 `clock >= 384000` 先命中 → 384–594 MHz 全被拒；`phy_configure` 恒传 `bpp=8` 使 PHY 表 10/12 bpp 不可达 | 调整条件顺序、按真实 bpp 传参 | 中 | **【KMD·需部署路径】**；需 4K60+ 显示器实测，且"是否有意限制"未知 |
-| B10 **N14** | KMD `mwv207_pipe_3d.c:301-307`、`mwv207_pipe_2d.c:212-227`、`mwv207_pipe_dec.c:136-141`：`reset` 只 `dma_fence_put` 在飞 fence 而**不 signal**；`mwv207_pipe_2d.c:424-448` `destroy` 不排空 `fence_queue` | reset 时以 `-EIO` signal 在飞 fence；destroy 排空队列 | 中 | **已修（2026-11-10，`22145e9`）**：四条管线统一 `dma_fence_set_error(-EIO)`+signal，destroy 排空；DEC/ENC 用 `xchg` 抢槽防双重 put。模块已于 2026-11-10 重启后生效（`039F972E…`，重启后 GL/query/VP9 回归全过）；reset 通路仍未实跑 |
+| B10 **N14** | KMD `mwv207_pipe_3d.c:301-307`、`mwv207_pipe_2d.c:212-227`、`mwv207_pipe_dec.c:136-141`：`reset` 只 `dma_fence_put` 在飞 fence 而**不 signal**；`mwv207_pipe_2d.c:424-448` `destroy` 不排空 `fence_queue` | reset 时以 `-EIO` signal 在飞 fence；destroy 排空队列 | 中 | **已修（2026-11-10，`22145e9`）**：四条管线统一 `dma_fence_set_error(-EIO)`+signal，destroy 排空；DEC/ENC 用 `xchg` 抢槽防双重 put。模块已于 2026-11-10 重启后生效（`039F972E…`，重启后 GL/query/VP9 回归全过）；3D reset 通路已用 `tests/n14-reset/` 探针实测（6 轮 TDR、`pipe_3d_force_complete` 6/6、用户 fence 12.3 s 完成、无 WARN），2D/DEC/ENC 与 destroy 路径未覆盖 |
 | B11 **K12** | KMD `mwv207_sched.c:203-204` 超时循环体只有 `devfreq_record_idle`，循环变量未用，`drm_sched_resubmit_jobs`(:205) 前无 job 完整性校验 | 补真正的 job 检查与信号 | 中 | **【KMD·需部署路径】** |
 | B12 **K9-①** | KMD `dc/mwv207_va.c:634-655` vblank 处理器**整字回写** `0x9907f4`（影响 bit12–15） | 改逐位 W1C（与 `irq.c:44` 一致） | 小-中 | **【KMD·需部署路径】**；需 vblank 竞态验证 |
 | B13 **K9-②** | KMD `mwv207_irq.c:31` ISR 无锁读 `irq_enable_reg[]`，而 mask/unmask 在 `irq_lock` 内写 | 加锁或改用影子/原子 | 小-中 | **【KMD·需部署路径】**；ISR 上下文 |
@@ -134,7 +134,7 @@ C1/C3（16 位格式 A/B/C）、C2（混合 8/15 是否保留超额声明）、D
 **批次 4 — KMD（必须先解决部署路径）**
 先做 **K-a**（把 5.10 KMD 移植成 6.6 DKMS 模块），之后 `A13/N9、A14/K11、B8/N2、B9/N10、B10/N14、B11/K12、B12/K9-①、B13/K9-②、B14/N1` 才谈得上生效。
 **其中 B14/N1 优先级最高**（对象与管线泄漏 + `INFO` 谎报 DEC=2），但**当前 UMD 恒用 `engine_id=0` 所以未触发**——即"高严重、零现网影响"。
-**B10/N14 是唯一可能让用户态永久等待的条目**，若将来出现"某次 hang 后应用卡死"，应首先怀疑它。
+**B10/N14 已修并实测 3D reset 通路**（`22145e9`）；若将来出现"某次 hang 后应用卡死"，仍应首先怀疑它在 2D/DEC/ENC 与 destroy 路径上的残余风险。
 
 **批次 5 — 视频**
 `I-1`（`mwv207_dec_hevc.c:1060` 位深当图像高）与 `I-2` 都是**一行级修复**，但需要真实 HEVC 8 bit 码流做解码验证（可用 ffmpeg 生成 + 逐帧比对）。

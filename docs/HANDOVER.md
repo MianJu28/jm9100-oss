@@ -101,8 +101,9 @@ OpenCL/VA-API/VDPAU 全走我们的栈；自建 KMD 在跑（srcversion `039F972
   统一 `dma_fence_set_error(-EIO)` + signal；DEC/ENC 用 `xchg(&current_fence, NULL)`
   与轮询线程抢槽，杜绝双重 put。已在 2026-11-10 重启后生效（运行中即
   `039F972EFE3279A155EE225`），重启后 glxinfo / query 4·4 / VP9 18·18 / glxgears
-  117 FPS 全过；reset 通路本身尚未实跑（构造 hang 有挂死整机风险），
-  见 `docs/UNRESOLVED.md` §2.1。
+  117 FPS 全过；reset 通路已用 `tests/n14-reset/` 探针实测：6 轮 TDR、
+  `pipe_3d_force_complete` 命中 6/6、用户 fence 12.3 s 完成、复位后 GPU 正常。
+  2D/DEC/ENC 与 destroy 路径仍未被探针覆盖，见 `docs/UNRESOLVED.md` §2.1。
 
 ### 待办（按价值排序）
 1. **A5：VP9 10bit（Profile 2）/4:2:2** —— 当前 `vp_profile!=0 || bit_depth!=8` 直接拒绝

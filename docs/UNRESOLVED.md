@@ -55,7 +55,7 @@ N1 / K11 / N2 / N4 / K9-① / K9-② / K12 / N10 / N9（见 §2）。
 | 1 | VAAPI/VP9 | **A5 10bit（Profile 2）与 4:2:2 未实现** | 只能解 Profile0 8bit；Profile1/2 被显式拒绝（放开会让 ASIC 自旋挂死整机） | `docs/HANDOVER-VP9.md` §10 A5 |
 | 2 | VAAPI/VP9 | **B3 intra-only 非关键帧样片缺** | 该分支未上机验证；本机编码器产不出 | `docs/HANDOVER-VP9.md` §10 B3 |
 | 3 | VAAPI/VP9 | **B2 真正的跨尺寸参考未验证** | 已有"缺参考/尺寸不同即拒绝"的保护（`72f9523`），缩放路径未跑通；需自写 VAAPI 客户端 | `docs/HANDOVER-VP9.md` §10 B2 |
-| 4 | KMD | **N14 已修，重启后已验证生效** | 修复见 §2.1（`22145e9`）；运行中 srcversion 已是 `039F972EFE3279A155EE225`，GL/query/VP9 回归全过；reset 通路仍未实跑 | 本文 §2.1 |
+| 4 | KMD | **N14 已修，重启后已验证生效** | 修复见 §2.1（`22145e9`）；运行中 srcversion 已是 `039F972EFE3279A155EE225`，GL/query/VP9 回归全过；reset 通路已用 `tests/n14-reset/` 探针实测（6 轮 TDR、force_complete 6/6） | 本文 §2.1 |
 | 5 | KMD | N1/N2/N4/K9-①/K9-②/K11/K12/N10/N9 | 竞态/健壮性，多为低概率 | 本文 §2 |
 | 6 | 切换脚本 | **vendor 态端到端未实跑** | `stack vendor` 会重启，需人工确认；热切换已证不可行（refcnt 恒 2） | `switch-mwv207.sh` / §5 |
 | 7 | 打包 | **DKMS 一致性警告（走 stage 时会复现，已记录处理步骤）** | `tools/dkms-sync.sh` 重建后两个内核都干净；`kmd stage` 直接覆盖仓库构建的 .ko 会让 6.6.155 重新报 `Diff between built and installed module!`，用 `dkms install --force` + `depmod` + `update-initramfs` 恢复即可 | §2.1、§5 |
@@ -178,7 +178,7 @@ N1 / K11 / N2 / N4 / K9-① / K9-② / K12 / N10 / N9（见 §2）。
 > **刻意未移植 K2**：6.6 的 `ttm_bo_init_reserved()` 失败走 `err_put: ttm_bo_put(bo)`
 > → `bo->destroy` = 本驱动 `mwv207_ttm_bo_destroy()`（内部已 release+free），再补一次是 double free。
 
-### 2.1 N14：reset/destroy 时 signal 在飞 fence（已修，待重启生效）
+### 2.1 N14：reset/destroy 时 signal 在飞 fence（已修，已重启生效，reset 通路已实测）
 
 **提交 `22145e9`**（`src/kernel-6.6`），改法按 `docs/api/08-KMD.md:1067` 的规定
 "reset 内对在飞 fence `dma_fence_set_error(-EIO)` + signal"：
@@ -214,9 +214,20 @@ N1 / K11 / N2 / N4 / K9-① / K9-② / K12 / N10 / N9（见 §2）。
 - `dmesg` 无新增 WARN/BUG/Call Trace；只有 boot 时的 out-of-tree 与未签名告警，
   外加一条与驱动无关的 `sched: RT throttling activated`（上一轮启动同样出现）。
 
-**残余验证缺口**：reset 通路本身未实跑（需构造 3D/2D/DEC 挂死，有挂死整机
-风险）；本次以编译 + 双内核安装 + 重启后常规回归验证。若将来出现"hang 后
-应用卡死"，按本条目的新行为应看到 fence 以 `-EIO` 返回，而不是永久等待。
+**reset 通路实测（2026-11-10，`tests/n14-reset/`）**：用 GL pbuffer + 长循环
+片元着色器制造 >2 s 的 3D 作业，触发 6 轮超时复位（`hang_limit` 5）；kprobe 记录
+`mwv207_sched_timedout_job` 6 次、`pipe_3d_force_complete` 6 次（一一对应），
+用户态 fence 在 12.3 s 后完成而非永久阻塞，复位后短作业与 `glxinfo`/`glxgears`
+均正常，dmesg 无 WARN/BUG。详见 `tests/n14-reset/README.md`。
+
+**残余验证缺口（如实记录）**：
+- 读 6.6 `drm_sched` 源码可知，超时路径上 `drm_sched_stop()` 会摘掉 job 回调、
+  `drm_sched_start(full_recovery=true)` 对无 parent 的 job 直接以 `-ECANCELED`
+  完成，所以"reset 后用户态永久等待"这个旧场景**无法用修复前对照复现**；N14 的
+  收益是 fence 状态正确（带错误信号而非被静默丢弃）、驱动内等待者不被挂住、
+  卸载路径不留永远 unsignaled 的 fence。
+- 2D / DEC / ENC 三条管线的 force_complete 与 destroy 路径未被探针覆盖
+  （需分别让 2D/解码引擎挂死或在有在飞 fence 时卸载驱动，风险更高）。
 
 ---
 
