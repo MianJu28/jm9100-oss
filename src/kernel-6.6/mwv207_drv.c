@@ -436,7 +436,16 @@ static void mwv207_pci_remove(struct pci_dev *pdev)
 	mwv207_irq_fini(jdev);
 	mwv207_vbios_fini(jdev);
 	mwv207_db_fini(jdev);
+	/*
+	 * FIX(jm9100-oss,K11): 按厂商源码（ref/vendor-1.8.0 解出的
+	 * jmgpu_insert.c 的 remove 路径 j9_feasibility()）补齐
+	 * pci_disable_device()：先清 bus master，再关 PCI 设备电源/命令位。
+	 * 原来只做 clear_master，卸载后设备的显存 BAR 仍处于使能状态。
+	 * 注意次序不能动：kms_fini() 必须早于 irq_fini()（显示侧 ISR 依赖 KMS
+	 * 对象），而 clear_master/disable_device 必须在所有 DMA 使用者退出之后。
+	 */
 	pci_clear_master(pdev);
+	pci_disable_device(pdev);
 	pci_set_drvdata(pdev, NULL);
 }
 

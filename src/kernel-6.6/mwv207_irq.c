@@ -193,6 +193,19 @@ void mwv207_irq_fini(struct mwv207_device *jdev)
 	struct pci_dev *pdev = jdev->pdev;
 	int i;
 
+	/*
+	 * K11（窗口部分）：free_irq() 只摘掉 Linux 侧的 handler，设备的
+	 * 中断使能位（0x009A8020/0x24）还在，线仍可能被拉起 —— 在共享中断
+	 * 线上就是一次 "nobody cared"。所以在交出 IRQ 之前，先在硬件侧把
+	 * 全部使能位清零、把挂起状态按 W1C 清掉，彻底关掉这个窗口。
+	 * 注意此时已完成 kms_fini()/sched_fini()，不会再有新的中断源需要处理。
+	 */
+	for (i = 0; i < 2; ++i) {
+		jdev_write(jdev, (0x009A8020) + i * 4, 0);
+		WRITE_ONCE(jdev->irq_enable_reg[i], 0);
+		jdev_write(jdev, (0x009A802c) + i * 4, 0xffffffff);
+	}
+
 	free_irq(pdev->irq, jdev);
 	pci_free_irq_vectors(pdev);
 
