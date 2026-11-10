@@ -362,14 +362,14 @@ K8/K9/K12 引自原报告，本树未复核（KMD 的 `irq.c`/`sched.c`/`ttm.c` 
 
 ## I. 视频编解码层的通读发现（来源：`05-VIDEO-CODEC.md`）
 
-### I.1 三个新缺陷（I-1/I-2 已修，I-3 已定案，另见 I-4）
+### I.1 四个新缺陷（I-1/I-2 已修，I-3/I-4 已定案并收回声明）
 
 | # | 位置 | 问题 | 影响 |
 |---|---|---|---|
 | **I-1** | `video-codec/mwv207/mwv207_dec_hevc.c:1060` | `pic_height` 误取 `bit_depth_chroma_minus8` 而非图像高 → 8 bit 时 `height64 = 0` → `tile_buffer_size = 0` | HEVC 8 bit 路径的 tile 缓冲为 0 字节，与 `bs_size-3` 下溢叠加，实际影响**未实测**。**已修（2026-11-10）**：改取 `pic_height_in_luma_samples`；修后 8bit/Main10 各 2 tile 列 720p 与软件解码逐位一致，VP9 回归仍 18/18 |
 | ~~I-2~~ | word7 bit30 复用 | `JMDEC_BITPLANE1_E` 与 `JMDEC_BLACKWHITE_E` **同占 word7 bit30**；H264 先写后者（`mwv207_dec_h264.c:587`），随后被前者清零（`mwv207_dec_h264.c:2083`）**覆盖** | **已修（2026-11-10，`a5a938b`）**：查原厂 `{word,width,shift}` 表（`mwv207_video_dec_8170table.h`）——BITPLANE0/1/2 与 CABAC/BLACKWHITE/DIR_8X8_INFER 在 word7 上**逐位同名同址**（31/30/29 两组各 3 个），是按 codec 复用的同一物理位，不是抄错。H.264 不走 bitplane 模式，原句等于把单色标志清零，已删除 |
 | ~~I-3~~ | H.264 High422/High444 声明 | 能力表声明 422/444，解码器硬置 `chroma_format_idc=1` | **已定案（2026-11-10，`a5a938b`）**：本机 H.264 硬解只有 4:0:0/4:2:0（解码寄存器表无采样格式选择器；原厂 `jmgpu_drv_video.so` 文档串写 `0=4:0:0. 1=4:2:0` 且其 `QueryConfigProfiles` 只声明 ConstrainedBaseline/Main/High；libva 里根本没有对应 VAProfile）→ **不可实现，已收回声明**；证据与实测见 `UNRESOLVED.md` §1.5 |
-| **I-4** | H.264 10bit 输出全 0 | `dec_param.bit_depth` 在 `mwv207_dec_h264.c:2330` 才置位，而 `:597`/`:1337`/`:1892` 先用它算尺寸；`JMDEC_BIT_DEPTH_OUT_MINUS8` 只有 VP9 在写 | **【实测】硬件支持**（原厂特性表 `0x1F76`：`h264_high10_support = 1`），但 r16 与当前构建解 High10 样片都得到全 0 面（1520640 个 u16 采样全 0），软件解码正常 → 本驱动实现缺陷，未修 |
+| ~~I-4~~ | H.264 10bit 提交挂死 DEC 管线 | 10 帧 352×288 High10 样片 → 6 次 `job from 'av:h264:df0' to 'mwv207_dec0', timed out!`（`irq state reg: 0x00010102`）、输出面全 0；8bit 同路径零超时 | **已定案（2026-11-10，`4ecca0d`）**：原厂特性表虽写 `h264_high10_support = 1`，但 Hantro 系 10bit H.264 需要 **high10p 位流预转换**，本驱动未实现（原厂闭源驱动也不声明 High10）→ **收回 `PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH10`**，并在 `end_frame` 对 `bit_depth_luma_minus8 > 0` 直接跳过。收回后 ffmpeg 对该类流报 `hwaccel initialisation returned error` 并回退，DEC 零超时 |
 
 ### I.2 同步机制的意外事实（需注意）
 
@@ -427,10 +427,11 @@ K8/K9/K12 引自原报告，本树未复核（KMD 的 `irq.c`/`sched.c`/`ttm.c` 
 - 回归：`tests/tri-test` → `HARDWARE TRIANGLE RENDER: PASS`；`tests/fbo-test` →
   `FBO status: 0x8cd5 COMPLETE` + `FBO HARDWARE RENDER: PASS`；`glxinfo` 仍为
   GL core 4.0 / **GLES 3.2 (git-6cb20bd761)**。
-- 仍未修（2026-11-10 复核）：`I-4`（H.264 High10 输出全 0，硬件支持、属本驱动
-  缺陷）、UMD 的 `E1`/`E6`（实测后决定不改）、KMD 的 `N4`/`K9-①`/`K11`/`N10`。
+- 仍未修（2026-11-10 复核）：UMD 的 `E1`/`E6`（实测后决定不改）、KMD 的
+  `N4`/`K9-①`/`K11`/`N10`。
   `I-2`（word7 bit30 复用）与 `I-3`（H.264 422/444 声明）已于同日修好/定案见
-  `a5a938b` 与 `UNRESOLVED.md` §1.5。
+  `a5a938b` 与 `UNRESOLVED.md` §1.5；`I-4`（H.264 High10 挂死 DEC 管线）
+  同日定案并收回声明见 `4ecca0d`。
   `W6`/`W7`/`W12`/`O5`/`E2`–`E10`/`F.3` 已修（见 `UNRESOLVED.md` §1.1/§1.4）；
   `N14` 已于 2026-11-10 修好见 `22145e9`，`N1`/`N2`/`K12`/`K9-②`/`N9` 同日修好见
   `6502f19`（待重启生效）；`I-1` 同日修好（HEVC tile 缓冲高度）—— 分级与批次见

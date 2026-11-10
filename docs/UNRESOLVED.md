@@ -1,7 +1,7 @@
 # 未修复缺陷与未实现功能 · 总清单
 
 > 汇总截至 **2026-11-10**（运行中的 UMD 是 **r16**，`payload-41/VERSION = 24.1.2-fullstack-r16`；
-> 含 I-1/I-2/I-3 修复的 **`payload-42`（r18）已生成并预检通过、尚未安装**；内核
+> 含 I-1/I-2/I-3/I-4 修复的 **`payload-42`（r19）已生成并预检通过、尚未安装**；内核
 > `6.6.155-arm64-desktop-hwe` 侧另有待重启生效的 `D5EEF36617A4D3FBF4AFD1D` 一批），
 > 对应外层仓库工作树（含 `src/mwv207-umd/` 分层）。
 > 取代散落在 `api/06-KNOWN-ISSUES.md`、`api/11-FIX-FEASIBILITY.md` 里的分散记录：
@@ -60,7 +60,7 @@ N1 / N2 / K12 / K9-② / N9（见 §2.2）。剩下的是 N4 / K9-① / K11 / N1
 | 3 | VAAPI/VP9 | **B2 真正的跨尺寸参考未验证** | 已有"缺参考/尺寸不同即拒绝"的保护（`72f9523`），缩放路径未跑通；需自写 VAAPI 客户端 | `docs/HANDOVER-VP9.md` §10 B2 |
 | 4 | KMD | **N14 已修，重启后已验证生效** | 修复见 §2.1（`22145e9`）；运行中 srcversion 已是 `039F972EFE3279A155EE225`，GL/query/VP9 回归全过；reset 通路已用 `tests/n14-reset/` 探针实测（6 轮 TDR、force_complete 6/6） | 本文 §2.1 |
 | 4b | KMD | **N1/N2/K12/K9-②/N9 已修，待重启生效** | 修复见 §2.2（`6502f19`）；新模块 `D5EEF36617A4D3FBF4AFD1D` 已装到两个内核并刷新 initramfs，重启后需按 §2.2 判据验证 | 本文 §2.2 |
-| 4c | UMD 视频 | **I-4：H.264 High10 硬解输出全 0**（硬件 `h264_high10_support=1`，属本驱动缺陷；旧驱动同样） | 10bit H.264 无法解出画面（VA 仍声明 High10，客户端会拿到全 0 面）；判据＝与软件解码逐位一致 | 本文 §1.2 / `api/05-VIDEO-CODEC.md` §6.7 |
+| 4c | UMD 视频 | **I-4：H.264 High10 已定案（2026-11-10 收回声明）** —— 按当前寄存器配置提交 10bit H.264 会让 DEC 管线挂死（6 次 TDR、输出全 0）；缺 Hantro 的 high10p 位流预转换 | 客户端现在对该类流直接回退（`hwaccel initialisation returned error`），DEC 零超时；原厂闭源驱动同样不声明 High10 | 本文 §1.2 / `api/05-VIDEO-CODEC.md` §6.7 |
 | 5 | KMD | 剩余 N4/K9-①/K11/N10 | 竞态/健壮性/显示边界，多为低概率；刻意留到下一批（需重构或硬件实测，见 §2.2 末尾） | 本文 §2 |
 | 6 | 切换脚本 | **vendor 态端到端未实跑** | `stack vendor` 会重启，需人工确认；热切换已证不可行（refcnt 恒 2） | `switch-mwv207.sh` / §5 |
 | 7 | 打包 | **DKMS 一致性警告（走 stage 时会复现，已记录处理步骤）** | `tools/dkms-sync.sh` 重建后两个内核都干净；`kmd stage` 直接覆盖仓库构建的 .ko 会让 6.6.155 重新报 `Diff between built and installed module!`，用 `dkms install --force` + `depmod` + `update-initramfs` 恢复即可 | §2.1、§5 |
@@ -120,7 +120,7 @@ N1 / N2 / K12 / K9-② / N9（见 §2.2）。剩下的是 N4 / K9-① / K11 / N1
 
 | # | 位置 | 问题 | 当前证据 | 建议 |
 |---|---|---|---|---|
-| **I-4** | H.264 10bit 解码路径（`video-codec/mwv207/mwv207_dec_h264.c` = `dec_param.bit_depth` 在 `:2330` 才置位，`:597`/`:1337`/`:1892` 先用了它；`JMDEC_BIT_DEPTH_OUT_MINUS8` 只有 VP9 在写） | **H.264 High10（10bit）硬解输出全 0**：10 帧 352×288 High10 样片，`hwdownload,format=p010` 得到的 3041280 B 里 1520640 个 u16 采样**全为 0**，而软件解码同文件正常（≈290 起）。新旧驱动（r16 与当前构建）行为一致 ⇒ 不是本次改动引入 | **【实测】硬件支持**：原厂 `mwv207_video_dec_vpu_features_list.h:39` 对 `hw_build_id = 0x1F76` 写 `h264_high10_support = 1`，`h264_support = 3`；故属本驱动实现缺陷而非能力缺口。VA 侧 High10 声明暂保留（待修 I-4） | 按 `JMDEC_BIT_DEPTH_OUT_MINUS8` + 位深相关的 buffer/PPU 配置排查；判据＝与软件解码逐位一致（HEVC Main10 同法已通过） |
+| ~~I-4~~ | H.264 10bit 解码路径（`video-codec/mwv207/mwv207_dec_h264.c`；`dec_param.bit_depth` 在 `:2330` 置位，`:597`/`:1337`/`:1892` 先用；`JMDEC_BIT_DEPTH_OUT_MINUS8` 只有 VP9 在写） | **已定案（2026-11-10，`4ecca0d`）：收回 High10 声明**。实测 10 帧 352×288 High10 样片：驱动侧 `set_regs` 正常执行 10 次（`bit_depth=10`、`high10p_mode=1`、`chroma_format_idc=1`），但内核连报 6 次 `mwv207: job from 'av:h264:df0' to 'mwv207_dec0', timed out!`（`irq state reg: 0x00010102`），靠 TDR 回收，输出面 1520640 个 u16 采样全 0；8bit High 420 同路径**零超时**、逐位一致 | 结论：**不是硬件能力缺口而是实现缺口** —— 原厂特性表对 `0x1F76` 写 `h264_high10_support=1`，但 Hantro 系的 10bit H.264 需要 high10p 位流预转换，本驱动未实现；原厂闭源驱动的 `QueryConfigProfiles` 也不声明 High10。已收回声明并在 `end_frame` 对 `bit_depth_luma_minus8 > 0` 直接跳过（避免把 DEC 拖进超时循环） | 若将来要做：实现 high10p 位流预转换（10bit 语法元素重打包）后重新申请该 profile；判据＝与软件解码逐位一致且 `timed out!` 计数 0 |
 | **E1** | `mwv207_draw.c:751-754` | `color_8` 四个分量都 `<< 8` | **【实测更正】不是高位覆盖**：`/tmp/blendcolor` 用 `glBlendFunc(GL_CONSTANT_COLOR, GL_ZERO)` + `glBlendColor(0.5,0.25,0.125,1.0)` 实测，llvmpipe `(26,26,19,204)`（= 期望值），我们 `(25,25,19,204)` —— **只差 1 LSB，A 通道完全正确**，说明硬件确实按"低 8 位 + 某个位宽"解释了该寄存器，没有互相覆盖。原文档"高位互相覆盖"的判断作废 | 不改（按目标字段宽度改移位缺乏验证手段，可能引入真错）；如需精确到 0 LSB 再查 `0x509` 定义 |
 | ~~E2~~ | `mwv207_draw.c` | ~~`static uint32_t draw_count` 跨 context 共享~~ | **已修**（2026-11-02）：移入 `struct mwv207_context` 的 `uint32_t draw_count;`，`mwv207_config_draw()` 读写 context 字段 | — |
 | **E6** | `mwv207_query.c:108,201,284` | `TIMESTAMP` / `TIMESTAMP_DISJOINT` 用 **CPU** `os_time_get_nano()`，不是 GPU 时间戳 | 【复核】三处均 `os_time_get_nano()`；【实测】`GL_TIMESTAMP` 返回 ≈31.7 小时 = CPU 开机时长 | **不改**（复核：与 llvmpipe 同为 CPU 时钟语义，行为一致；硬件时间戳寄存器 `0x00490/0x00494` 虽存在，切换属功能改动而非缺陷修复，且需整条 query 路径验证） |
@@ -178,7 +178,8 @@ ffmpeg `-hwaccel vaapi` 能建 device，但 `hwdownload` 报 `Function not imple
 **回归**（同一次构建）：HEVC 720p 8bit/Main10 各 2 tile 列与软件逐位一致；H.264 High 420 逐位一致；VP9 18/18；
 `vainfo` 只剩 ConstrainedBaseline/Main/High/High10 + HEVC Main/Main10 + VP9P0；GL 侧 glxinfo/glxgears/query 4/4 均无变化。
 
-> 相关新发现见 §1.2 的 **I-4**（H.264 High10 输出全 0，硬件其实支持，属本驱动缺陷）。
+> H.264 的另一个色度/位深相关结论见 §1.2 的 **I-4**：High10（10bit）提交会挂死 DEC 管线，
+> 已同日定案并收回声明（`4ecca0d`），缺 high10p 位流预转换。
 
 ---
 
@@ -362,7 +363,8 @@ ffmpeg `-hwaccel vaapi` 能建 device，但 `hwdownload` 报 `Function not imple
 | 2026-11-10 | KMD：sched 槽位撞车（N1）、3D 在飞上限撞事件表（N2）、超时路径 devfreq 多减（K12）、ISR 影子寄存器数据竞争（K9-②）、显示侧两处 `BUG_ON(irq == 0)`（N9） | `6502f19`（`src/kernel-6.6`；两内核已装、initramfs 已刷，重启后生效） |
 | 2026-11-10 | KMD：3D/2D/DEC/ENC `reset`/`destroy` 对在飞 fence 只 `dma_fence_put` 不 signal（N14），2D `destroy` 不排空 `fence_queue` | `22145e9`（`src/kernel-6.6`；模块已暂存，重启后生效） |
 | 2026-11-10 | UMD：HEVC `tile_buffer_size` 用位深当帧高（I-1），tile 缓冲按错误高度分配 | `385ed81`（`src/mwv207-umd`） |
-| 2026-11-10 | UMD：收回 H.264 High422/High444 声明（不可实现，见 §1.5）＋ word7 bit30 复用导致的单色标志被清零（I-2/I-3） | `a5a938b`（`src/mwv207-umd`）；载荷 `payload-42`（r18）已重新生成并通过 `umd check`/预验证，**安装需 `sudo ./switch-mwv207.sh umd install`（会重启 lightdm）** |
+| 2026-11-10 | UMD：收回 H.264 High422/High444 声明（不可实现，见 §1.5）＋ word7 bit30 复用导致的单色标志被清零（I-2/I-3） | `a5a938b`（`src/mwv207-umd`） |
+| 2026-11-10 | UMD：收回 H.264 High10 声明（I-4：10bit 提交会挂死 DEC 管线，缺 high10p 位流预转换）＋ `end_frame` 拒绝高位深码流 | `4ecca0d`（`src/mwv207-umd`）；载荷 `payload-42`（r19）已重新生成并通过 `umd check`/预验证，**安装需 `sudo ./switch-mwv207.sh umd install`（会重启 lightdm）** |
 | 2026-11-10 | Firefox 标签栏"微缩 chrome"：buffer 写入前等待 GPU（`mwv207_resource.c`） | `6ec1e17`（`src/mwv207-umd`） |
 | 2026-11-10 | mesa：`loader_dri3_query_buffer_age()` 恒 0（我们不做交换后缓冲保留） | `248659c`（`ref/oh-mesa`，本地） |
 | 2026-11-07 | Firefox 字形/图标撕裂：上传暂存 BO 延迟释放（`retired_staging` 环） | `f8f693a`（`src/mwv207-umd`） |

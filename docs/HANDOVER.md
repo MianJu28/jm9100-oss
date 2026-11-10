@@ -22,8 +22,8 @@ OpenCL/VA-API/VDPAU 全走我们的栈；自建 KMD 在跑（srcversion `039F972
 | 机器 | Deepin 25 aarch64，内核 `6.6.155-arm64-desktop-hwe`（143 也装了 DKMS 包，但不是启动内核），GPU `[0731:9100]` PCI 07:00.0，HDMI-1 1920×1080@100Hz，无免密 sudo（用 `printf '666\n' \| sudo -S`） |
 | 仓库 | `/home/admin/jm9100-oss`（git，远端 `git@github.com:MianJu28/jm9100-oss.git`，已推送同步） |
 | 源码 | `src/mwv207-umd/`（UMD，唯一可改处；上游树 `ref/oh-mesa/.../src/gallium/{drivers,winsys}/mwv207` 是指向它的符号链接）、`src/kernel-6.6/`（KMD，已并入本仓库） |
-| 已装栈 | `/usr/local/lib/mwv207-oss/`（r16，DRI md5 `01904e3a…`，EGL md5 `300daa41…`；**r18 目标值** DRI `7ee8b982…` / VA `b77d9377…`），`/lib/modules/…/updates/dkms/mwv207.ko`（自建 KMD） |
-| 载荷 | 运行中 `payload-41`（`24.1.2-fullstack-r16`）；**`payload-42`（`24.1.2-fullstack-r18`，含 I-1/I-2/I-3）已生成、`umd check` 与预验证通过、未安装**，装用 `sudo ./switch-mwv207.sh umd install`（会重启 lightdm，在本地终端/TTY 执行）；历史快照在 `/var/lib/mwv207-oss/switch-history` |
+| 已装栈 | `/usr/local/lib/mwv207-oss/`（r16，DRI md5 `01904e3a…`，EGL md5 `300daa41…`；**r19 目标值** DRI `5408ee72…` / VA `eec6bfe5…`），`/lib/modules/…/updates/dkms/mwv207.ko`（自建 KMD） |
+| 载荷 | 运行中 `payload-41`（`24.1.2-fullstack-r16`）；**`payload-42`（`24.1.2-fullstack-r19`，含 I-1/I-2/I-3/I-4）已生成、`umd check` 与预验证通过、未安装**，装用 `sudo ./switch-mwv207.sh umd install`（会重启 lightdm，在本地终端/TTY 执行）；历史快照在 `/var/lib/mwv207-oss/switch-history` |
 | 快速回归副本 | `/tmp/gd3/`（测试用；`/tmp` 是 7.8G tmpfs，重启即空，记得清理大文件）。实验构建流程：改 `src/mwv207-umd` → `ninja -C ref/oh-mesa/User_source_code/mesa-24.1.2/build-full src/gallium/targets/dri/libmwv207_dri.so` → `cp` 到 `/tmp/gd3/` → 用 `LIBGL_DRIVERS_PATH=/tmp/gd3 MESA_LOADER_DRIVER_OVERRIDE=mwv207` 测 |
 | 出包安装 | `./tools/make-payload.sh -v 24.1.2-fullstack-rN` → `printf '666\n' \| sudo -S ./switch-mwv207.sh umd install --force`（**install 调用常显示 interrupted，实装已完成——必须用 `status` + md5 比对确认，勿盲目重跑**） |
 | 构建陷阱 | 性能实验必须用 `build-full`（`build-glvnd` 是旧二进制）；`meson setup --wipe` 会把 glvnd 从 auto 变 enabled → 必须显式 `-Dglvnd=false -Dgles1/2=enabled` |
@@ -112,15 +112,19 @@ OpenCL/VA-API/VDPAU 全走我们的栈；自建 KMD 在跑（srcversion `039F972
   `READ_ONCE`/`WRITE_ONCE`；N9 显示侧两处 `BUG_ON(irq == 0)` 改可回退错误。
   两内核已装、initramfs 已刷（srcversion `D5EEF36…`），重启后按
   `docs/UNRESOLVED.md` §2.2 的判据验证。
-- **UMD 视频批次（`385ed81`/`a5a938b`，载荷 r18 待安装）**：I-1 HEVC tile 缓冲按真实帧高
+- **UMD 视频批次（`385ed81`/`a5a938b`/`4ecca0d`，载荷 r19 待安装）**：I-1 HEVC tile 缓冲按真实帧高
   分配（原先拿 `bit_depth_chroma_minus8` 当高度，8bit 时高度为 0）；I-2 H.264 路径删掉
   `set_reg(BITPLANE1_E, 0)`（与原厂 1840 行表核对：BITPLANE0/1/2 与
   CABAC/BLACKWHITE/DIR_8X8_INFER 在 word7 上逐位同名同址，是按 codec 复用的物理位，
   该句把单色标志清掉）；I-3 收回 H.264 High422/High444 声明 —— 寄存器/原厂驱动/libva
   三重证据表明本机只有 4:0:0 与 4:2:0（细节 `docs/UNRESOLVED.md` §1.5）。
   验证：HEVC 8bit/Main10 2 tile 列逐位一致、H.264 High 420 逐位一致、VP9 18/18、
-  query 4/4。**新发现 I-4：H.264 High10 输出全 0**（硬件 `h264_high10_support=1`，
-  属本驱动缺陷，非能力缺口），已记入 `docs/UNRESOLVED.md` §1.2。
+  query 4/4。**I-4：H.264 High10 已定案并收回声明** —— 实测 10bit 样片会让
+  DEC 管线连报 6 次 `job from 'av:h264:df0' to 'mwv207_dec0', timed out!`
+  （TDR 回收、输出全 0），缺 Hantro 的 high10p 位流预转换；原厂闭源驱动也不
+  声明 High10。收回后 ffmpeg 对该类流直接回退（`hwaccel initialisation
+  returned error`），DEC 零超时；`end_frame` 另加 `bit_depth_luma_minus8 > 0`
+  跳过分支。见 `docs/UNRESOLVED.md` §1.2。
 
 ### 待办（按价值排序）
 1. **A5：VP9 10bit（Profile 2）/4:2:2** —— 当前 `vp_profile!=0 || bit_depth!=8` 直接拒绝
@@ -137,14 +141,14 @@ OpenCL/VA-API/VDPAU 全走我们的栈；自建 KMD 在跑（srcversion `039F972
    （`mwv207` refcnt 恒为 2，只有 reboot 才释放）。
 6. **性能**：buffer 写入等待的吞吐代价只做了 glxgears 观测（110 FPS 无回退），重负载未量化；
    Firefox WebGL 42–44 FPS 的剩余瓶颈在 WebRender 帧调度。
-7. **UMD r18（I-1/I-2/I-3）待安装**：`payload-42` 已重新生成（r17→r18，原文 r17 载荷被
+7. **UMD r19（I-1/I-2/I-3/I-4）待安装**：`payload-42` 已重新生成（r17→r18→r19，原文 r17 载荷被
    本次修复取代）、`umd check` 通过，预验证用的是载荷内的同一份二进制
    （`libmwv207_dri.so` 跑 glxinfo/glxgears（~100 FPS）/query 4-4，
    `libEGL_mwv207` 跑 EGL/GBM smoke 全 OK，`libmwv207_drv_video.so` 跑 HEVC 8bit/Main10
    2 tile 列逐位一致、H.264 High 420 逐位一致、VP9 回归 18/18）。安装命令
    `sudo ./switch-mwv207.sh umd install` **会重启 lightdm**，因此要在本地终端/TTY 执行
-   （在 dsh web 会话里执行会连带杀掉本会话）；装完 `umd status` 应显示 r18，
-   DRI md5 `7ee8b982…`、VA md5 `b77d9377…`。
+   （在 dsh web 会话里执行会连带杀掉本会话）；装完 `umd status` 应显示 r19，
+   DRI md5 `5408ee72…`、VA md5 `eec6bfe5…`。
 8. **DKMS 一致性**：改 KMD 源码后必须重跑 `tools/dkms-sync.sh`（它会 dkms build/install
    两个内核）。注意 `switch-mwv207.sh kmd stage` 会用仓库构建的 .ko 覆盖 DKMS 安装路径，
  `dkms status` 会因此重新报 `Diff between built and installed module!`——差异来自

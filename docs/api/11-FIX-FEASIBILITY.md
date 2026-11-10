@@ -142,9 +142,13 @@ C1/C3（16 位格式 A/B/C）、C2（混合 8/15 是否保留超额声明）、D
 `I-3`（H.264 High422/444）**不可实现**，已收回声明：解码寄存器表里没有色度采样格式
 选择器、原厂 `jmgpu_drv_video.so` 的文档串只写 `0=4:0:0 1=4:2:0` 且 `QueryConfigProfiles`
 不声明 422/444、libva 也没有对应 VAProfile —— 三条互相独立（详见 `UNRESOLVED.md` §1.5）。
-`I-4`（H.264 High10 输出全 0）是新发现的**驱动缺陷**：原厂特性表对 `hw_build_id 0x1F76`
-写 `h264_high10_support = 1`，硬件支持，问题在本驱动的位深/输出配置（
-`dec_param.bit_depth` 置位晚于使用、`JMDEC_BIT_DEPTH_OUT_MINUS8` 未写）。
+`I-4`（H.264 High10）已定案并收回声明：原厂特性表对 `hw_build_id 0x1F76` 写
+`h264_high10_support = 1`，但按当前寄存器配置提交 10bit 码流会让 **DEC 管线挂死**
+（实测 6 次 `job from 'av:h264:df0' to 'mwv207_dec0', timed out!`、输出面全 0；
+8bit 同路径零超时）。Hantro 系的 10bit H.264 需要 **high10p 位流预转换**，本驱动
+未实现，原厂闭源驱动同样不声明 High10 → `4ecca0d` 收回 `MPEG4_AVC_HIGH10` 并在
+`end_frame` 跳过高位深码流。真正实现属"大"：需要先做位流重打包，再重调
+`BIT_DEPTH_*`/`DEC_MODE`/输出位深寄存器。
 `D1`（VP9）是独立的、有明确模板的中型实现。
 
 ---

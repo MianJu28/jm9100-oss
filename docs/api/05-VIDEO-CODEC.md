@@ -146,7 +146,7 @@ mwv207_context_video_codec_init(&ctx->base);
 | `PIPE_VIDEO_PROFILE_MPEG4_AVC_MAIN` | 43 | ✅ |
 | `PIPE_VIDEO_PROFILE_MPEG4_AVC_EXTENDED` | 44 | ✅ |
 | `PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH` | 45 | ✅ |
-| `PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH10` | 46 | ✅ |
+| ~~`PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH10`~~ | 46 | **已收回声明（2026-11-10，`4ecca0d`）**：10bit 提交会挂死 DEC 管线（缺 high10p 位流预转换），见 I-4 |
 | ~~`PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH422`~~ | 47 | **已收回声明（2026-11-10，`a5a938b`）**：本机 H.264 硬解只有 4:0:0/4:2:0，422 不可实现，见 `UNRESOLVED.md` §1.5 |
 | ~~`PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH444`~~ | 48 | **已收回声明**，同上 |
 | `PIPE_VIDEO_PROFILE_HEVC_MAIN` | 49 | ✅ |
@@ -639,13 +639,18 @@ VAProfile 都没有 → 本机物理上只有 4:0:0 与 4:2:0（详见 `UNRESOLV
 > `DEC_TAB_SWAP` 在公共块里被置为"非 0"（H.264 分支），而 `JMDEC_DEC_TAB_SWAP` 正好落在 **word 2**——
 > 这就是提交时为什么要把 word 2 单独作为一条命令（§5.2 第 3 条）紧随 word 1 之前发送。
 >
-> **I-4（2026-11-10 新发现，未修）**：H.264 10bit（High10）硬解输出**全 0** —— 10 帧
-> 352×288 样片经 `hwdownload,format=p010` 得到 3041280 B 全零面，而软件解码正常；
-> r16 与当前构建一致，故预先存在。原厂特性表对 `hw_build_id 0x1F76` 写
-> `h264_high10_support = 1`（`mwv207_video_dec_vpu_features_list.h:39`）⇒ 硬件支持，
-> 属本驱动缺陷。可疑点：`dec_param.bit_depth` 直到 `:2330` 才置位，而 `:597`/`:1337`/`:1892`
-> 先用它算尺寸；`JMDEC_BIT_DEPTH_OUT_MINUS8`（word 8，见上表旁）只有 VP9 在
-> `mwv207_dec_vp9.c:1265` 写，H.264/HEVC 都没写。详见 `UNRESOLVED.md` §1.2 的 I-4。
+> **I-4（2026-11-10 已定案，声明已收回）：H.264 10bit 提交会挂死 DEC 管线。**
+> 10 帧 352×288 High10 样片：驱动侧 `set_regs` 正常跑 10 次（`bit_depth=10`、
+> `high10p_mode=1`、`chroma_format_idc=1`、尺寸/流长都对），但内核连报 6 次
+> `mwv207: job from 'av:h264:df0' to 'mwv207_dec0', timed out!`
+> （`mwv207_dec0 irq state reg: 0x00010102`），靠 drm_sched TDR 回收，
+> 输出面 1520640 个 u16 采样**全 0**；8bit High 420 同路径零超时且逐位一致。
+> 原厂特性表对 `hw_build_id 0x1F76` 写 `h264_high10_support = 1`，但 Hantro 系的
+> 10bit H.264 需要 **high10p 位流预转换**（10bit 语法元素重打包），本驱动未实现；
+> 原厂闭源驱动的 `QueryConfigProfiles` 也不声明 High10。因此 `4ecca0d` 收回了
+> High10 声明，并在 `end_frame` 对 `bit_depth_luma_minus8 > 0` 直接跳过，
+> 避免把 DEC 管线拖进超时循环。`JMDEC_BIT_DEPTH_OUT_MINUS8`（word 8）目前只有
+> VP9 在 `mwv207_dec_vp9.c:1265` 写 —— 若将来补 high10p，这里也要一并处理。
 
 ---
 
