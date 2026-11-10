@@ -14,6 +14,7 @@
 * Electronics Corporation is strictly prohibited.
 */
 #include <linux/dma-fence.h>
+#include <linux/atomic.h>
 #include <linux/kthread.h>
 #include <linux/delay.h>
 #include <linux/freezer.h>
@@ -89,18 +90,21 @@ static int pipe_dec_polling(void *priv)
 		usleep_range(1000, 1001);
 		try_to_freeze();
 
-		fence = smp_load_acquire(&pipe->current_fence);
-		if (fence == NULL)
-			continue;
-
 		stat = pipe_dec_read(pipe, 0x4);
 		if ((stat & 0x1100) != 0x1100)
 			continue;
 
+		/*
+		 * 用 xchg 抢走 current_fence：与 reset 路径竞争时只有一个
+		 * 赢家，避免两边各 dma_fence_put() 一次（N14）。抢到之后再
+		 * 跑 PP，保证 reset 已经把硬件清掉时不会在旧状态上做后处理。
+		 */
+		fence = xchg(&pipe->current_fence, NULL);
+		if (!fence)
+			continue;
+
 		pipe_codec_sw_pp_excute(&pipe->sw_pp, &pipe->base);
 		pipe_dec_stat_reset(pipe, stat);
-
-		smp_store_release(&pipe->current_fence, NULL);
 
 		dma_fence_signal(&fence->base);
 		dma_fence_put(&fence->base);
@@ -109,10 +113,26 @@ static int pipe_dec_polling(void *priv)
 	return 0;
 }
 
+/*
+ * N14: reset/destroy 时把在飞 fence 以 -EIO 完成。
+ * 旧代码只 dma_fence_put()，等待该 fence 的客户端会永久睡眠。
+ */
+static void pipe_dec_force_complete(struct mwv207_pipe_dec *pipe)
+{
+	struct pipe_dec_fence *fence;
+
+	fence = xchg(&pipe->current_fence, NULL);
+	if (!fence)
+		return;
+
+	dma_fence_set_error(&fence->base, -EIO);
+	dma_fence_signal(&fence->base);
+	dma_fence_put(&fence->base);
+}
+
 static void mwv207_pipe_dec_reset(struct mwv207_pipe *mpipe)
 {
 	struct mwv207_pipe_dec *pipe = to_dec_pipe(mpipe);
-	struct pipe_dec_fence *fence;
 	u32 stat;
 	int i;
 
@@ -128,12 +148,7 @@ static void mwv207_pipe_dec_reset(struct mwv207_pipe *mpipe)
 	for (i = 12; i < pipe->base.iosize; i += 0x4)
 		pipe_dec_write(pipe, i, 0);
 
-	fence = smp_load_acquire(&pipe->current_fence);
-	if (fence) {
-		dma_fence_put(&fence->base);
-
-		smp_store_release(&pipe->current_fence, NULL);
-	}
+	pipe_dec_force_complete(pipe);
 }
 
 static struct dma_fence *mwv207_pipe_dec_submit(struct mwv207_pipe *mpipe,
@@ -217,6 +232,9 @@ static void mwv207_pipe_dec_destroy(struct mwv207_pipe *mpipe)
 	struct mwv207_pipe_dec *pipe = to_dec_pipe(mpipe);
 
 	kthread_stop(pipe->poll_thread);
+
+	/* N14: 轮询线程已停，这里不会再有推进者；残留 fence 就地完成 */
+	pipe_dec_force_complete(pipe);
 }
 
 struct mwv207_pipe *mwv207_pipe_dec_create(struct mwv207_device *jdev, int unit, u32 regbase,

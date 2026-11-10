@@ -282,19 +282,44 @@ static void pipe_3d_hw_init(struct mwv207_pipe_3d *pipe)
 	pipe_3d_write(pipe, 0x10c, 0x015b0880);
 }
 
+/*
+ * N14: 复位/卸载时把已提交但尚未完成的 fence 以 -EIO 结束并放引用。
+ * 旧代码只 dma_fence_put()，fence 永远不 signal —— 持有它的等待者
+ * （dma_resv 隐含 fence、sync_file、客户端）会永久睡眠。
+ * 先在 event_lock 内摘走数组，再在锁外 signal，回调不会在锁内执行。
+ */
+static void pipe_3d_force_complete(struct mwv207_pipe_3d *pipe)
+{
+	struct dma_fence *fences[30];
+	unsigned long flags;
+	int i;
+
+	spin_lock_irqsave(&pipe->event_lock, flags);
+	bitmap_zero(pipe->event_bitmap, 30);
+	for (i = 0; i < 30; i++) {
+		fences[i] = pipe->event_fence[i];
+		pipe->event_fence[i] = NULL;
+	}
+	spin_unlock_irqrestore(&pipe->event_lock, flags);
+
+	for (i = 0; i < 30; i++) {
+		if (!fences[i])
+			continue;
+		dma_fence_set_error(fences[i], -EIO);
+		dma_fence_signal(fences[i]);
+		dma_fence_put(fences[i]);
+	}
+}
+
 static void mwv207_pipe_3d_reset(struct mwv207_pipe *mpipe)
 {
 	struct mwv207_pipe_3d *pipe = to_3d_pipe(mpipe);
-	int i;
 
-	spin_lock_irq(&pipe->event_lock);
-	bitmap_zero(pipe->event_bitmap, 30);
-	for (i = 0; i < 30; i++) {
-		dma_fence_put(pipe->event_fence[i]);
-		pipe->event_fence[i] = NULL;
-	}
-	spin_unlock_irq(&pipe->event_lock);
-
+	/*
+	 * N14: 先以 -EIO 完成在飞 fence，再复位硬件 —— 避免复位过程中
+	 * 硬件又吐出旧 job 的事件，ISR 把已被 reset 的 job 当成功完成。
+	 */
+	pipe_3d_force_complete(pipe);
 	pipe_3d_hw_init(pipe);
 	pipe->tail = pipe->ringbuf;
 	pipe->head = pipe->ringbuf;
@@ -455,6 +480,9 @@ static void mwv207_pipe_3d_destroy(struct mwv207_pipe *mpipe)
 
 	free_irq(pipe->irq, pipe);
 	pipe_3d_stop(pipe);
+
+	/* N14: 卸载后不再有 ISR 推进事件 fence，残留者就地以 -EIO 完成 */
+	pipe_3d_force_complete(pipe);
 
 	jbo = pipe->ringbuf_bo;
 	ret = mwv207_bo_reserve(jbo, true);

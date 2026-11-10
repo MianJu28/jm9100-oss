@@ -203,20 +203,35 @@ static int pipe_2d_hw_init(struct mwv207_pipe_2d *pipe)
 	return 0;
 }
 
-static void pipe_2d_reset_ring(struct mwv207_pipe_2d *pipe)
+/*
+ * N14: reset/destroy 时在飞 fence 必须 signal 后再 put。
+ * 旧代码只 dma_fence_put()，fence 永远停在未完成状态，任何持有它的
+ * 等待者（dma_resv 的隐含 fence、sync_file、上层 TTM/客户端）会永久睡眠。
+ * 先把队列摘到本地链表再在锁外 signal，避免在持有 fence_queue_lock 时
+ * 跑 fence 回调（ISR 里是同一个队列，锁序保持一致）。
+ */
+static void pipe_2d_force_complete(struct mwv207_pipe_2d *pipe)
 {
 	struct pipe_2d_fence *fence, *p;
+	LIST_HEAD(dead);
 	unsigned long flags;
 
-	pipe->head = pipe->ring_start;
-	pipe->tail = pipe->ring_start;
-
 	spin_lock_irqsave(&pipe->fence_queue_lock, flags);
-	list_for_each_entry_safe(fence, p, &pipe->fence_queue, q) {
+	list_splice_init(&pipe->fence_queue, &dead);
+	spin_unlock_irqrestore(&pipe->fence_queue_lock, flags);
+
+	list_for_each_entry_safe(fence, p, &dead, q) {
 		list_del(&fence->q);
+		dma_fence_set_error(&fence->base, -EIO);
+		dma_fence_signal(&fence->base);
 		dma_fence_put(&fence->base);
 	}
-	spin_unlock_irqrestore(&pipe->fence_queue_lock, flags);
+}
+
+static void pipe_2d_reset_ring(struct mwv207_pipe_2d *pipe)
+{
+	pipe->head = pipe->ring_start;
+	pipe->tail = pipe->ring_start;
 }
 
 static u32 *pipe_2d_append_wl(struct mwv207_pipe_2d *pipe)
@@ -259,6 +274,12 @@ static inline void pipe_2d_stop(struct mwv207_pipe_2d *pipe)
 static void mwv207_pipe_2d_reset(struct mwv207_pipe *mpipe)
 {
 	struct mwv207_pipe_2d *pipe = to_pipe_2d(mpipe);
+
+	/*
+	 * N14: 无论下面 hw_init() 结果如何（失败会 early return，硬件可能
+	 * 复位不掉），在飞 fence 都必须先完成，否则等待者永远无法恢复。
+	 */
+	pipe_2d_force_complete(pipe);
 
 	if (pipe_2d_hw_init(pipe))
 		return;
@@ -418,6 +439,12 @@ static void mwv207_pipe_2d_destroy(struct mwv207_pipe *mpipe)
 
 	free_irq(pipe->irq, pipe);
 	pipe_2d_stop(pipe);
+
+	/*
+	 * N14: free_irq() 之后不会再有 ISR 推进 fence，残留节点必须在这里
+	 * 以 -EIO 完成，否则卸载后这些 fence 的等待者永远醒不过来。
+	 */
+	pipe_2d_force_complete(pipe);
 
 	ret = mwv207_bo_reserve(mbo, true);
 	if (ret) {
