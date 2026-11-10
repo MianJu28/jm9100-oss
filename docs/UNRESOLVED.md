@@ -61,7 +61,7 @@ dmesg 里 GPU 相关错误计数为 0。
 | 4 | KMD | **N14 已修，待重启生效** | 修复见 §2.1（`22145e9`）；新模块已暂存（`039F972EFE3279A155EE225`），当前运行仍是旧版 `D507FC2774D547E7BEBA182`，重启后需跑 GL/VAAPI 回归 | 本文 §2.1 |
 | 5 | KMD | N1/N2/N4/K9-①/K9-②/K11/K12/N10/N9 | 竞态/健壮性，多为低概率 | 本文 §2 |
 | 6 | 切换脚本 | **vendor 态端到端未实跑** | `stack vendor` 会重启，需人工确认；热切换已证不可行（refcnt 恒 2） | `switch-mwv207.sh` / §5 |
-| 7 | 打包 | **DKMS 一致性警告（已解决）** | 2026-11-10 用 `tools/dkms-sync.sh` 重建后，6.6.155 与 6.6.143 的 `dkms status` 都不再报差异；KMD 改源码后仍须重跑该脚本 | §5 |
+| 7 | 打包 | **DKMS 一致性警告（走 stage 时会复现，已记录处理步骤）** | `tools/dkms-sync.sh` 重建后两个内核都干净；`kmd stage` 直接覆盖仓库构建的 .ko 会让 6.6.155 重新报 `Diff between built and installed module!`，用 `dkms install --force` + `depmod` + `update-initramfs` 恢复即可 | §2.1、§5 |
 | 8 | 性能 | buffer 写入等待的吞吐代价未量化 | 仅 glxgears（110 FPS）观测；重负载未测 | 本文 §4 性能 |
 | 9 | 依赖补丁 | `loader_dri3` buffer age 恒 0 只在本地 mesa 树提交 | 未推厂商镜像；重建 mesa 时需保留 | `ref/oh-mesa` `248659c` |
 | 10 | 测试 | 无自动化 GL 回归 | Firefox/GL 侧探针均为一次性脚本；VP9 有 `tools/vp9-regression.sh` | §7 |
@@ -198,6 +198,14 @@ dmesg 里 GPU 相关错误计数为 0。
 
 **部署状态**：`tools/dkms-sync.sh` 已重建并安装到 6.6.155 与 6.6.143 两个内核，
 `switch-mwv207.sh kmd stage` 已刷新 initramfs 并暂存（srcversion
+> **备注（DKMS 状态）**：`kmd stage` 是把仓库构建的 .ko 直接 `install` 到
+> `/lib/modules/$KVER/updates/dkms/`，与 DKMS 自己构建/签名的副本内容不同，
+> 因此 `dkms status` 会重新出现 `Diff between built and installed module!`。
+> 已用 `dkms install -m mwv207-oss -v 1.0.0 -k 6.6.155-arm64-desktop-hwe --force`
+> + `depmod -a` + `update-initramfs -u -k 6.6.155-arm64-desktop-hwe` 恢复干净
+> 状态：两处 srcversion 均为 `039F…`，initramfs 内那份也已刷新为 `039F…`。
+> 以后每次 `kmd stage` 后若要 `dkms status` 干净，重复这三步。
+
 `D507FC2774D547E7BEBA182` → `039F972EFE3279A155EE225`）。**重启后核对**：
 
 ```bash

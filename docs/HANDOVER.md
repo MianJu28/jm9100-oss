@@ -117,9 +117,13 @@ DKMS 包 `mwv207-oss/1.0.0`；N14 修复版 `039F972EFE3279A155EE225` 已暂存�
    （`mwv207` refcnt 恒为 2，只有 reboot 才释放）。
 6. **性能**：buffer 写入等待的吞吐代价只做了 glxgears 观测（110 FPS 无回退），重负载未量化；
    Firefox WebGL 42–44 FPS 的剩余瓶颈在 WebRender 帧调度。
-7. **DKMS 一致性（已解决）**：2026-11-10 用 `tools/dkms-sync.sh` 重建后，6.6.155 与
-   6.6.143 的 `dkms status` 都不再报 `Diff between built and installed module!`。
-   之后每次改 KMD 源码仍必须重跑该脚本，并用 `switch-mwv207.sh kmd stage` 暂存。
+7. **DKMS 一致性**：改 KMD 源码后必须重跑 `tools/dkms-sync.sh`（它会 dkms build/install
+   两个内核）。注意 `switch-mwv207.sh kmd stage` 会用仓库构建的 .ko 覆盖 DKMS 安装路径，
+ `dkms status` 会因此重新报 `Diff between built and installed module!`——差异来自
+   DKMS 的 MOK 签名与构建方式，功能等价；要恢复干净状态，再跑一次
+   `dkms install -m mwv207-oss -v 1.0.0 -k <ver> --force` + `depmod -a` +
+   `update-initramfs -u -k <ver>`（2026-11-10 已这样处理 6.6.155，两处 srcversion
+   均为 `039F…`）。
 
 ### 不建议投入（沿用 2026-11-03 结论）
 C-2 16 位采样编码（硬件边界）、D7 Vulkan、C-5/C-6、N10/N9、openuuyc 单实例 UX。
