@@ -70,7 +70,7 @@ modinfo /lib/modules/…/updates/dkms/…    -> srcversion 0EFB7F4433EA5311B08E8
 |---|---|---|---|---|
 | 1 | VAAPI/VP9 | **A5：Profile 2（10bit 4:2:0）已支持；4:2:2/4:4:4 定案不可实现** | 2026-11-10 `82e7b02`：Profile 2 与软件解码**逐位一致**（64x64/640x360/720p60/1080p30，含 inter 帧，零 TDR），默认声明，`MWV207_VP9_10BIT_DISABLE=1` 可关。Profile 1/3 与 H.264 422/444 同理不可实现：解码器没有色度采样格式选择字段（§1.5）。**残余**：12bit VP9 未验证（代码只放行 10bit） | 本文 §1.6 |
 | 2 | VAAPI/VP9 | **B3 样片到手，但暴露 I-5：官方 intra-only 向量硬件解码与 libvpx 不一致**（4 个解码帧 DIFF、3 个 `show_existing` 帧一致；已排除比对方法/尺寸/解析层） | 本机编码器产不出 intra-only 帧，已改用 WebM 官方向量并做成 `tests/vp9-intraonly/` 诊断脚本；**I-5 未定位**，暂不能宣告 B3 通过 | 本文 §1.7 |
-| 3 | VAAPI/VP9 | **B2 真正的跨尺寸参考未验证** | 已有"缺参考/尺寸不同即拒绝"的保护（`72f9523`），缩放路径未跑通；需自写 VAAPI 客户端 | `docs/HANDOVER-VP9.md` §10 B2 |
+| 3 | VAAPI/VP9 | **B2 侦察完成：普通 resize+tile 序列正确；resize_inter 一族被保护跳过但仍出脏帧（I-6 候选）** | `vp90-2-14-resize-10frames-fp-tiles-1-2.webm` 硬件与 libvpx **IDENTICAL**；`vp90-2-21-resize_inter_320x180_5_1-2.webm` 每帧报 `reference 0 (slot 0) has no decoded picture; frame skipped`，但输出字节数与软件一致、内容 DIFF ⇒ 跳过要对上层可见 | 本文 §1.8 |
 | 4 | KMD | **N14 已修，重启后已验证生效** | 修复见 §2.1（`22145e9`）；运行中 srcversion 已是 `039F972EFE3279A155EE225`，GL/query/VP9 回归全过；reset 通路已用 `tests/n14-reset/` 探针实测（6 轮 TDR、force_complete 6/6） | 本文 §2.1 |
 | 4b | KMD | **N1/N2/K12/K9-②/N9 已修，重启后已验证生效** | 修复见 §2.2（`6502f19`）；2026-11-10 13:29 重启后 srcversion = `D5EEF36617A4D3FBF4AFD1D`，GL/query 4·4/VP9 18·18/H.264 8bit 逐位一致/N14 探针 6·6 全过，dmesg 无 WARN/BUG；引擎计数用 `tests/engines/` 核对（lite 机型 3d=1 dec=1 enc=0 2d=1 dma=1） | 本文 §2.2 |
 | 4c | UMD 视频 | **I-4：H.264 High10 已定案（2026-11-10 收回声明）** —— 按当前寄存器配置提交 10bit H.264 会让 DEC 管线挂死（6 次 TDR、输出全 0）；缺 Hantro 的 high10p 位流预转换 | 客户端现在对该类流直接回退（`hwaccel initialisation returned error`），DEC 零超时；原厂闭源驱动同样不声明 High10 | 本文 §1.2 / `api/05-VIDEO-CODEC.md` §6.7 |
@@ -322,6 +322,35 @@ inter 帧（1/5/6）也 DIFF、且它们的预测来自正确参考，说明问�
 **复跑**：`tests/vp9-intraonly/run-vp9-intraonly.sh`（首次需联网下载样片；`--local DIR`
 可复用已下载文件）；自产样片用 `tests/vp9-intraonly/build-probe.sh` +
 `tests/vp9-intraonly/make-intra-only.py`。
+
+### 1.8 B2 侦察：官方 resize 向量一批能解、一批跳过但照样出图（I-6 候选）
+
+B2 要的是"跨尺寸参考"（参考帧尺寸与当前帧不同）。官方测试向量里有两族现成的：
+
+| 向量 | 说明 | 硬件 vs libvpx |
+|---|---|---|
+| `vp90-2-14-resize-10frames-fp-tiles-1-2.webm` | 432×240，10 帧，tile 1×2 | **IDENTICAL**（4665600 B） |
+| `vp90-2-21-resize_inter_320x180_5_1-2.webm` | 320×180，30 帧，首包 `K__` 关键帧 | **DIFF**（两边都是 2592000 B） |
+
+第一族说明"带 tile 的普通 resize 序列"在本驱动上是通的。第二族触发驱动的保护性跳过：
+
+```
+mwv207_dec_vp9_set_regs() ERROR vp9: reference 0 (slot 0) has no decoded picture; frame skipped
+```
+
+（每帧一行。）libvpx 软件解码这条流**没有任何告警**，即它是合法流；但驱动把帧判为
+"参考缺失"并 `frame skipped` 之后，**这些帧仍然被当成正常帧输出**（硬件输出字节数与
+软件一致 2592000 B，内容 DIFF）。也就是说：
+
+- 现有"缺参考/尺寸不同即拒绝"（`72f9523`）确实拦住了不该解的帧；
+- 但拦截**没有传到应用**：`mwv207_dec_vp9_set_regs()` 之后调用方继续走 PP/输出，
+  用户拿到的是脏帧而不是错误。
+
+这既是 B2 的真实内容（要么支持跨尺寸参考，要么让"跳过"对上层可见），也是 I-6 候选：
+**解码失败必须让 surface 标记失败/让 fence 带错误，而不是静默出图**。
+复跑：`ffmpeg -hwaccel vaapi -hwaccel_output_format vaapi -i <向量> -vf hwdownload,format=nv12`
+与 `-c:v libvpx-vp9` 逐字节比对；向量在
+<https://storage.googleapis.com/downloads.webmproject.org/test_data/libvpx/>。
 
 ---
 
