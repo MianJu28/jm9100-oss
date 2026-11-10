@@ -32,8 +32,8 @@
 ```
 cat /sys/module/mwv207/srcversion        -> D5EEF36617A4D3FBF4AFD1D（运行中）
 modinfo -n mwv207                        -> /lib/modules/6.6.155-…/updates/dkms/mwv207.ko
-modinfo src/kernel-6.6/mwv207.ko         -> srcversion D5EEF36617A4D3FBF4AFD1D
-modinfo /lib/modules/…/updates/dkms/…    -> srcversion D5EEF36617A4D3FBF4AFD1D
+modinfo src/kernel-6.6/mwv207.ko         -> srcversion 0EFB7F4433EA5311B08E88C（待重启）
+modinfo /lib/modules/…/updates/dkms/…    -> srcversion 0EFB7F4433EA5311B08E88C（待重启）
 ```
 
 三方一致 ⇒ **运行中的就是自建版**，且包含：
@@ -344,8 +344,22 @@ LLI 数组是复用的（`0x400000 / sizeof(lli)` 条），超过约 64 MB 的�
 6.6.143 用 `dkms install --force` 补装；两内核 `dkms status` 均 `installed`、无 `Diff`
 警告；两个 initramfs 都已刷新，解包核对
 `updates/dkms/mwv207.ko` 的 srcversion 均为 **`0EFB7F4433EA5311B08E88C`**
-（143 的 `update-initramfs` 又出现一次既有的 `dracut-install` segfault/exit 139，
-重跑即成功，与上次同因，目标文件未被破坏）。运行中仍是 `D5EEF36617A4D3FBF4AFD1D`。
+（143 的 `update-initramfs` 又出现既有的 `dracut-install` segfault/exit 139，
+重跑即成功，与上次同因，目标文件未被破坏）。**这个 139 与我们的驱动无关，已有证据**：
+对应时刻的内核日志是 `note: cp[246066] exited with irqs disabled` + `preempt_count 1`
+以及随后 idle 上的 `WARNING at kernel/context_tracking.c:128 ct_kernel_exit`，
+而同参数的 `cp --reflink=auto --sparse=auto -fL` 在命令行手跑 3/3 成功 —— 属该内核
+（`vfs_monitor(OE)` 等树外模块在场、`Tainted: D`）在 initramfs 工具链大批量搬文件时的
+既有不稳定性，不是 GPU 管线触发。运行中仍是 `D5EEF36617A4D3FBF4AFD1D`。
+
+**一键验收**：`printf '666\n' | sudo -S ./tests/verify-installed.sh 0EFB7F4433EA5311B08E88C`
+（`tests/verify-installed.sh`，2026-11-10 新增；`--no-n14` 可跳过 TDR 探针）——它把下面的
+判据全部脚本化，含 srcversion 比对、`modinfo -n` 来源、glxinfo/query/引擎计数、
+VAAPI profile 归位、三类解码逐位一致、High10 回退与 DEC 零超时、TDR 探针、
+以及"只看本次运行新增"的 dmesg 告警检查（`kernel.dmesg_restrict=1` 时普通用户跑会
+明确 SKIP 而不是假 PASS）。当前在运行中的 `D5EE…` + r19 上跑过：普通用户
+`PASS=18 FAIL=0 SKIP=3`，root 全跑 `PASS=21 FAIL=0 SKIP=1`（SKIP 为 TDR 探针后预期的
+6 条 `timed out`）。
 
 **重启后的判据**：`cat /sys/module/mwv207/srcversion` 应为 `0EFB7F4433EA5311B08E88C`；
 随后 `glxinfo -B`、`tests/query/run-query-tests.sh`（`DRI_DIR=/usr/local/lib/mwv207-oss`）、
@@ -365,7 +379,7 @@ LLI 数组是复用的（`0x400000 / sizeof(lli)` 条），超过约 64 MB 的�
 
 | # | 目标 | 可行性 | 状态 / 缺口 |
 |---|---|---|---|
-| **D1** | **VP9 解码** | **中-高**（最可行） | 切片解析器 + bool 解码器**已编入库但零调用者**；唯一缺口是 `mwv207_video_dec.c` 里 `mwv207_dec_vp9_set_regs()` **无 VP9 分支**（`grep vp9 mwv207_video_dec.c` 仅命中注释/头文件）。有 H264（10 个 `set_regs`）/HEVC（7 个）作模板，1840 行解码寄存器表已全量还原。**本机芯片档位已确认**：`mwv207_dec_h264.c:2321` 与 `mwv207_dec_hevc.c:1231` 都硬编码调用 `mwv207_video_dec_get_hw_features_by_id(0x00001F76, ...)`，而 `mwv207_video_dec_vpu_features_list.h:29-36` 的 `0x00001F76` 档 `vp9_support=1`、`vp9_profile2_support=1` → **硬件确实支持 VP9（含 Profile 2）**。需真实 VP9 码流验证 |
+| **D1** | **VP9 解码** | 已落地 Profile0，余项见 A5 | **Profile0 8bit 已实现并上机验证**（`mwv207_dec_vp9.c` 的切片/bool 解析 + `mwv207_video_dec.c` 的 `mwv207_dec_vp9_set_regs()` 分支；`tools/vp9-regression.sh` 18/18 逐位一致）。**剩下的是 §0.1 的 A5**：Profile1/2（10bit）与 4:2:2 被显式拒绝，放开会让 ASIC 自旋挂死整机，需先有安全试错/看门狗路径。芯片档位 `0x00001F76` 的 `vp9_support=1`、`vp9_profile2_support=1` 说明硬件能力在，缺的是驱动侧 10bit 通路 |
 | ~~D2~~ | ~~**H264 4:2:2 / 4:4:4**~~ | **已定案（2026-11-10）：不可实现** | 原 I-3 二选一已终结 —— 硬件只有 4:0:0/4:2:0，已收回声明（`a5a938b`），见 §1.5；`chroma_format_idc` 硬置保持 1，另加 `chroma_format_idc>1` 即跳过解码的防线 |
 | **D3** | **编码（H264/HEVC）** | 大（从零） | UMD 侧 `base.encode_bitstream` **从未安装**（全树 0 处）；KMD 有 `mwv207_pipe_enc.c`。硬件侧有 HEVC 编码证据（闭源串含 `jmenc/source/hevc/hevcencapi.c`） |
 | **D4** | 4 个未实现的扩展 opcode：`WAIT_GROUP_EVENT`(0x11) / `TD_OP`(0x12) / `TEX_INVALIDATE`(0x14) / `PRE_NORM`(0x15) | 小-中 | 厂商枚举齐全（`MWV207REG_SH_EXTENDED_OPCODE`），需逐个确定语义 |
@@ -461,7 +475,11 @@ LLI 数组是复用的（`0x400000 / sizeof(lli)` 条），超过约 64 MB 的�
 - 反编译与寄存器：[ref/reverse-source/docs/README.md](ref/reverse-source/docs/README.md)、
   [ref/reverse-source/docs/05-OCCLUSION-QUERY.md](ref/reverse-source/docs/05-OCCLUSION-QUERY.md)
 - KMD 6.6 移植：[../reports/KMD-6.6-PORT-REPORT.md](../reports/KMD-6.6-PORT-REPORT.md)
-- 验证工具：`tests/query/run-query-tests.sh`、`tests/engines/run-engines.sh`（引擎计数，N1）、
+- 验证工具：`tests/verify-installed.sh`（**一键验收已安装栈**：KMD srcversion/来源、
+  glxinfo/query/引擎计数、VAAPI profile 归位、H.264-High/HEVC 8/10bit 逐位一致、
+  High10 回退且 DEC 零超时、TDR 探针、dmesg 新增告警；`sudo ./tests/verify-installed.sh <srcversion>`
+  全跑，普通用户跑会自动跳过需要 root 的两项）、`tests/query/run-query-tests.sh`、
+  `tests/engines/run-engines.sh`（引擎计数，N1）、
   `tests/n14-reset/run-n14-reset.sh`（reset 通路，N14/K12）、`tests/run-all.sh`
 
 ## 火狐浏览器自身 UI 的文字错位（r8 起可见）—— 已修（2026-11-07）

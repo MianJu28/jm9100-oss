@@ -11,7 +11,7 @@
 `6.6.155-arm64-desktop-hwe`；本文早前写的 6.6.143 是升级前的内核，两个版本的 DKMS
 模块都已同步重建）。
 桌面零 env 下 GL 4.0 / GLES 3.2 / `Video memory: 2048MB`，glxgears 110 FPS；
-OpenCL/VA-API/VDPAU 全走我们的栈；自建 KMD 在跑（srcversion `039F972EFE3279A155EE225`，
+OpenCL/VA-API/VDPAU 全走我们的栈；自建 KMD 在跑（srcversion `D5EEF36617A4D3FBF4AFD1D`，
 含 N14 的 reset/fence 修复与 N1/N2/K12/K9-②/N9 批次，**2026-11-10 13:29 重启后已验证生效**；
 再下一批 N4（DMA 异步完成 + 真 fence）/K11（中断窗口 + `pci_disable_device`）已构建为
 `0EFB7F4433EA5311B08E88C` 并装到两个内核、initramfs 已刷，**待重启生效**；
@@ -141,6 +141,11 @@ DKMS 包 `mwv207-oss/1.0.0`）。**VP9 Profile0 8bit 硬解已与软件逐位一
   声明 High10。收回后 ffmpeg 对该类流直接回退（`hwaccel initialisation
   returned error`），DEC 零超时；`end_frame` 另加 `bit_depth_luma_minus8 > 0`
   跳过分支。见 `docs/UNRESOLVED.md` §1.2。
+- **一键验收脚本（2026-11-10，`tests/verify-installed.sh`）**：把 KMD 版本/来源、
+  glxinfo/query/引擎计数、VAAPI profile 归位、H.264-High/HEVC 8/10bit 逐位一致、
+  High10 回退与 DEC 零超时、TDR 探针、dmesg 新增告警（带基线，只查本次运行新增行）
+  串成一条命令；`kernel.dmesg_restrict=1` 时明确 SKIP 而非假 PASS。已在 r19 + `D5EE…`
+  上预跑通过（root 全跑 `PASS=21 FAIL=0 SKIP=1`）。
 
 ### 待办（按价值排序）
 1. **A5：VP9 10bit（Profile 2）/4:2:2** —— 当前 `vp_profile!=0 || bit_depth!=8` 直接拒绝
@@ -154,6 +159,9 @@ DKMS 包 `mwv207-oss/1.0.0`）。**VP9 Profile0 8bit 硬解已与软件逐位一
    `docs/UNRESOLVED.md` §2.3——重点是 TTM 搬移全走这条路径，glxgears/query/VP9/
    HEVC/H.264 都要逐位复核）；K9-① 已核实为与厂商一致（非缺陷）；只剩 N10（只文档化）
    与 20 处 `BUG_ON` 的防御性收敛。
+   **重启后一条命令验收**：`printf '666\n' | sudo -S ./tests/verify-installed.sh 0EFB7F4433EA5311B08E88C`
+   （2026-11-10 新增 `tests/verify-installed.sh`；`--no-n14` 跳过 TDR 探针）。当前在
+   `D5EE…` + r19 上预跑：普通用户 `PASS=18 FAIL=0 SKIP=3`、root `PASS=21 FAIL=0 SKIP=1`。
 5. **vendor 态端到端验证**：`stack vendor` 会重启，尚未人工实跑；热切换已证不可行
    （`mwv207` refcnt 恒为 2，只有 reboot 才释放）。
 6. **性能**：buffer 写入等待的吞吐代价只做了 glxgears 观测（110 FPS 无回退），重负载未量化；

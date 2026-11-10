@@ -17,7 +17,9 @@ r16 修复 Firefox 两处渲染缺陷 —— 字形/图标撕裂（上传暂存 
 GBM/Wayland 平台打通 → 健壮性批次修复 → dual-source blend 崩溃修复 →
 UMD 视频批次（HEVC tile 缓冲高度 I-1、word7 bit30 复用 I-2、收回 H.264
 High422/444 声明 I-3、收回 H.264 High10 声明 I-4 —— 10bit H.264 提交会挂死
-DEC 管线；载荷 `payload-42` r19 已安装）。
+DEC 管线；载荷 `payload-42` r19 已安装）→ 一键验收脚本
+`tests/verify-installed.sh`（版本/GL/引擎/VAAPI 能力/三类解码逐位一致/TDR/dmesg，
+`sudo ./tests/verify-installed.sh <srcversion>` 一条命令跑完）。
 
 ## 快速使用
 
