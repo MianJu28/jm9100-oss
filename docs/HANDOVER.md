@@ -26,7 +26,7 @@ OpenCL/VA-API/VDPAU 全走我们的栈；自建 KMD 在跑（srcversion `D5EEF36
 | 机器 | Deepin 25 aarch64，内核 `6.6.155-arm64-desktop-hwe`（143 也装了 DKMS 包，但不是启动内核），GPU `[0731:9100]` PCI 07:00.0，HDMI-1 1920×1080@100Hz，无免密 sudo（用 `printf '666\n' \| sudo -S`） |
 | 仓库 | `/home/admin/jm9100-oss`（git，远端 `git@github.com:MianJu28/jm9100-oss.git`，已推送同步） |
 | 源码 | `src/mwv207-umd/`（UMD，唯一可改处；上游树 `ref/oh-mesa/.../src/gallium/{drivers,winsys}/mwv207` 是指向它的符号链接）、`src/kernel-6.6/`（KMD，已并入本仓库） |
-| 已装栈 | `/usr/local/lib/mwv207-oss/`（运行中 **r20**：DRI md5 `39f38c6f5fd2f5ec64d0b90459f31e89`、VA md5 `fa63148dfb01b97461897106a4591346`、EGL_mwv207 `d038036a…`、vdpau `f10fcec15f26…`、OpenCL `a3fb2f47559b…`；`payload-41`=r16/`payload-42`=r20 可回滚），`/lib/modules/…/updates/dkms/mwv207.ko`（自建 KMD，运行中 `5A5B401802B79D560151210`） |
+| 已装栈 | `/usr/local/lib/mwv207-oss/`（运行中 **r20**：DRI md5 `39f38c6f5fd2f5ec64d0b90459f31e89`、VA md5 `fa63148dfb01b97461897106a4591346`、EGL_mwv207 `d038036a…`、vdpau `f10fcec15f26…`、OpenCL `a3fb2f47559b…`；`payload-41`=r16/`payload-42`=r20 可回滚），`/lib/modules/…/updates/dkms/mwv207.ko`（自建 KMD，运行中 `5A5B401802B79D560151210`；已装待重启 `8DFC520FB8FCDECFBC911AA`） |
 | 载荷 | 运行中 `payload-42`（`24.1.2-fullstack-r19`，含 I-1/I-2/I-3/I-4；2026-11-10 13:25 安装）；**`payload-42` 已重新组装为 `24.1.2-fullstack-r20`**（追加 A5：VP9 Profile 2 10bit 4:2:0），`umd check` 通过、`/tmp/p42` 预验证（glxinfo/query 4·4/720p60 10bit 逐位一致），**安装需用户在自己终端跑 `sudo ./switch-mwv207.sh umd install`（会重启 lightdm）**；`payload-41`（r16）为上一份可回滚点，历史快照在 `/var/lib/mwv207-oss/switch-history` |
 | 快速回归副本 | `/tmp/gd3/`（测试用；`/tmp` 是 7.8G tmpfs，重启即空，记得清理大文件）。实验构建流程：改 `src/mwv207-umd` → `ninja -C ref/oh-mesa/User_source_code/mesa-24.1.2/build-full src/gallium/targets/dri/libmwv207_dri.so` → `cp` 到 `/tmp/gd3/` → 用 `LIBGL_DRIVERS_PATH=/tmp/gd3 MESA_LOADER_DRIVER_OVERRIDE=mwv207` 测 |
 | 出包安装 | `./tools/make-payload.sh -v 24.1.2-fullstack-rN` → `printf '666\n' \| sudo -S ./switch-mwv207.sh umd install --force`（**install 调用常显示 interrupted，实装已完成——必须用 `status` + md5 比对确认，勿盲目重跑**） |
@@ -118,6 +118,12 @@ OpenCL/VA-API/VDPAU 全走我们的栈；自建 KMD 在跑（srcversion `D5EEF36
   `tests/bad-submit/`（9 个用例）。2026-11-10 16:21 重启后运行中即为
   `5A5B401802B79D560151210`，`tests/verify-installed.sh … --bad-submit` 全过
   `PASS=25 FAIL=0 SKIP=1`；畸形提交 9/9 干净返回 errno、dmesg 零 oops。
+- **N17（`1fc9b21`，待重启生效）**：`5A5B4018…` 上普通桌面负载即触发
+  `refcount_t: addition on 0; use-after-free`（`mwv207_pipe_dma_submit+0x77c`）——
+  N4 的异步 DMA 把给调度器的 `dma_fence_get()` 放在 `queue_work()` 之后，worker 抢跑时
+  fence 已被回收。轻则引用计数污染/泄漏，重则 parent fence 被回收、job 永不完成，用户态
+  停在不可中断等待（与 16:30 整屏卡死、Xorg 只能 SIGKILL 的症状吻合）。两内核与两
+  initramfs 已装 `8DFC520FB8FCDECFBC911AA`，重启后按 `docs/UNRESOLVED.md` §2.6 复核。
 - **KMD 结构/边界批次（`6502f19`，已重启验证生效）**：N1 sched 槽位撞车（6 槽放 7 个
   引擎，enc0 覆盖 dec1）→ `MWV207_MAX_SCHED_NR 7` + 显式下标；N2 3D `hw_submission`
   30→28（等于事件槽数会命中 `BUG_ON(event >= 30)`）；K12 超时路径 devfreq 多减 →
@@ -169,8 +175,12 @@ OpenCL/VA-API/VDPAU 全走我们的栈；自建 KMD 在跑（srcversion `D5EEF36
    **重启验证生效**（`fbed27f`，运行中 srcversion `0EFB7F4…`；判据见
    `docs/UNRESOLVED.md` §2.3）；K9-① 已核实为与厂商一致（非缺陷）；20 处 `BUG_ON`
    已收敛（`53b3229`）＋ 新发现的 N16 已修（`c01af40`），运行中已是 `5A5B4018…`、
-   **重启后验证生效**（PASS=25，§2.4/§2.5）；只剩 N10（决定只文档化）。
-   **一条命令验收**：`printf '666\n' | sudo -S ./tests/verify-installed.sh 5A5B401802B79D560151210 --bad-submit`
+   **重启后验证生效**（PASS=25，§2.4/§2.5）。另在 16:41 抓到由 N4 引入的引用计数缺陷
+   **N17**（异步 DMA 在 `queue_work()` 之后才 `dma_fence_get()`，worker 抢跑时对已释放
+   fence 做 `refcount_inc`），已修（`1fc9b21`）、两内核装为 `8DFC52…`，**待重启生效**
+   （§2.6）；它与 16:30 那次整屏卡死（Xorg 收 SIGTERM 不退、只能 SIGKILL）症状一致。
+   只剩 N10（决定只文档化）。
+   **一条命令验收**：`printf '666\n' | sudo -S ./tests/verify-installed.sh 8DFC520FB8FCDECFBC911AA --bad-submit`
    （`--no-n14` 跳过 TDR 探针）。2026-11-10 14:36 重启后实跑：
    `PASS=22 FAIL=0 SKIP=1`（SKIP 为 TDR 探针后预期的 6 条 `timed out`），
    另测 glxgears 102.7 FPS、`tools/vp9-regression.sh` 18/18。
