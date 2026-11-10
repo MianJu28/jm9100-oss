@@ -73,8 +73,14 @@ static void mwv207_evict_flags(struct ttm_buffer_object *bo,
 			mwv207_bo_placement_from_domain(jbo,
 					0x2 | 0x4,
 					false);
-			BUG_ON(!(jbo->placements[0].mem_type == TTM_PL_VRAM));
-			BUG_ON(!(jbo->placements[1].mem_type == TTM_PL_TT));
+			/* placement_from_domain(VRAM|TT) 的结果必须是
+			 * [0]=VRAM、[1]=TT。若这个前置条件不成立，后面给
+			 * placements[0] 设 visible 窗口的 fpfn/lpfn 就会算错，
+			 * 因此直接放弃这次 evict 特化（退回普通 placement），
+			 * 而不是 panic。 */
+			if (WARN_ON_ONCE(jbo->placements[0].mem_type != TTM_PL_VRAM ||
+					 jbo->placements[1].mem_type != TTM_PL_TT))
+				return;
 			jbo->placements[0].fpfn = jdev->visible_vram_size >> PAGE_SHIFT;
 			jbo->placements[0].lpfn = 0;
 			jbo->placement.placement = &jbo->placements[0];

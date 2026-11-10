@@ -404,6 +404,8 @@ static int mwv207_submit_patch_single(struct mwv207_job *mjob,
 			return -EINVAL;
 		jbo = mwv207_job_bo(mjob, reloc->idx);
 	}
+	if (!jbo)
+		return -EINVAL;
 
 	return  mwv207_submit_patch_entry(mjob, reloc, jbo, dat, dat_size);
 }
@@ -429,8 +431,11 @@ static int mwv207_submit_patch_dma_entry(struct mwv207_job *mjob,
 		loc->pg_nr_type = MWV207_DMA_NR_PAGES_RAM(PFN_UP(jbo->tbo.base.size));
 		break;
 	default:
-		BUG_ON(1);
-		break;
+		/* 走到这里说明 BO 的 mem_type 既不是 VRAM 也不是 TT —— TTM 只会在
+		 * SYSTEM/TT/VRAM 之间迁移，SYSTEM 在提交前会被 validate 成 TT。
+		 * 原实现是 BUG_ON(1)（用户态提交路径上的内核 panic），改成可恢复错误。 */
+		WARN_ON_ONCE(1);
+		return -EINVAL;
 	}
 
 	if (loc->offset >= mwv207_bo_size(jbo))
@@ -467,7 +472,11 @@ static int mwv207_submit_patch_dma(struct drm_device *dev, struct mwv207_job *mj
 			return -EINVAL;
 		if (reloc->bo_offset)
 			return -EINVAL;
+		if (reloc->idx >= mjob->nr_bos)
+			return -EINVAL;
 		jbo = mwv207_job_bo(mjob, reloc->idx);
+		if (!jbo)
+			return -EINVAL;
 		if (reloc->cmd_offset == offsetof(struct mwv207_dma_cmd, src.base))
 			src_bo = jbo;
 		else if (reloc->cmd_offset == offsetof(struct mwv207_dma_cmd, dst.base))
@@ -542,6 +551,8 @@ static int mwv207_submit_validate(struct drm_device *dev, struct mwv207_job *mjo
 
 	for (i = 0; i < mjob->nr_bos + mjob->nr_cmd_dat; ++i) {
 		jbo = mwv207_job_bo(mjob, i);
+		if (!jbo)
+			continue;
 
 		if (jbo->tbo.pin_count)
 			continue;

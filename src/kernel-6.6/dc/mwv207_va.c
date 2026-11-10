@@ -712,7 +712,9 @@ static int mwv207_va_init_single(struct mwv207_device *jdev, int idx)
 	drm_crtc_enable_color_mgmt(&va->crtc, 768, true, 768);
 	ret = drm_mode_crtc_set_gamma_size(&va->crtc, 256);
 
-	BUG_ON(drm_crtc_index(&va->crtc) != va->idx);
+	/* crtc 索引与 va->idx 必须一致（vblank/CSC 都按 idx 取表）。原实现
+	 * BUG_ON；不一致时只告警并继续，避免把整个 init 变成 panic。 */
+	WARN_ON_ONCE(drm_crtc_index(&va->crtc) != va->idx);
 
 	return ret;
 }

@@ -110,7 +110,10 @@ void jdev_write_vram(struct mwv207_device *jdev, u64 vram_addr, void *buf, int s
 
 static inline void jdev_write(struct mwv207_device *jdev, u32 reg, u32 value)
 {
-	BUG_ON(reg <= 0x100000);
+	/* 寄存器窗口从 0x100000 起；<= 0x100000 多半是把 VRAM 地址/裸偏移当
+	 * 寄存器用了。原实现 BUG_ON，会 panic 整个内核；改成丢弃这次写。 */
+	if (WARN_ON_ONCE(reg <= 0x100000))
+		return;
 	writel_relaxed(value, jdev->mmio + reg);
 }
 
@@ -121,11 +124,14 @@ static inline u32 jdev_read(struct mwv207_device *jdev, u32 reg)
 
 static inline void jdev_modify(struct mwv207_device *jdev, u32 reg, u32 mask, u32 value)
 {
-	u32 rvalue = jdev_read(jdev, reg);
+	u32 rvalue;
 
+	if (WARN_ON_ONCE(reg <= 0x100000))
+		return;
+
+	rvalue = jdev_read(jdev, reg);
 	rvalue = (rvalue & ~mask) | (value & mask);
 	jdev_write(jdev, reg, rvalue);
-	BUG_ON(reg <= 0x100000);
 }
 
 #define to_fpriv(drm_file)  ((drm_file)->driver_priv)

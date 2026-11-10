@@ -72,7 +72,10 @@ void mwv207_job_put(struct mwv207_job *mjob);
 
 static inline struct mwv207_bo *mwv207_job_bo(struct mwv207_job *mjob, int idx)
 {
-	BUG_ON(idx >= mjob->nr_bos + mjob->nr_cmd_dat);
+	/* idx 来自用户态提交的 reloc（src/dst/reloc->idx），越界不能 panic。
+	 * 返回 NULL 由调用者转成 -EINVAL。 */
+	if (WARN_ON_ONCE(idx < 0 || idx >= mjob->nr_bos + mjob->nr_cmd_dat))
+		return NULL;
 	return to_jbo(mjob->mtvb[idx].base.bo);
 }
 

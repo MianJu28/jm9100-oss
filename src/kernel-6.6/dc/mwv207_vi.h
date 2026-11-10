@@ -72,13 +72,15 @@ void mwv207_output_set_crtc(struct drm_encoder *encoder, struct drm_crtc *crtc);
 
 static inline u32 mwv207_output_read(struct mwv207_output *output, u32 reg)
 {
-	BUG_ON(reg >= 0x8000);
+	if (WARN_ON_ONCE(reg >= 0x8000))
+		return 0;
 	return readl(output->mmio + reg);
 }
 
 static inline void mwv207_output_write(struct mwv207_output *output, u32 reg, u32 value)
 {
-	BUG_ON(reg >= 0x8000);
+	if (WARN_ON_ONCE(reg >= 0x8000))
+		return;
 	writel_relaxed(value, output->mmio + reg);
 }
 
@@ -87,7 +89,8 @@ static inline void mwv207_output_modify(struct mwv207_output *output, u32 reg,
 {
 	u32 rvalue;
 
-	BUG_ON(reg >= 0x8000);
+	if (WARN_ON_ONCE(reg >= 0x8000))
+		return;
 	rvalue = mwv207_output_read(output, reg);
 	rvalue = (rvalue & ~mask) | (value & mask);
 	mwv207_output_write(output, reg, rvalue);

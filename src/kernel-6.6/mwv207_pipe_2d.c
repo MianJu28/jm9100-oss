@@ -258,7 +258,11 @@ static void pipe_2d_start(struct mwv207_pipe_2d *pipe)
 	*pipe->tail++ = 0x80000000;
 
 	pipe->last_wait = pipe_2d_append_wl(pipe);
-	BUG_ON(pipe_2d_ptr_span(pipe->tail, pipe->ring_start) != 32);
+	/* 环形缓冲刚被重置：起点到 tail 必须正好 32 字节（8 条描述符）。
+	 * 不成立说明 ring 状态已被破坏，此时继续写下去会越界，直接停在这里；
+	 * 之后的 job 会由 2 s TDR 回收（N14 保证在飞 fence 会被 signal）。 */
+	if (WARN_ON_ONCE(pipe_2d_ptr_span(pipe->tail, pipe->ring_start) != 32))
+		return;
 	pipe_2d_barrier(pipe);
 	pipe_2d_write(pipe, 0x4C00, 1);
 
@@ -396,12 +400,19 @@ mwv207_pipe_2d_submit(struct mwv207_pipe *mpipe, struct mwv207_job *mjob)
 
 	wait = pipe_2d_append_wl(pipe);
 
-	BUG_ON(pipe_2d_ptr_span(pipe->tail, start) & 0xf);
+	/* 描述符长度以 16 字节为单位写回 start[1]，因此跨度必须 16 对齐、
+	 * 且不能超过预留空间 size。两者都是内部不变量（size 来自用户提交
+	 * 的 cmd_size 向上取整），破坏时不能让内核 panic：
+	 * 回滚 tail、作废这次提交，由调度器把 job 标成失败。 */
+	if (WARN_ON_ONCE((pipe_2d_ptr_span(pipe->tail, start) & 0xf) ||
+			 pipe_2d_ptr_span(pipe->tail, start) > size)) {
+		/* tail 不回滚：描述符确实已经写进环形缓冲，保持记账一致。
+		 * fence 已入队，由 ISR/reset 统一回收；本次提交报错交给上层。 */
+		return ERR_PTR(-EIO);
+	}
 	start[1] = pipe_2d_ptr_span(pipe->tail, start) / 16 - 1;
 
 	pipe_2d_wtol(pipe, start, wait);
-
-	BUG_ON(pipe_2d_ptr_span(pipe->tail, start) > size);
 
 	return fence;
 }

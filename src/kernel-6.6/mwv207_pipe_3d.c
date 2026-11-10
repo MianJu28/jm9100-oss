@@ -120,12 +120,15 @@ static inline u32 pipe_3d_event_push(struct mwv207_pipe_3d *pipe, struct dma_fen
 
 	spin_lock_irq(&pipe->event_lock);
 	event = find_first_zero_bit(pipe->event_bitmap, 30);
-	if (likely(event < 30))
+	if (likely(event < 30)) {
 		pipe->event_fence[event] = dma_fence_get(fence);
-	set_bit(event, pipe->event_bitmap);
+		set_bit(event, pipe->event_bitmap);
+	} else {
+		/* 30 个事件槽全部在飞：原实现会 set_bit(30) 后 BUG_ON。
+		 * 返回 -1 由提交路径转成 -EBUSY，让调度器把 job 判失败。 */
+		event = (u32)-1;
+	}
 	spin_unlock_irq(&pipe->event_lock);
-
-	BUG_ON(event >= 30);
 
 	return event;
 }
@@ -143,9 +146,13 @@ static inline u32 pipe_3d_gpu_addr(struct mwv207_pipe_3d *pipe, u32 *ptr)
 static inline void pipe_3d_link(struct mwv207_pipe_3d *pipe, u32 prefetch, u32 addr)
 {
 	pipe->tail = PTR_ALIGN(pipe->tail, 8);
-	BUG_ON(pipe->tail >= pipe->end - 1
+	/* ring 溢出的原实现是 BUG_ON（panic 整个内核）。这里改成跳过这条
+	 * 描述符：命令流会缺一段，该 job 由 2 s TDR 回收（N14 已保证在飞
+	 * fence 会被 signal），总比 panic 好。 */
+	if (WARN_ON_ONCE(pipe->tail >= pipe->end - 1
 			|| (((prefetch + 7) / 8) & 0xffff0000)
-			|| addr & 0x7);
+			|| addr & 0x7))
+		return;
 	*pipe->tail++ = 0x40000000 | ((prefetch + 7) / 8);
 	*pipe->tail++ = addr;
 }
@@ -153,7 +160,8 @@ static inline void pipe_3d_link(struct mwv207_pipe_3d *pipe, u32 prefetch, u32 a
 static inline void pipe_3d_wait(struct mwv207_pipe_3d *pipe)
 {
 	pipe->tail = PTR_ALIGN(pipe->tail, 8);
-	BUG_ON(pipe->tail >= pipe->end);
+	if (WARN_ON_ONCE(pipe->tail >= pipe->end))
+		return;
 
 	*pipe->tail++ = 0x38000000 | 200;
 }
@@ -166,8 +174,9 @@ static inline void pipe_3d_wl(struct mwv207_pipe_3d *pipe)
 
 static inline void pipe_3d_wtol(struct mwv207_pipe_3d *pipe, u32 *w, u32 target, u32 size)
 {
-	BUG_ON((((size + 7) / 8) & 0xffff0000) || target & 0x7
-			|| w < pipe->ringbuf || w >= pipe->end - 1);
+	if (WARN_ON_ONCE((((size + 7) / 8) & 0xffff0000) || target & 0x7
+			|| w < pipe->ringbuf || w >= pipe->end - 1))
+		return;
 	w[1] = target;
 	pipe_3d_read(pipe, 0x4);
 	mb();
@@ -177,7 +186,8 @@ static inline void pipe_3d_wtol(struct mwv207_pipe_3d *pipe, u32 *w, u32 target,
 static inline void pipe_3d_loadstate(struct mwv207_pipe_3d *pipe, u32 reg, u32 val)
 {
 	pipe->tail = PTR_ALIGN(pipe->tail, 8);
-	BUG_ON(pipe->tail >= pipe->end - 1);
+	if (WARN_ON_ONCE(pipe->tail >= pipe->end - 1))
+		return;
 
 	*pipe->tail++ = 0x08010000 | reg;
 	*pipe->tail++ = val;
@@ -194,7 +204,8 @@ static inline void pipe_3d_sem(struct mwv207_pipe_3d *pipe, u32 from, u32 to)
 static inline void pipe_3d_stall(struct mwv207_pipe_3d *pipe, u32 from, u32 to)
 {
 	pipe->tail = PTR_ALIGN(pipe->tail, 8);
-	BUG_ON(pipe->tail >= pipe->end - 1);
+	if (WARN_ON_ONCE(pipe->tail >= pipe->end - 1))
+		return;
 	from &= 0x1f;
 	to   &= 0x1f;
 	to  <<= 8;
@@ -390,6 +401,15 @@ static struct dma_fence *mwv207_pipe_3d_submit(struct mwv207_pipe *mpipe,
 	fence->rpos = pipe->tail;
 	fence->pipe = pipe;
 	event = pipe_3d_event_push(pipe, &fence->base);
+	if (unlikely(event == (u32)-1)) {
+		/* 事件槽耗尽：tail 回滚（还没写任何描述符、也没踢 GPU），
+		 * 释放本地这份 fence 引用，交给调度器去重试。 */
+		pipe->tail = last_tail;
+		dma_fence_put(&fence->base);
+		pr_err("mwv207: %s 事件槽耗尽（30 个全在飞）",
+				pipe->base.fname);
+		return ERR_PTR(-EBUSY);
+	}
 
 	pipe_3d_loadstate(pipe, 0x502e, 0x1);
 	pipe_3d_loadstate(pipe, 0x50ce, 0xf);
@@ -397,7 +417,12 @@ static struct dma_fence *mwv207_pipe_3d_submit(struct mwv207_pipe *mpipe,
 	pipe_3d_loadstate(pipe, 0x502e, 0x0);
 
 	pipe_3d_wl(pipe);
-	BUG_ON(pipe_3d_ptr_span(pipe->tail, start) > size);
+	/* 描述符跨度不能超过预留空间。原实现 BUG_ON；这里作废本次提交，
+	 * tail 不回滚（描述符已写入环形缓冲），fence 由事件槽/reset 回收。 */
+	if (WARN_ON_ONCE(pipe_3d_ptr_span(pipe->tail, start) > size)) {
+		dma_fence_put(&fence->base);
+		return ERR_PTR(-EIO);
+	}
 	pipe_3d_wtol(pipe, last_tail - 4, pipe_3d_gpu_addr(pipe, start),
 			pipe_3d_ptr_span(pipe->tail, start));
 	return &fence->base;

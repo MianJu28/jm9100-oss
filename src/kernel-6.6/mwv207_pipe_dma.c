@@ -338,9 +338,14 @@ static inline u64 cursor_axi(struct mwv207_dma_cursor *cursor)
 
 static inline void cursor_advance(struct mwv207_dma_cursor *cursor, u64 len)
 {
-	BUG_ON(cursor->cur_pos + len > cursor->line_pos + cursor->width);
+	u64 line_end = cursor->line_pos + cursor->width;
 
-	if (cursor->cur_pos + len == cursor->line_pos + cursor->width) {
+	/* 原实现 BUG_ON（用户态给的 width/stride/height 组合可能让它成立）。
+	 * 这里夹紧到行尾，保证填充循环一定推进、不会原地死循环。 */
+	if (WARN_ON_ONCE(cursor->cur_pos + len > line_end))
+		len = line_end > cursor->cur_pos ? line_end - cursor->cur_pos : 0;
+
+	if (cursor->cur_pos + len == line_end) {
 		cursor->line_pos += cursor->stride;
 		cursor->cur_pos = cursor->line_pos;
 	} else
@@ -508,7 +513,10 @@ static struct dma_fence *mwv207_pipe_dma_submit(struct mwv207_pipe *mpipe,
 	struct dma_fence *fence;
 	u64 remain, len;
 
-	BUG_ON(mjob->cmd_size != sizeof(struct mwv207_dma_cmd));
+	/* cmd_size 来自用户态提交：长度不符时不能 panic，直接报错让调度器
+	 * 把 job 标失败。 */
+	if (WARN_ON_ONCE(mjob->cmd_size != sizeof(struct mwv207_dma_cmd)))
+		return ERR_PTR(-EINVAL);
 
 	/*
 	 * 防御：drm_sched 按引擎串行，上一个 fence 完成前不会再次 run_job。

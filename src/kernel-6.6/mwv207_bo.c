@@ -97,7 +97,11 @@ void mwv207_bo_placement_from_domain(struct mwv207_bo *jbo, u32 domain, bool pin
 		c++;
 	}
 
-	BUG_ON(c > 3);
+	/* placements[] 只有 3 个槽，而 domain 只有 0x1/0x2/0x4 三个位分支，
+	 * 所以 c 最多 3；原来这里是 BUG_ON(c > 3)（不可达但仍是 panic 点）。
+	 * 保留成可恢复断言，并夹紧到数组边界，防止将来加 domain 位时越界。 */
+	if (WARN_ON_ONCE(c > ARRAY_SIZE(jbo->placements)))
+		c = ARRAY_SIZE(jbo->placements);
 	jbo->placement.num_placement = c;
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 9, 0))
 	jbo->placement.num_busy_placement = c;
