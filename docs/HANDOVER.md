@@ -143,7 +143,7 @@ OpenCL/VA-API/VDPAU 全走我们的栈；自建 KMD 在跑（srcversion `D5EEF36
   窗口），`pci_remove()` 在 `pci_clear_master()` 后补 `pci_disable_device()`。K9-① 经与前
   一版厂商源码对照确认是 W1C 标准清位、**不是缺陷**；N10 决定只文档化（见
   `docs/UNRESOLVED.md` §2.3）。
-- **UMD 视频批次（`385ed81`/`a5a938b`/`4ecca0d`，载荷 r19 已安装）**：I-1 HEVC tile 缓冲按真实帧高
+- **UMD 视频批次（`385ed81`/`a5a938b`/`4ecca0d`，载荷 r20 已安装）**：I-1 HEVC tile 缓冲按真实帧高
   分配（原先拿 `bit_depth_chroma_minus8` 当高度，8bit 时高度为 0）；I-2 H.264 路径删掉
   `set_reg(BITPLANE1_E, 0)`（与原厂 1840 行表核对：BITPLANE0/1/2 与
   CABAC/BLACKWHITE/DIR_8X8_INFER 在 word7 上逐位同名同址，是按 codec 复用的物理位，
@@ -156,6 +156,15 @@ OpenCL/VA-API/VDPAU 全走我们的栈；自建 KMD 在跑（srcversion `D5EEF36
   声明 High10。收回后 ffmpeg 对该类流直接回退（`hwaccel initialisation
   returned error`），DEC 零超时；`end_frame` 另加 `bit_depth_luma_minus8 > 0`
   跳过分支。见 `docs/UNRESOLVED.md` §1.2。
+- **I-6：被跳过的帧不再静默返回脏图（2026-11-10，`bb5cd9e`）**：VP9/H.264 里所有
+  "这一帧没法解"的提前返回（参考缺失、尺寸不符、参数不支持、分配失败、分区尺寸异常）
+  以前只清 `JMDEC_DEC_E` 就返回，PPU 输出面根本没编程，而 `vaSyncSurface()` 照样
+  成功 —— 应用拿到的是目标 surface 的旧内容（B2 的 resize_inter 向量就是这样）。
+  现在 codec 层置 `frame_skipped`，`end_frame()` 不提交、改置 `frame_failed` 并给
+  `*picture->fence` 一个 fd=-1 的桩 fence，新增的 `get_decoder_fence()` 在失败时
+  返回 0，Mesa 的 va 前端据此让 `vaSyncSurface()` 回 `VA_STATUS_ERROR_TIMEDOUT`
+  （ffmpeg 侧 `Failed to sync surface`）。回归：VP9 P2 10bit / show_existing /
+  res14 / HEVC 8 / H.264 8 全部逐位一致。
 - **一键验收脚本（2026-11-10，`tests/verify-installed.sh`）**：把 KMD 版本/来源、
   glxinfo/query/引擎计数、VAAPI profile 归位、H.264-High/HEVC 8/10bit 逐位一致、
   High10 回退与 DEC 零超时、TDR 探针、dmesg 新增告警（带基线，只查本次运行新增行）
@@ -171,9 +180,10 @@ OpenCL/VA-API/VDPAU 全走我们的栈；自建 KMD 在跑（srcversion `D5EEF36
    本机编码器产不出该帧类型），但比对照出**新缺陷 I-5**：硬件解码 4 个解码帧与 libvpx
    不一致（3 个 `show_existing` 帧一致），参考槽重建正确、输出面可疑。诊断脚本
    `tests/vp9-intraonly/run-vp9-intraonly.sh`，细节见 `docs/UNRESOLVED.md` §1.7。
-3. **B2：真正的跨尺寸参考** —— 已有"缺参考/尺寸不同即拒绝"保护（`72f9523`）；要验证
-   "参考自身几何 + hscale/vscale"路径，需要一个自写 VAAPI 客户端（ffmpeg 在分辨率变化时
-   会重建 VA context，绕不过去）。
+3. **B2：真正的跨尺寸参考** —— 已有"缺参考/尺寸不同即拒绝"保护（`72f9523`），且
+   I-6 已修（`bb5cd9e`）：被跳过的帧现在会显式失败（`vaSyncSurface` 报错、ffmpeg 停止
+   输出），不再静默出脏图。要真正**支持**跨尺寸参考，还需要自写 VAAPI 客户端验证
+   "参考自身几何 + hscale/vscale"路径（ffmpeg 在分辨率变化时会重建 VA context，绕不过去）。
 4. **其余 KMD 项**：N1/N2/K12/K9-②/N9 已修并重启验证（`6502f19`）；N4/K11 已修、
    **重启验证生效**（`fbed27f`，运行中 srcversion `0EFB7F4…`；判据见
    `docs/UNRESOLVED.md` §2.3）；K9-① 已核实为与厂商一致（非缺陷）；20 处 `BUG_ON`
@@ -191,10 +201,10 @@ OpenCL/VA-API/VDPAU 全走我们的栈；自建 KMD 在跑（srcversion `D5EEF36
    （`mwv207` refcnt 恒为 2，只有 reboot 才释放）。
 6. **性能**：buffer 写入等待的吞吐代价只做了 glxgears 观测（110 FPS 无回退），重负载未量化；
    Firefox WebGL 42–44 FPS 的剩余瓶颈在 WebRender 帧调度。
-7. **UMD r19 已安装并复核**：`payload-42`（`24.1.2-fullstack-r19`）2026-11-10 13:25 安装，
-   `umd status` 显示活动栈 `oss-24.1.2-fullstack-r19`、快照 `20261110-132539`、目录 219M；
-   `md5sum /usr/local/lib/mwv207-oss/libmwv207_dri.so` = `5408ee72…`、
-   `libmwv207_drv_video.so` = `eec6bfe5…`。重启后复核：`vainfo` 只剩 ConstrainedBaseline/
+7. **UMD r20 已安装并复核**：`payload-42`（`24.1.2-fullstack-r20`）2026-11-10 16:17 安装，
+   `umd status` 显示活动栈 `oss-24.1.2-fullstack-r20`、快照 `20261110-161759`；
+   `md5sum /usr/local/lib/mwv207-oss/libmwv207_dri.so` = `39f38c6f…`、
+   `libmwv207_drv_video.so` = `fa63148d…`。重启后复核：`vainfo` 只剩 ConstrainedBaseline/
    Main/High + HEVC Main/Main10 + VP9Profile0 + None(VideoProc)；H.264 High10 样片
    `-hwaccel vaapi` 报 `Failed setup for format vaapi` 正确回退（DEC 零超时）；
    HEVC 8bit 640×360 逐位一致。回滚点 `payload-41`（r16）。

@@ -155,6 +155,14 @@ mwv207_context_video_codec_init(&ctx->base);
 | `PIPE_VIDEO_PROFILE_VP9_PROFILE2` | — | ✅ **2026-11-10 起声明（A5，`82e7b02`）**：10bit 4:2:0，与软件解码逐位一致（载荷 r20，2026-11-10 16:17 安装；重启后 1080p30 硬件解码 186624000 B 逐位一致、零超时）；`MWV207_VP9_10BIT_DISABLE=1` 可关。Profile 1/3（4:2:2/4:4:4）不声明 |
 | 其它（含 HEVC_MAIN_12/444、AV1、VC1…） | 54 | ❌ `return false` |
 
+> **被跳过的帧现在会显式失败（2026-11-10，`bb5cd9e`）**：参考帧缺失、参考尺寸与当前帧
+> 不一致、参数不支持、缓冲区分配失败等情况，解码器只清 `JMDEC_DEC_E` 就返回，
+> PPU 输出面因此从未被编程。以前这条路径对 VAAPI 完全不可见（`vaSyncSurface()`
+> 照样返回成功，应用拿到目标 surface 的旧内容）；现在 `end_frame()` 不提交作业，
+> 而是置 `frame_failed` 并给 `*picture->fence` 一个 fd=-1 的桩 fence，由新增的
+> `get_decoder_fence()` 返回 0，让 Mesa 的 va 前端把 `vaSyncSurface()` 翻成
+> `VA_STATUS_ERROR_TIMEDOUT`（ffmpeg 侧表现为 `Failed to sync surface` 并停止输出）。
+
 返回值为（`:51`）：
 
 ```c

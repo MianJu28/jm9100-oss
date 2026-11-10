@@ -70,7 +70,7 @@ modinfo /lib/modules/…/updates/dkms/…    -> srcversion 0EFB7F4433EA5311B08E8
 |---|---|---|---|---|
 | 1 | VAAPI/VP9 | **A5：Profile 2（10bit 4:2:0）已支持；4:2:2/4:4:4 定案不可实现** | 2026-11-10 `82e7b02`：Profile 2 与软件解码**逐位一致**（64x64/640x360/720p60/1080p30，含 inter 帧，零 TDR），默认声明，`MWV207_VP9_10BIT_DISABLE=1` 可关。Profile 1/3 与 H.264 422/444 同理不可实现：解码器没有色度采样格式选择字段（§1.5）。**残余**：12bit VP9 未验证（代码只放行 10bit） | 本文 §1.6 |
 | 2 | VAAPI/VP9 | **B3 样片到手，但暴露 I-5：官方 intra-only 向量硬件解码与 libvpx 不一致**（4 个解码帧 DIFF、3 个 `show_existing` 帧一致；已排除比对方法/尺寸/解析层） | 本机编码器产不出 intra-only 帧，已改用 WebM 官方向量并做成 `tests/vp9-intraonly/` 诊断脚本；**I-5 未定位**，暂不能宣告 B3 通过 | 本文 §1.7 |
-| 3 | VAAPI/VP9 | **B2 侦察完成：普通 resize+tile 序列正确；resize_inter 一族被保护跳过但仍出脏帧（I-6 候选）** | `vp90-2-14-resize-10frames-fp-tiles-1-2.webm` 硬件与 libvpx **IDENTICAL**；`vp90-2-21-resize_inter_320x180_5_1-2.webm` 每帧报 `reference 0 (slot 0) has no decoded picture; frame skipped`，但输出字节数与软件一致、内容 DIFF ⇒ 跳过要对上层可见 | 本文 §1.8 |
+| 3 | VAAPI/VP9 | **B2 侦察完成；I-6 已修（`bb5cd9e`）——被跳过的帧不再静默出脏图** | `vp90-2-14-resize-10frames-fp-tiles-1-2.webm` 硬件与 libvpx **IDENTICAL**；`vp90-2-21-resize_inter_320x180_5_1-2.webm` 仍按设计跳过（跨尺寸参考不支持），但现在 `vaSyncSurface()` 会返回 `VA_STATUS_ERROR_TIMEDOUT`，ffmpeg 报 `Failed to sync surface` 并停止输出，而不是吐出 2592000 字节脏数据 | 本文 §1.8 |
 | 4 | KMD | **N14 已修，重启后已验证生效** | 修复见 §2.1（`22145e9`）；运行中 srcversion 已是 `039F972EFE3279A155EE225`，GL/query/VP9 回归全过；reset 通路已用 `tests/n14-reset/` 探针实测（6 轮 TDR、force_complete 6/6） | 本文 §2.1 |
 | 4b | KMD | **N1/N2/K12/K9-②/N9 已修，重启后已验证生效** | 修复见 §2.2（`6502f19`）；2026-11-10 13:29 重启后 srcversion = `D5EEF36617A4D3FBF4AFD1D`，GL/query 4·4/VP9 18·18/H.264 8bit 逐位一致/N14 探针 6·6 全过，dmesg 无 WARN/BUG；引擎计数用 `tests/engines/` 核对（lite 机型 3d=1 dec=1 enc=0 2d=1 dma=1） | 本文 §2.2 |
 | 4c | UMD 视频 | **I-4：H.264 High10 已定案（2026-11-10 收回声明）** —— 按当前寄存器配置提交 10bit H.264 会让 DEC 管线挂死（6 次 TDR、输出全 0）；缺 Hantro 的 high10p 位流预转换 | 客户端现在对该类流直接回退（`hwaccel initialisation returned error`），DEC 零超时；原厂闭源驱动同样不声明 High10 | 本文 §1.2 / `api/05-VIDEO-CODEC.md` §6.7 |
@@ -79,6 +79,7 @@ modinfo /lib/modules/…/updates/dkms/…    -> srcversion 0EFB7F4433EA5311B08E8
 | 4f | KMD | **N16 已修，重启后已验证生效**（新发现）：畸形 submit（`nr_cmd_dat>0` 而 `cmd_dats==NULL`）会让 `mwv207_job_fini()` 空指针解引用 → 内核 oops，任何本地进程可触发 | `c01af40`：清理条件加 `&& mjob->cmd_dats`；配套 `tests/bad-submit/` 9 个用例（默认不跑，老模块会 oops）。两内核已装 `5A5B4018…` | 本文 §2.5 |
 | 4g | KMD | **N17 已修，重启后已验证生效**（新发现）：N4 的异步 DMA 在 `queue_work()` 之后才 `dma_fence_get()`，worker 抢跑时对已释放 fence 做 refcount_inc（`refcount_t: addition on 0; use-after-free`，PC 在 `mwv207_pipe_dma_submit`），等待者可能永远收不到 signal —— 与 16:30 整屏卡死（Xorg 收 SIGTERM 不退、只能 SIGKILL）症状一致 | `1fc9b21`：给调度器的引用在 `queue_work` 之前取；运行中已是 `8DFC520FB8FCDECFBC911AA`，17:55 重启后 `verify-installed.sh --bad-submit` PASS=25，kprobe 压测 submit/complete 2052·2052 平衡、refcount 告警 0、X 最大延迟 5 ms | 本文 §2.6 |
 | 4h | UMD 视频 | **I-5：VP9 intra-only 样片解码不一致（新发现，待定位）** | 官方向量 `vp90-2-16-intra-only.webm`：硬件 7 帧与 libvpx 软件解码比，4 个解码帧全 DIFF、3 个 `show_existing` 一致；参考槽重建正确、输出面可疑 | 本文 §1.7 |
+| 4i | UMD 视频 | **I-6 已修（`bb5cd9e`）**：跳过帧（参考缺失/尺寸不符/参数不支持/分配失败）以前只清 `JMDEC_DEC_E` 就返回，PPU 输出面没编程、`vaSyncSurface()` 照样成功，应用拿到旧内容 | 现在 `end_frame()` 置 `frame_failed` + 桩 fence，`get_decoder_fence()` 返回 0 → `vaSyncSurface()` 报错；回归（VP9 P2 10bit / show_existing / res14 / HEVC8 / H264 8）全部逐位一致 | 本文 §1.8 |
 | 5 | KMD | 只剩 N10（决定只文档化） | K9-① 已核实为与厂商一致（非缺陷）；N10 改为只记录 | 本文 §2.3 |
 | 6 | 切换脚本 | **vendor 态端到端未实跑** | `stack vendor` 会重启，需人工确认；热切换已证不可行（refcnt 恒 2） | `switch-mwv207.sh` / §5 |
 | 7 | 打包 | **DKMS 一致性警告（走 stage 时会复现，已记录处理步骤）** | `tools/dkms-sync.sh` 重建后两个内核都干净；`kmd stage` 直接覆盖仓库构建的 .ko 会让 6.6.155 重新报 `Diff between built and installed module!`，用 `dkms install --force` + `depmod` + `update-initramfs` 恢复即可 | §2.1、§5 |
@@ -355,7 +356,7 @@ tx_mode=3 的关键帧改写成 intra-only（`refresh=0x01`、352×288、101 KB 
 可复用已下载文件）；自产样片用 `tests/vp9-intraonly/build-probe.sh` +
 `tests/vp9-intraonly/make-intra-only.py`。
 
-### 1.8 B2 侦察：官方 resize 向量一批能解、一批跳过但照样出图（I-6 候选）
+### 1.8 B2 侦察：官方 resize 向量一批能解、一批跳过；I-6 已修（`bb5cd9e`）
 
 B2 要的是"跨尺寸参考"（参考帧尺寸与当前帧不同）。官方测试向量里有两族现成的：
 
@@ -385,14 +386,34 @@ mwv207_dec_vp9_set_regs() ERROR vp9: reference 0 (slot 0) has no decoded picture
 return;`（`mwv207_dec_vp9.c:1017-1050`），而 **PPU 的输出面配置在函数末尾
 （`mwv207_pp_set_regs()`，约 :1433）**，提前返回后根本没编程 —— 也就是硬件既不解码、
 也不写目标 surface；应用拿到的"画面"其实是那块 surface 的**旧内容/未初始化显存**。
-所以修复有两条路，且都还没做：
+所以修复有两条路：
 
-1. **占位填充**：跳过时在 CPU 侧把目标 surface 填成可识别的中性色（例如 0x80 灰），
-   让用户看到"这里没解出来"而不是随机噪点。要注意 NV12/P010 与 64B 对齐/tiled 布局，
-   必须先确认 `target` 的实际内存布局再动。
-2. **失败上报**：让 `vaEndPicture`/`vaSyncSurface` 看到错误。`pipe_video_codec::end_frame`
-   返回 void，Mesa 的 va 前端也没有逐帧错误通道，需要我们自己加一个
-   "本帧跳过"标志并让 `frontends/va` 读到（会动共享前端代码，需谨慎）。
+1. **占位填充**：跳过时在 CPU 侧把目标 surface 填成可识别的中性色（例如 0x80 灰）。
+   要注意 NV12/P010 与 64B 对齐/tiled 布局，必须先确认 `target` 的实际内存布局。**未做。**
+2. **失败上报**：让 `vaEndPicture`/`vaSyncSurface` 看到错误。**已做（`bb5cd9e`）。**
+
+**I-6 修法（2026-11-10，`bb5cd9e`）**：不需要动 Mesa 的 `frontends/va` —— Mesa 24.1 的
+`pipe_video_codec` 已经有 `get_decoder_fence(codec, fence, timeout)`，而
+`_vlVaSyncSurface()` 正是把它的返回值翻译成 `VA_STATUS_SUCCESS` / `VA_STATUS_ERROR_TIMEDOUT`
+（返回 0 即报错）。原来本驱动根本没实现这个 vfunc，`surf->fence` 始终为 NULL，
+`vaSyncSurface()` 在"没有未完成操作"的分支直接返回成功。所以：
+
+- codec 层在每个跳过点置 `decoder->frame_skipped`（VP9 13 处、H.264 的 4:2:2 与
+  High10 两处、未支持格式的 default 分支）；
+- `end_frame()` 看到它就不提交作业，改调 `mwv207_video_decoder_mark_frame_failed()`：
+  置 `frame_failed`，并给 `*picture->fence` 一个 fd = -1 的桩 fence
+  （Mesa 只在 fence 非空时才调 `get_decoder_fence()`）；
+- 新增 `mwv207_video_decoder_get_decoder_fence()`：`frame_failed` 置位时返回 0，
+  其余情况正常 `fence_wait()`。
+
+实测（dev 驱动）：`vp90-2-21-resize_inter_320x180` 现在 ffmpeg 报
+`Failed to sync surface 0x2b: 38 (unknown libva error)` 并停止输出，不再是 2592000
+字节的脏数据；`vp90-2-14`、VP9 Profile2 10bit、show_existing、quantizer-00、
+HEVC 8bit、H.264 8bit 回归全部逐位一致。`tests/vp9-resize/run-vp9-resize.sh` 的判据
+相应改成 `SKIPPED-AS-ERROR`（好）/`SKIPPED-MUTE`（I-6 复发）。
+
+副作用（有意为之）：被跳过的帧会让 ffmpeg 报 `Input/output error` 并放弃该序列。
+真机播放时这是"明确失败"替代"静默脏帧"。
 复跑：`ffmpeg -hwaccel vaapi -hwaccel_output_format vaapi -i <向量> -vf hwdownload,format=nv12`
 与 `-c:v libvpx-vp9` 逐字节比对；向量在
 <https://storage.googleapis.com/downloads.webmproject.org/test_data/libvpx/>。
@@ -836,6 +857,7 @@ initramfs 已刷并解包核对（`modinfo -F srcversion` 均为 `8DFC52…`）�
 | 2026-11-10 | UMD：HEVC `tile_buffer_size` 用位深当帧高（I-1），tile 缓冲按错误高度分配 | `385ed81`（`src/mwv207-umd`） |
 | 2026-11-10 | UMD：收回 H.264 High422/High444 声明（不可实现，见 §1.5）＋ word7 bit30 复用导致的单色标志被清零（I-2/I-3） | `a5a938b`（`src/mwv207-umd`） |
 | 2026-11-10 | UMD：收回 H.264 High10 声明（I-4：10bit 提交会挂死 DEC 管线，缺 high10p 位流预转换）＋ `end_frame` 拒绝高位深码流 | `4ecca0d`（`src/mwv207-umd`）；载荷 `payload-42`（r19）已重新生成并通过 `umd check`/预验证，**安装需 `sudo ./switch-mwv207.sh umd install`（会重启 lightdm）** |
+| 2026-11-10 | UMD：被跳过的帧不再静默返回脏图（I-6）—— 跳过点置 `frame_skipped`，`end_frame()` 不提交并给桩 fence，新增 `get_decoder_fence()` 让 `vaSyncSurface()` 报错（跨尺寸参考一族现在显式失败） | `bb5cd9e`（`src/mwv207-umd`）＋ `tests/vp9-resize/run-vp9-resize.sh` 判据升级 |
 | 2026-11-10 | UMD：VP9 Profile 2（10bit 4:2:0）硬解落地（A5）——放行 `profile==2 && bit_depth==10`、声明 `VP9Profile2` + P010 面、`mwv207_vp9_10bit_enabled()` 开关；4 组样片（64x64/640x360/720p60/1080p30，含 inter 帧）与软件解码逐位一致、零 TDR，VP9 回归 18/18 | `82e7b02`（`src/mwv207-umd`）；载荷 `payload-42` 升为 r20（DRI `39f38c6f…`、VA `fa63148d…`） |
 | 2026-11-10 | Firefox 标签栏"微缩 chrome"：buffer 写入前等待 GPU（`mwv207_resource.c`） | `6ec1e17`（`src/mwv207-umd`） |
 | 2026-11-10 | mesa：`loader_dri3_query_buffer_age()` 恒 0（我们不做交换后缓冲保留） | `248659c`（`ref/oh-mesa`，本地） |

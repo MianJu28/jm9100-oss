@@ -364,7 +364,7 @@ K8/K9/K12 引自原报告，本树未复核（KMD 的 `irq.c`/`sched.c`/`ttm.c` 
 
 ## I. 视频编解码层的通读发现（来源：`05-VIDEO-CODEC.md`）
 
-### I.1 四个新缺陷（I-1/I-2 已修，I-3/I-4 已定案并收回声明；A5 已补上 VP9 Profile 2）
+### I.1 新缺陷（I-1/I-2 已修，I-3/I-4 已定案并收回声明，I-6 已修；A5 已补上 VP9 Profile 2）
 
 | # | 位置 | 问题 | 影响 |
 |---|---|---|---|
@@ -372,6 +372,7 @@ K8/K9/K12 引自原报告，本树未复核（KMD 的 `irq.c`/`sched.c`/`ttm.c` 
 | ~~I-2~~ | word7 bit30 复用 | `JMDEC_BITPLANE1_E` 与 `JMDEC_BLACKWHITE_E` **同占 word7 bit30**；H264 先写后者（`mwv207_dec_h264.c:587`），随后被前者清零（`mwv207_dec_h264.c:2083`）**覆盖** | **已修（2026-11-10，`a5a938b`）**：查原厂 `{word,width,shift}` 表（`mwv207_video_dec_8170table.h`）——BITPLANE0/1/2 与 CABAC/BLACKWHITE/DIR_8X8_INFER 在 word7 上**逐位同名同址**（31/30/29 两组各 3 个），是按 codec 复用的同一物理位，不是抄错。H.264 不走 bitplane 模式，原句等于把单色标志清零，已删除 |
 | ~~I-3~~ | H.264 High422/High444 声明 | 能力表声明 422/444，解码器硬置 `chroma_format_idc=1` | **已定案（2026-11-10，`a5a938b`）**：本机 H.264 硬解只有 4:0:0/4:2:0（解码寄存器表无采样格式选择器；原厂 `jmgpu_drv_video.so` 文档串写 `0=4:0:0. 1=4:2:0` 且其 `QueryConfigProfiles` 只声明 ConstrainedBaseline/Main/High；libva 里根本没有对应 VAProfile）→ **不可实现，已收回声明**；证据与实测见 `UNRESOLVED.md` §1.5 |
 | ~~I-4~~ | H.264 10bit 提交挂死 DEC 管线 | 10 帧 352×288 High10 样片 → 6 次 `job from 'av:h264:df0' to 'mwv207_dec0', timed out!`（`irq state reg: 0x00010102`）、输出面全 0；8bit 同路径零超时 | **已定案（2026-11-10，`4ecca0d`）**：原厂特性表虽写 `h264_high10_support = 1`，但 Hantro 系 10bit H.264 需要 **high10p 位流预转换**，本驱动未实现（原厂闭源驱动也不声明 High10）→ **收回 `PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH10`**，并在 `end_frame` 对 `bit_depth_luma_minus8 > 0` 直接跳过。收回后 ffmpeg 对该类流报 `hwaccel initialisation returned error` 并回退，DEC 零超时 |
+| ~~I-6~~ | 跳过帧仍出脏图 | 参考缺失/尺寸不符/参数不支持/分配失败时只清 `JMDEC_DEC_E` 就返回，PPU 输出面没编程，而 `vaSyncSurface()` 照常成功 → 应用拿到旧内容 | **已修（2026-11-10，`bb5cd9e`）**：跳过点置 `frame_skipped`，`end_frame()` 不提交并给桩 fence + `frame_failed`，新增 `get_decoder_fence()` 返回 0 → Mesa 让 `vaSyncSurface()` 回 `VA_STATUS_ERROR_TIMEDOUT`（ffmpeg 报 `Failed to sync surface`）。见 `UNRESOLVED.md` §1.8 |
 
 ### I.2 同步机制的意外事实（需注意）
 
@@ -438,6 +439,7 @@ K8/K9/K12 引自原报告，本树未复核（KMD 的 `irq.c`/`sched.c`/`ttm.c` 
   20 处 `BUG_ON` 的防御性收敛已于同日完成（`53b3229`），并在写配套测试 `tests/bad-submit/`
   时抓到 N16（`c01af40`）；两者随 `5A5B401802B79D560151210` 于 2026-11-10 16:21 重启后
   验证生效（一键验收 `PASS=25 FAIL=0`，畸形提交 9/9 干净返回 errno，见 §2.4/§2.5）。
+  `I-6`（跳过帧静默出脏图）已修 `bb5cd9e`，被跳过的帧现在会显式失败（§I.1）。
   `I-2`（word7 bit30 复用）与 `I-3`（H.264 422/444 声明）已于同日修好/定案见
   `a5a938b` 与 `UNRESOLVED.md` §1.5；`I-4`（H.264 High10 挂死 DEC 管线）
   同日定案并收回声明见 `4ecca0d`。随后又在普通桌面负载下抓到 **N17**（N4 异步 DMA 的
