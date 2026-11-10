@@ -10,7 +10,8 @@
 本文早前写的 6.6.143 是升级前的内核，两个版本的 DKMS 模块现在都已同步重建）。
 桌面零 env 下 GL 4.0 / GLES 3.2 / `Video memory: 2048MB`，glxgears 110 FPS；
 OpenCL/VA-API/VDPAU 全走我们的栈；自建 KMD 在跑（srcversion `039F972EFE3279A155EE225`，
-含 N14 的 reset/fence 修复；DKMS 包 `mwv207-oss/1.0.0`）。**VP9 Profile0 8bit 硬解已与软件逐位一致**（回归 18/18，
+含 N14 的 reset/fence 修复；下一批 N1/N2/K12/K9-②/N9 已构建为
+`D5EEF36617A4D3FBF4AFD1D` 并装到两个内核，**待重启生效**；DKMS 包 `mwv207-oss/1.0.0`）。**VP9 Profile0 8bit 硬解已与软件逐位一致**（回归 18/18，
 含真实 720p/1080p 影视内容）。**Firefox 两处渲染缺陷已根治**：字形/图标撕裂（`f8f693a`）、
 标签栏"微缩 chrome"（`6ec1e17`）。剩余项见 §5。
 
@@ -104,6 +105,13 @@ OpenCL/VA-API/VDPAU 全走我们的栈；自建 KMD 在跑（srcversion `039F972
   117 FPS 全过；reset 通路已用 `tests/n14-reset/` 探针实测：6 轮 TDR、
   `pipe_3d_force_complete` 命中 6/6、用户 fence 12.3 s 完成、复位后 GPU 正常。
   2D/DEC/ENC 与 destroy 路径仍未被探针覆盖，见 `docs/UNRESOLVED.md` §2.1。
+- **KMD 结构/边界批次（`6502f19`，待重启生效）**：N1 sched 槽位撞车（6 槽放 7 个
+  引擎，enc0 覆盖 dec1）→ `MWV207_MAX_SCHED_NR 7` + 显式下标；N2 3D `hw_submission`
+  30→28（等于事件槽数会命中 `BUG_ON(event >= 30)`）；K12 超时路径 devfreq 多减 →
+  新增 `mwv207_devfreq_reset_busy()` 清零；K9-② ISR 影子寄存器改
+  `READ_ONCE`/`WRITE_ONCE`；N9 显示侧两处 `BUG_ON(irq == 0)` 改可回退错误。
+  两内核已装、initramfs 已刷（srcversion `D5EEF36…`），重启后按
+  `docs/UNRESOLVED.md` §2.2 的判据验证。
 
 ### 待办（按价值排序）
 1. **A5：VP9 10bit（Profile 2）/4:2:2** —— 当前 `vp_profile!=0 || bit_depth!=8` 直接拒绝
@@ -112,8 +120,10 @@ OpenCL/VA-API/VDPAU 全走我们的栈；自建 KMD 在跑（srcversion `039F972
 3. **B2：真正的跨尺寸参考** —— 已有"缺参考/尺寸不同即拒绝"保护（`72f9523`）；要验证
    "参考自身几何 + hscale/vscale"路径，需要一个自写 VAAPI 客户端（ffmpeg 在分辨率变化时
    会重建 VA context，绕不过去）。
-4. **其余 KMD 项（N14 已修，见上）**：N1/N2/N4/K9-①/K9-②/K11/K12/N10/N9 见
-   `docs/UNRESOLVED.md` §2。
+4. **其余 KMD 项**：N1/N2/K12/K9-②/N9 已修（`6502f19`，待重启验证）；剩下
+   N4（DMA 忙等改真 fence，属重构）、K9-①（vblank 逐位 W1C 需硬件语义）、
+   K11（`pci_clear_master` 与 kms/irq 收尾次序耦合，卸载路径需可卸载环境才能验证）、
+   N10（HDMI 需显示侧实测），见 `docs/UNRESOLVED.md` §2/§2.2。
 5. **vendor 态端到端验证**：`stack vendor` 会重启，尚未人工实跑；热切换已证不可行
    （`mwv207` refcnt 恒为 2，只有 reboot 才释放）。
 6. **性能**：buffer 写入等待的吞吐代价只做了 glxgears 观测（110 FPS 无回退），重负载未量化；
@@ -123,11 +133,11 @@ OpenCL/VA-API/VDPAU 全走我们的栈；自建 KMD 在跑（srcversion `039F972
  `dkms status` 会因此重新报 `Diff between built and installed module!`——差异来自
    DKMS 的 MOK 签名与构建方式，功能等价；要恢复干净状态，再跑一次
    `dkms install -m mwv207-oss -v 1.0.0 -k <ver> --force` + `depmod -a` +
-   `update-initramfs -u -k <ver>`（2026-11-10 已这样处理 6.6.155，两处 srcversion
-   均为 `039F…`）。
+   `update-initramfs -u -k <ver>`（2026-11-10 已这样处理 6.6.155/6.6.143，两处
+   解包后的模块 srcversion 均为 `D5EEF36…`）。
 
 ### 不建议投入（沿用 2026-11-03 结论）
-C-2 16 位采样编码（硬件边界）、D7 Vulkan、C-5/C-6、N10/N9、openuuyc 单实例 UX。
+C-2 16 位采样编码（硬件边界）、D7 Vulkan、C-5/C-6、N10、openuuyc 单实例 UX。
 原先"chrome 文字错位（用户已搁置）"一条已随 `f8f693a`/`6ec1e17` 修复，可删除。
 
 ## 6. C 类三项（2026-11-03 已拍板：全部保留声明 + 注明）

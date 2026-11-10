@@ -11,7 +11,7 @@ r16 修复 Firefox 两处渲染缺陷 —— 字形/图标撕裂（上传暂存 
 逐位一致（回归 18/18，含真实 720p/1080p 内容）。
 
 里程碑速览：全功能栈（GL/VAAPI/VDPAU/rusticl OpenCL）→ GLES 3.2 原生点亮 →
-自建 KMD 真机运行（srcversion `039F972EFE3279A155EE225`，含 N14 的 reset/fence 修复）→ Firefox 硬件渲染
+自建 KMD 真机运行（运行中 srcversion `039F972EFE3279A155EE225`，含 N14 的 reset/fence 修复；下一批 N1/N2/K12/K9-②/N9 已装为 `D5EEF36617A4D3FBF4AFD1D`，重启后生效）→ Firefox 硬件渲染
 修复（WebRender 图元全丢根因 = VS 里 RGBA32F 取样只回 64 位）→ 性能优化
 （WebGL 36→42+ FPS，CSS 页到 vsync 上限 97–99 FPS；均约 llvmpipe 的 2 倍）→
 GBM/Wayland 平台打通 → 健壮性批次修复 → dual-source blend 崩溃修复。

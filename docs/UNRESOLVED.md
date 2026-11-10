@@ -38,8 +38,9 @@ modinfo /lib/modules/…/updates/dkms/…    -> srcversion 039F972EFE3279A155EE2
 - `28bc73d` 修的 N15（零重定位提交未初始化 `drm_sched_job` → `BUG_ON(!entity)`）；
 - `22145e9` 修的 N14（reset/destroy 时 signal 在飞 fence，见 §2.1）。
 
-因此 **K 系列与 N14 的修复均已生效**，剩下的是从未做过修复的
-N1 / K11 / N2 / N4 / K9-① / K9-② / K12 / N10 / N9（见 §2）。
+因此 **K 系列与 N14 的修复均已生效**。另有一批已构建待重启的修复（`6502f19`，
+新模块 `D5EEF36617A4D3FBF4AFD1D`，已装到两个内核、initramfs 已刷）：
+N1 / N2 / K12 / K9-② / N9（见 §2.2）。剩下的是 N4 / K9-① / K11 / N10（见 §2）。
 自建模块会打印 `loading out-of-tree module taints kernel` 与
 `module verification failed: signature and/or required key missing`（DKMS 签了名，
 但 MOK 证书没有 enroll 进内核信任链），属既有现象；dmesg 里 GPU 相关错误计数为 0。
@@ -56,7 +57,8 @@ N1 / K11 / N2 / N4 / K9-① / K9-② / K12 / N10 / N9（见 §2）。
 | 2 | VAAPI/VP9 | **B3 intra-only 非关键帧样片缺** | 该分支未上机验证；本机编码器产不出 | `docs/HANDOVER-VP9.md` §10 B3 |
 | 3 | VAAPI/VP9 | **B2 真正的跨尺寸参考未验证** | 已有"缺参考/尺寸不同即拒绝"的保护（`72f9523`），缩放路径未跑通；需自写 VAAPI 客户端 | `docs/HANDOVER-VP9.md` §10 B2 |
 | 4 | KMD | **N14 已修，重启后已验证生效** | 修复见 §2.1（`22145e9`）；运行中 srcversion 已是 `039F972EFE3279A155EE225`，GL/query/VP9 回归全过；reset 通路已用 `tests/n14-reset/` 探针实测（6 轮 TDR、force_complete 6/6） | 本文 §2.1 |
-| 5 | KMD | N1/N2/N4/K9-①/K9-②/K11/K12/N10/N9 | 竞态/健壮性，多为低概率 | 本文 §2 |
+| 4b | KMD | **N1/N2/K12/K9-②/N9 已修，待重启生效** | 修复见 §2.2（`6502f19`）；新模块 `D5EEF36617A4D3FBF4AFD1D` 已装到两个内核并刷新 initramfs，重启后需按 §2.2 判据验证 | 本文 §2.2 |
+| 5 | KMD | 剩余 N4/K9-①/K11/N10 | 竞态/健壮性/显示边界，多为低概率；刻意留到下一批（需重构或硬件实测，见 §2.2 末尾） | 本文 §2 |
 | 6 | 切换脚本 | **vendor 态端到端未实跑** | `stack vendor` 会重启，需人工确认；热切换已证不可行（refcnt 恒 2） | `switch-mwv207.sh` / §5 |
 | 7 | 打包 | **DKMS 一致性警告（走 stage 时会复现，已记录处理步骤）** | `tools/dkms-sync.sh` 重建后两个内核都干净；`kmd stage` 直接覆盖仓库构建的 .ko 会让 6.6.155 重新报 `Diff between built and installed module!`，用 `dkms install --force` + `depmod` + `update-initramfs` 恢复即可 | §2.1、§5 |
 | 8 | 性能 | buffer 写入等待的吞吐代价未量化 | 仅 glxgears（110 FPS）观测；重负载未测 | 本文 §4 性能 |
@@ -155,19 +157,15 @@ N1 / K11 / N2 / N4 / K9-① / K9-② / K12 / N10 / N9（见 §2）。
 > 行号以 **6.6 树** `src/kernel-6.6/` 为准（与 5.10 树的行号不同）。
 > **自建 KMD 已经在跑**（`srcversion 039F972EFE3279A155EE225`，见 §0），
 > 所以下表全部是**真实存在于当前系统上**的未修缺陷，不是"待部署"的纸上问题。
-> 下表之外，K1–K8/K10、N15 与 N14 均已修好并在运行。
+> 下表之外，K1–K8/K10、N15、N14 已修好并在运行；N1/N2/K12/K9-②/N9 已修
+> （`6502f19`，见 §2.2），新模块 `D5EEF36617A4D3FBF4AFD1D` 已装、**待重启生效**。
 
 | # | 级别 | 位置 | 问题 |
 |---|---|---|---|
-| **N1** | **高** | `mwv207_sched.c:353-355` + `mwv207.h:61` | **比原记录更严重**：`sched[6]` 只有 **6 槽**，但拓扑需要 **7 个**（3d×2 + dec×2 + enc×1 + 2d×1 + dma×1）。`sched_3d=&sched[0]`、`sched_dec=&sched_3d[2]`、`sched_enc=&sched_dec[1]` → **`sched_dec[1]` 与 `sched_enc[0]` 同为 `&sched[3]`**，且 `sched_dma[0]` 落在**最后一槽**无余量。后果：enc0 的 scheduler 覆盖 dec1，而 `:390` 仍据 `sched_dec[1]` 非空报 `nr_dec = 2` → `INFO` 谎报；`engine_id=1` 的 DEC 提交会被 ENC 调度器执行。**当前 UMD `engine_id` 恒 0，故未触发**（高严重、零现网影响） |
 | **K11** | 中 | `mwv207_drv.c:439` | `pci_clear_master` 位于移除流程最后；且与 `kms_fini` 必须先于 `irq_fini` 的次序耦合 |
-| **N2** | 中 | `mwv207_sched.c` `hw_submission=30` | 与硬件事件数 30 **相等**，违背源码注释 "must be lower than 30" → 事件位图满时有越界/`BUG_ON` 风险 |
 | **N4** | 中 | `mwv207_pipe_dma.c` | DMA 提交在 `run_job` 工作线程内**忙等最多 5 s** 并返回 **stub fence** → 调度器工作线程被长占、fence 语义退化 |
 | **K9-①** | 中 | `dc/mwv207_va.c:634-655`（约） | vblank 处理器**整字回写** `0x9907f4`（影响 bit12–15），而 demux 清位本该是逐位 W1C |
-| **K9-②** | 中 | `mwv207_irq.c:31` | ISR **无锁**读 `irq_enable_reg[]`，而 mask/unmask 在 `irq_lock` 内写 |
-| **K12** | 中 | `mwv207_sched.c` 超时路径 | 循环体只有 `devfreq_record_idle`、循环变量未使用；`drm_sched_resubmit_jobs` 前无 job 完整性校验 |
 | **N10** | 低 | `dc/mwv207_hdmi.c:908-918` `mode_valid` | 6.6 树的判据是 `clock > 594000` → `MODE_CLOCK_HIGH`，另对非 HDMI sink 加 `clock >= 165000` 限制；`phy_configure` 恒传 `bpp=8` 使 PHY 表 10/12 bpp 项不可达。**实测本机 HDMI-A-1 走 1920x1080@100Hz**，未受影响。⚠ 原记录的"384–594 MHz 全被拒"出自 **5.10 树**，6.6 树判据已不同（阈值 594000，非 384000） |
-| **N9** | 低 | `dc/mwv207_kms.c:188`、`dc/mwv207_hdmi.c:1064` | 仍保留 `BUG_ON`（3D/2D 已改成可回退范式，显示侧没跟上） |
 | 其它 | — | 全树 | `BUG_ON`（不含 `BUILD_BUG_ON`）仍有 **20 处** |
 
 > **已修好并在运行**：K1（flags 位运算）、K3（copy_to_user 返回）、
@@ -228,6 +226,42 @@ N1 / K11 / N2 / N4 / K9-① / K9-② / K12 / N10 / N9（见 §2）。
   卸载路径不留永远 unsignaled 的 fence。
 - 2D / DEC / ENC 三条管线的 force_complete 与 destroy 路径未被探针覆盖
   （需分别让 2D/解码引擎挂死或在有在飞 fence 时卸载驱动，风险更高）。
+
+### 2.2 调度器槽位/在飞上限/超时计数与显示侧 BUG_ON（已修，待重启生效）
+
+**提交 `6502f19`**（`src/kernel-6.6`，5 条一起改，都在"结构性/边界"这一类）：
+
+| 项 | 级别 | 原问题 | 改法 |
+|---|---|---|---|
+| **N1** | 高 | `sched[6]` 只有 6 槽，拓扑要 7 个；`sched_enc = &sched_dec[1]` 与 dec1 撞槽 → enc0 scheduler 覆盖 dec1（dec1 的 scheduler+pipe 泄漏），`nr_dec` 仍报 2，`engine_id=1` 的 DEC 提交会进 ENC 调度器 | `mwv207.h` 加 `MWV207_MAX_SCHED_NR 7`，数组扩到 7；`mwv207_sched_init()` 改用显式下标（3d=0..1、dec=2..3、enc=4、2d=5、dma=6）；suspend/resume/fini 三处循环改用该宏 |
+| **N2** | 中 | 3D `hw_submission=30` 等于 `event_bitmap` 槽数（30），满负荷时下一次 `pipe_3d_event_push()` 命中 `BUG_ON(event >= 30)` | 新增 `MWV207_3D_HW_SUBMISSION 28`（3d0/3d1 都用），留 2 槽余量 |
+| **K12** | 中 | 超时路径用"遍历 `pending_list` 每个 job 记一次 `devfreq_record_idle`"补偿复位丢掉的减一；队列里的 job 未必都 `record_busy` → 多减 → `busy_count` 变负触发 `WARN_ON` | 新增 `mwv207_devfreq_reset_busy()`：复位后在 `devfreq_lock` 下把 `busy_count` 清零（复位语义＝无在飞 job），resubmit 的 job 重新 `record_busy` |
+| **K9-②** | 中 | ISR 无锁读 `irq_enable_reg[]`，mask/unmask 在 `irq_lock` 下写 | 读写都改 `READ_ONCE`/`WRITE_ONCE`（含 `irq_suspend`/`irq_resume`）；不加锁以免在 ISR 里持锁调 `generic_handle_irq` |
+| **N9** | 低 | 显示侧 `BUG_ON(va_irq == 0)`（`kms.c`）、`BUG_ON(hdmi->irq == 0)`（`hdmi.c`） | 改成 `pr_err` + `-ENODEV` 回退，与 3D/2D 的 K8 范式一致；`irq.c` 里引用旧 BUG_ON 的注释同步更新 |
+
+**部署状态**：`tools/dkms-sync.sh` 重建并安装到 6.6.155；6.6.143 另外
+`dkms build/install --force` + `depmod`；两个内核的 initramfs 都已
+`update-initramfs -u`（解包核对 `updates/dkms/mwv207.ko` 的 srcversion 均为
+`D5EEF36617A4D3FBF4AFD1D`），`dkms status` 两个内核均干净。运行中仍是
+`039F972EFE3279A155EE225`，**重启后生效**。
+
+> 注：`update-initramfs -u -k 6.6.143…` 第一次调用时 `update-initramfs`
+> 自身 segfault（exit 139），目标文件未被改动（mtime 未变），重跑一次即成功；
+> 已核对解包后的模块 srcversion。属工具偶发问题，与驱动无关。
+
+**这一批为什么能改、怎么验证**：
+- N1 只动槽位分配，不改变任何对外接口；`nr_dec` 仍是 2，UMD 的
+  `engine_id` 语义不变（所以不需要改 UMD）。重启后可用 `dmesg | grep mwv207`
+  与 `/sys/kernel/debug/dri/*/…`（如有）确认 7 个 scheduler 都建起来了，
+  并用 `engine_id=1` 的自写提交验证 DEC1 走的是 dec1 而不是 enc0。
+- N2 只降低在飞上限，判据是"压测 28+ 个 3D 提交不再出现
+  `kernel BUG at ...mwv207_pipe_3d.c` 的事件表满"；正常桌面负载在飞数远小于 28。
+- K12 的判据：`tests/n14-reset/` 探针再跑一遍（它会连做 6 轮超时复位），
+  修复前每轮都可能打 `WARNING ... busy_count`，修复后 `dmesg` 无该 WARN。
+- K9-②/N9 属防御性改动，判据是编译 + 常规启动无回归；`BUG_ON` 一旦命中
+  已是不可恢复，改后最多是 probe 失败退驱动，不再 panic。
+
+**残余验证缺口**：以上 5 条都要重启后才生效，本节写作时尚未重启验证。
 
 ---
 
@@ -295,6 +329,7 @@ N1 / K11 / N2 / N4 / K9-① / K9-② / K12 / N10 / N9（见 §2）。
 
 | 日期 | 项 | 提交 |
 |---|---|---|
+| 2026-11-10 | KMD：sched 槽位撞车（N1）、3D 在飞上限撞事件表（N2）、超时路径 devfreq 多减（K12）、ISR 影子寄存器数据竞争（K9-②）、显示侧两处 `BUG_ON(irq == 0)`（N9） | `6502f19`（`src/kernel-6.6`；两内核已装、initramfs 已刷，重启后生效） |
 | 2026-11-10 | KMD：3D/2D/DEC/ENC `reset`/`destroy` 对在飞 fence 只 `dma_fence_put` 不 signal（N14），2D `destroy` 不排空 `fence_queue` | `22145e9`（`src/kernel-6.6`；模块已暂存，重启后生效） |
 | 2026-11-10 | Firefox 标签栏"微缩 chrome"：buffer 写入前等待 GPU（`mwv207_resource.c`） | `6ec1e17`（`src/mwv207-umd`） |
 | 2026-11-10 | mesa：`loader_dri3_query_buffer_age()` 恒 0（我们不做交换后缓冲保留） | `248659c`（`ref/oh-mesa`，本地） |

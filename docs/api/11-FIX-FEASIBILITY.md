@@ -60,7 +60,7 @@
 | A10 **E10/拼写** | `mwv207_query.c:342`、`include/mwv207_query.h:53` `destory`；另 `cmd_dat_arrary`、`MWV207_IMMEDIATE_GLOBAL_MEMEORY_OFFSET`、`CACHE_TEXUTRE_L1` | 改名（内部符号，无 ABI 影响） | 小 | 极低 | 编译 + 回归 |
 | A11 **F.3.2** | `nir/mwv207_disasm.c` 断言 `sizedwords % 2 == 0` 而步长是 4 | 修正断言 | 1 行 | 零（仅调试工具） | 反汇编任一着色器 |
 | A12 **F.3.3** | 同文件：FS color 输出遇 0 截断 | 修 printf 逻辑 | 小 | 零 | 同上 |
-| A13 **N9** | KMD `mwv207_kms.c:172`、`mwv207_hdmi.c:1057` 残留 `BUG_ON` | 改为可回退错误路径（3D/2D 已有范式） | 小 | 低 | **【KMD·需部署路径】** |
+| A13 **N9** | KMD `mwv207_kms.c:172`、`mwv207_hdmi.c:1057` 残留 `BUG_ON` | 改为可回退错误路径（3D/2D 已有范式） | 小 | 低 | **✅ 已做（2026-11-10 `6502f19`）：`pr_err` + `-ENODEV`，待重启生效** |
 | A14 **K11** | KMD `mwv207_drv.c:445` `pci_clear_master` 位于移除流程最后 | 提前；注意 **`kms_fini` 必须先于 `irq_fini`** 的耦合 | 小 | 中（次序敏感） | **【KMD·需部署路径】** + 模块卸载 |
 
 > A 类里 A4/A9/A11/A12 基本是"零风险修正"；A5 是本清单里**性价比最高的一条**（1 行换来 GPU 不再读到堆残留）。
@@ -78,13 +78,13 @@
 | B5 **E6** | `mwv207_query.c:108-112` `TIMESTAMP` 用 CPU `os_time_get_nano()` | 改用真 GPU 时间戳 | 中 | **2026-11-03 复核：不改**——与 llvmpipe 同为 CPU 时钟语义，行为一致；硬件寄存器 `0x00490/0x00494` 虽存在，切换属功能改动且需整条 query 路径验证 |
 | B6 **E7** | `mwv207_query.c:156-163,279-282` `PIPELINE_STATISTICS`/`SO_STATISTICS` 不发射寄存器，`get_result` 走 `unreachable()` | 最小可行：`begin/end` 报 `available=false`，消除 `unreachable()` 崩溃 | 小 | 完整实现需把硬件计数器映射到各统计项，中-大 |
 | B7 **E8** | `mwv207_state.c:335-354` 只保存单份视口，忽略 `num_viewports` | 存数组并逐视口编程 | 中-大 | **2026-11-03 复核：非缺陷**——cap=1、`ARB_viewport_array` 未暴露（`GL_MAX_VIEWPORTS` 查询 INVALID_ENUM）；多视口属新功能 D6 |
-| B8 **N2** | KMD 3D `hw_submission = 30` 与硬件事件数 30 相等，违背源码注释 "must be lower than 30" | 降到 29 或按事件数推导 | 小 | **【KMD·需部署路径】**；需硬件事件位图压满的场景验证 |
+| B8 **N2** | KMD 3D `hw_submission = 30` 与硬件事件数 30 相等，违背源码注释 "must be lower than 30" | 降到 29 或按事件数推导 | 小 | **✅ 已做（2026-11-10 `6502f19`）：`MWV207_3D_HW_SUBMISSION = 28`，待重启生效**；压满场景验证见 `docs/UNRESOLVED.md` §2.2 |
 | B9 **N10** | KMD HDMI `mode_valid` 首个条件 `clock >= 384000` 先命中 → 384–594 MHz 全被拒；`phy_configure` 恒传 `bpp=8` 使 PHY 表 10/12 bpp 不可达 | 调整条件顺序、按真实 bpp 传参 | 中 | **【KMD·需部署路径】**；需 4K60+ 显示器实测，且"是否有意限制"未知 |
 | B10 **N14** | KMD `mwv207_pipe_3d.c:301-307`、`mwv207_pipe_2d.c:212-227`、`mwv207_pipe_dec.c:136-141`：`reset` 只 `dma_fence_put` 在飞 fence 而**不 signal**；`mwv207_pipe_2d.c:424-448` `destroy` 不排空 `fence_queue` | reset 时以 `-EIO` signal 在飞 fence；destroy 排空队列 | 中 | **已修（2026-11-10，`22145e9`）**：四条管线统一 `dma_fence_set_error(-EIO)`+signal，destroy 排空；DEC/ENC 用 `xchg` 抢槽防双重 put。模块已于 2026-11-10 重启后生效（`039F972E…`，重启后 GL/query/VP9 回归全过）；3D reset 通路已用 `tests/n14-reset/` 探针实测（6 轮 TDR、`pipe_3d_force_complete` 6/6、用户 fence 12.3 s 完成、无 WARN），2D/DEC/ENC 与 destroy 路径未覆盖 |
-| B11 **K12** | KMD `mwv207_sched.c:203-204` 超时循环体只有 `devfreq_record_idle`，循环变量未用，`drm_sched_resubmit_jobs`(:205) 前无 job 完整性校验 | 补真正的 job 检查与信号 | 中 | **【KMD·需部署路径】** |
+| B11 **K12** | KMD `mwv207_sched.c:203-204` 超时循环体只有 `devfreq_record_idle`，循环变量未用，`drm_sched_resubmit_jobs`(:205) 前无 job 完整性校验 | 补真正的 job 检查与信号 | 中 | **✅ 已做（2026-11-10 `6502f19`）：新增 `mwv207_devfreq_reset_busy()` 直接清零 `busy_count`（`drm_sched` 侧的完整性由 6.6 的 stop/start 负责），待重启生效** |
 | B12 **K9-①** | KMD `dc/mwv207_va.c:634-655` vblank 处理器**整字回写** `0x9907f4`（影响 bit12–15） | 改逐位 W1C（与 `irq.c:44` 一致） | 小-中 | **【KMD·需部署路径】**；需 vblank 竞态验证 |
-| B13 **K9-②** | KMD `mwv207_irq.c:31` ISR 无锁读 `irq_enable_reg[]`，而 mask/unmask 在 `irq_lock` 内写 | 加锁或改用影子/原子 | 小-中 | **【KMD·需部署路径】**；ISR 上下文 |
-| B14 **N1** | KMD `mwv207_sched.c:310-314`：`sched_enc = &sched_dec[1]` 使 **`sched_dec[1]` 与 `sched_enc[0]` 同指 `&sched[3]`**；而 `:353` 仍报 `nr_dec = 2` | 扩大槽数组到 7 并修正偏移（`sched_enc = &sched_dec[2]`），同步改 `fini` 循环 | 小 | **改的是设备拓扑**（多出一个 scheduler 对象）；**【KMD·需部署路径】**。当前 UMD `engine_id` 恒 0 → 未触发，但**泄漏一个 dec1 对象与管线** |
+| B13 **K9-②** | KMD `mwv207_irq.c:31` ISR 无锁读 `irq_enable_reg[]`，而 mask/unmask 在 `irq_lock` 内写 | 加锁或改用影子/原子 | 小-中 | **✅ 已做（2026-11-10 `6502f19`）：`READ_ONCE`/`WRITE_ONCE`（不加锁，避免 ISR 里持锁调 `generic_handle_irq`），待重启生效** |
+| B14 **N1** | KMD `mwv207_sched.c:310-314`：`sched_enc = &sched_dec[1]` 使 **`sched_dec[1]` 与 `sched_enc[0]` 同指 `&sched[3]`**；而 `:353` 仍报 `nr_dec = 2` | 扩大槽数组到 7 并修正偏移（`sched_enc = &sched_dec[2]`），同步改 `fini` 循环 | 小 | **✅ 已做（2026-11-10 `6502f19`）：`MWV207_MAX_SCHED_NR 7` + 显式下标（3d=0..1、dec=2..3、enc=4、2d=5、dma=6），三处遍历同步；UMD 无需改（`engine_id` 语义不变），待重启生效** |
 | B15 **N4** | KMD `mwv207_pipe_dma.c:177-186,366`：DMA 提交在 `run_job` 里忙等最多 5 s 并返回 **stub fence** | 改事件等待 + 真 fence | 大 | **【KMD·需部署路径】** |
 | B16 **F.3.1** | `nir/mwv207_disasm.c:141-158` 的 `_str_inst_type[]` 与 `nir/mwv207_emit.c:205-232` 的 `get_alu_inst_type()`/`ops[].type` 编码矛盾（1 是 `.f16` 还是 `i32`） | 以 emit 侧为准统一 | 小 | 建议**先用厂商枚举判明** type 编码（见 C 类 F.1） |
 
@@ -133,7 +133,7 @@ C1/C3（16 位格式 A/B/C）、C2（混合 8/15 是否保留超额声明）、D
 
 **批次 4 — KMD（必须先解决部署路径）**
 先做 **K-a**（把 5.10 KMD 移植成 6.6 DKMS 模块），之后 `A13/N9、A14/K11、B8/N2、B9/N10、B10/N14、B11/K12、B12/K9-①、B13/K9-②、B14/N1` 才谈得上生效。
-**其中 B14/N1 优先级最高**（对象与管线泄漏 + `INFO` 谎报 DEC=2），但**当前 UMD 恒用 `engine_id=0` 所以未触发**——即"高严重、零现网影响"。
+**其中 B14/N1 优先级最高**（对象与管线泄漏 + `INFO` 谎报 DEC=2），但**当前 UMD 恒用 `engine_id=0` 所以未触发**——即"高严重、零现网影响"。A13/N9、B8/N2、B11/K12、B13/K9-②、B14/N1 已于 2026-11-10 一起修掉（`6502f19`，待重启生效）；B10/N14 更早已修并实测（`22145e9`）；剩余 B12/K9-①、A14/K11、B9/N10。
 **B10/N14 已修并实测 3D reset 通路**（`22145e9`）；若将来出现"某次 hang 后应用卡死"，仍应首先怀疑它在 2D/DEC/ENC 与 destroy 路径上的残余风险。
 
 **批次 5 — 视频**

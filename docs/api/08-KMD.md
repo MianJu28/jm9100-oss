@@ -255,7 +255,7 @@
 | A2 | `db_init`/`vbios_init` 失败直接 `return ret`，跳过清理 | `drv.c:369-373` |
 | A3 | `mwv207_mmap` 未校验 `filp->private_data`/`minor` 为空 | `drv.c:83-94` |
 | A4 | 悬挂于 devfreq 的 `governor_performance` 依赖 softdep；缺失时 probe 失败 | `drv.c:548-556`、`devfreq.c:192-198` |
-| A5 | `mwv207_sched_fini` 只在 6 个槽上销毁，**丢弃 dec1 的 scheduler**（见 §5.6 N1） | `sched.c:369-378`、`:310-314` |
+| A5 | `mwv207_sched_fini` 只在 6 个槽上销毁，**丢弃 dec1 的 scheduler**（见 §5.6 N1）—— **已修（2026-11-10 `6502f19`，7 槽全覆盖）** | `sched.c:369-378`、`:310-314` |
 
 ### 2.8 电源管理（`mwv207_drv.c:449-512`）
 
@@ -658,9 +658,18 @@ DMA 条目的地址填充（`mwv207_submit_patch_dma_entry`，`:391-428`）：VR
 | `sched_2d = &sched_enc[1]` | `sched_2d[0]=sched[4]` | 2d0 |
 | `sched_dma = &sched_2d[1]` | `sched_dma[0]=sched[5]` | dma0 |
 
-> **N1（本树新发现，待修）**：`sched_dec[1]` 与 `sched_enc[0]` 指向同一元素 `jdev->sched[3]`。第 4 步创建 dec1 的 scheduler 写入 `sched[3]`，第 5 步创建 enc0 的 scheduler **覆盖** `sched[3]`。后果：① dec1 的 `drm_gpu_scheduler` 对象失去唯一引用、`mwv207_sched_fini`（遍历 `sched[0..5]`）不会 `drm_sched_fini` 它 → 调度线程/工作队列泄漏，卸载时可能报警；② `ctx.c:97-130` 在 ctx 创建时为 DEC 引擎绑定 `sched_dec[0..1]`，此时 `sched_dec[1]` 已经是 **ENC 的 scheduler** → UMD 用 `engine_type=1(专享 DEC)、engine_id=1` 提交的 job 会被送进 ENC 调度器；③ INFO 的 `DRM_MWV207_ACTIVE_DEC_NR` 报 2（`:353`、`:359`）。该问题只在 full 芯片（非 lite）且 DEC1/ENC0 都存在时成立；lite 上 `pipe_dec_create(unit=1)` 与 `pipe_enc_create` 均返回 NULL（`pipe_dec.c:237`、`pipe_enc.c:239`），`sched[3]` 保持 NULL，不触发。
+> **N1（本树新发现，已修 2026-11-10 `6502f19`）**：`sched_dec[1]` 与 `sched_enc[0]` 指向同一元素 `jdev->sched[3]`。第 4 步创建 dec1 的 scheduler 写入 `sched[3]`，第 5 步创建 enc0 的 scheduler **覆盖** `sched[3]`。后果：① dec1 的 `drm_gpu_scheduler` 对象失去唯一引用、`mwv207_sched_fini`（遍历 `sched[0..5]`）不会 `drm_sched_fini` 它 → 调度线程/工作队列泄漏，卸载时可能报警；② `ctx.c:97-130` 在 ctx 创建时为 DEC 引擎绑定 `sched_dec[0..1]`，此时 `sched_dec[1]` 已经是 **ENC 的 scheduler** → UMD 用 `engine_type=1(专享 DEC)、engine_id=1` 提交的 job 会被送进 ENC 调度器；③ INFO 的 `DRM_MWV207_ACTIVE_DEC_NR` 报 2（`:353`、`:359`）。该问题只在 full 芯片（非 lite）且 DEC1/ENC0 都存在时成立；lite 上 `pipe_dec_create(unit=1)` 与 `pipe_enc_create` 均返回 NULL（`pipe_dec.c:237`、`pipe_enc.c:239`），`sched[3]` 保持 NULL，不触发。
+>
+> **修法**：`sched[]` 扩到 7（`MWV207_MAX_SCHED_NR`）+ 显式下标 3d=0..1、dec=2..3、
+> enc=4、2d=5、dma=6；suspend/resume/fini 遍历改用该宏。槽位不再共享，`nr_dec=2`
+> 名副其实，`engine_id=1` 的 DEC 提交进 dec1 自己的 scheduler；dec1 的
+> scheduler/pipe 也不再在卸载时泄漏。UMD 不需要改（`engine_id` 语义未变）。
 
-> **N2（源码注释与实现不一致）**：`sched.c:319-320` 注释要求 "sched limit of 3d should be lower than hw event count, which is 30 for 91/92"，但 `:323`/`:328` 传的 `hw_submission` 恰为 **30**；而 3D 事件位图正是 30 位（`pipe_3d.c:302-306` 的 `bitmap_zero(pipe->event_bitmap, 30)` 与 30 个 `event_fence[]` 槽）。相等而非"lower"，属边界配置，源码自述"otherwise pipe 3d will BUG_ON"。
+> **N2（源码注释与实现不一致，已修 2026-11-10 `6502f19`）**：原 `sched.c:319-320` 注释要求 "sched limit of 3d should be lower than hw event count, which is 30 for 91/92"，但 `:323`/`:328` 传的 `hw_submission` 恰为 **30**；而 3D 事件位图正是 30 位（`pipe_3d.c:302-306` 的 `bitmap_zero(pipe->event_bitmap, 30)` 与 30 个 `event_fence[]` 槽）。相等而非"lower"，属边界配置，源码自述"otherwise pipe 3d will BUG_ON"。
+>
+> **修法**：新增 `MWV207_3D_HW_SUBMISSION 28`（3d0/3d1 都用），比 30 个事件槽留 2
+> 个余量；判据是 28+ 个在飞 3D 提交不再命中 `BUG_ON(event >= 30)`，正常桌面负载
+> 在飞数远小于 28。
 
 ### 5.7 ctx 的 entity 划分（`mwv207_ctx.c:54-130`）
 
@@ -695,10 +704,14 @@ DMA 条目的地址填充（`mwv207_submit_patch_dma_entry`，`:391-428`）：VR
 3. `dump_hang_job` 为真 → `pipe->dump_state(pipe)`（3D 会读 `0x660/0x664/0x668/0x66c` 并轮询状态变化，`pipe_3d.c:397-422`；DEC/ENC/DMA 的 dump 只是 `pr_info`）+ `mwv207_sched_dump_job(mjob)`。
 4. `drm_sched_increase_karma(job)`。
 5. `pipe->reset(pipe)`（3D：清 30 个事件 bitmap 与引用、重写硬件、复位 tail/head、start；`pipe_3d.c:296-314`）。
-6. **`list_for_each_entry(timedout_job, &sched->base.ring_mirror_list, node) mwv207_devfreq_record_idle(sched->pipe);`（`:203-204`）**。
+6. **`list_for_each_entry(timedout_job, &sched->base.pending_list, list) mwv207_devfreq_record_idle(sched->pipe);`（原 `:203-204`；2026-11-10 已换成 `mwv207_devfreq_reset_busy()`）**。
 7. `drm_sched_resubmit_jobs(&sched->base)` → `drm_sched_start(&sched->base, true)`。
 
-**K12 复核（本树：⚠️ 语义问题仍在，且比原描述更完整）**：
+> 注：第 6 步已于 2026-11-10 修掉（`6502f19`，K12）——复位后直接
+> `mwv207_devfreq_reset_busy(pipe)` 把 `busy_count` 清零，不再按队列逐 job 减一。
+> 下表保留修前的复核证据。
+
+**K12 复核（修前状态；⚠️ 语义问题已在 `6502f19` 修掉，且比原描述更完整）**：
 
 | 子项 | 判定 | 证据 |
 |---|---|---|
@@ -785,7 +798,7 @@ DEC / ENC / DMA **不注册中断**（DEC/ENC 用轮询线程，DMA 忙等），
 |---|---|---|
 | `mwv207_irq_mask` | `jdev_modify(0x009A8020 + (irq/32)*4, 1 << (irq%32), 0)`；随后**回读同位并写入 `irq_enable_reg[irq/32]`**；全程 `spin_lock_irqsave(&irq_lock)` | `:53-66` |
 | `mwv207_irq_unmask` | 同址把该位写 1；同样在锁内更新影子 | `:68-81` |
-| 竞态 | demux ISR **读 `irq_enable_reg[i]` 时不持 `irq_lock`**（`:31`），而 mask/unmask 在锁内写它 → 影子数组无锁共享 | `:31` vs `:53-81` |
+| 竞态 | demux ISR **读 `irq_enable_reg[i]` 时不持 `irq_lock`**（`:31`），而 mask/unmask 在锁内写它 → 影子数组无锁共享；**已修（2026-11-10 `6502f19`，K9-②）**：读写都改 `READ_ONCE`/`WRITE_ONCE`（`irq_suspend/resume` 同），不加锁以免在 ISR 里持锁调 `generic_handle_irq` | `:31` vs `:53-81` |
 
 ### 6.6 K8 复核（`irq_create_mapping` 与 `BUG_ON`）
 
@@ -1041,7 +1054,7 @@ PLL 硬件命令通道（`mwv207_vcmd.c`）：
 | K9 | demux ISR 的 W1C 竞态丢事件 | ⚠️ **原机制不成立**；有真实但更小的等价问题（VA vblank 整字回写 + 影子无锁） | `irq.c:44`（逐位）vs `va.c:638-641`（整字）、`irq.c:31` |
 | K10 | `ctx.c` `scheds[6]` 无上界检查 | ✅ **已修** | `ctx.c:60`、`:66-67` |
 | K11 | remove 顺序：`pci_clear_master` 在最后 | ⚠️ **仍在** | `drv.c:445`（`free_irq` 之后） |
-| K12 | timedout_job 循环体语义可疑；重放无完整性校验 | ⚠️ **确认仍在** | `sched.c:203-204`、`:205-208` |
+| K12 | timedout_job 循环体语义可疑；重放无完整性校验 | ✅ **已修（2026-11-10 `6502f19`）：改为 `mwv207_devfreq_reset_busy()` 清零 `busy_count`**；"重放无完整性校验"仍属设计限制（`drm_sched_resubmit_jobs` 会重放同一 hang job，靠 `hang_limit` 5 次后 `-ECANCELED` 收敛，`tests/n14-reset/` 实测 6 轮） | `sched.c:203-204`、`:205-208` |
 
 ### 9.2 K8 的残留与 K9/K12 的详细证据
 
@@ -1055,15 +1068,15 @@ PLL 硬件命令通道（`mwv207_vcmd.c`）：
 
 | 编号 | 严重度 | 问题 | 证据 | 建议 |
 |---|---|---|---|---|
-| N1 | 高 | `sched[3]` 槽位被 `sched_dec[1]`（dec1）与 `sched_enc[0]`（enc0）共用 → ENC scheduler 覆盖 DEC id1；dec1 的 scheduler 泄漏；INFO 报 DEC=2；`engine_id=1` 的 DEC 提交落到 ENC 调度器 | `sched.c:310-314`、`:335-339`、`:351-355`、`ctx.c:97-130` | 分离基址（如 `sched_enc = &sched_dec[2]` 并把 `sched[]` 扩到 7），或改为显式索引 |
-| N2 | 中 | 3D 的 `hw_submission = 30` 与硬件事件数 30 相等，与源码注释"must be lower"冲突 | `sched.c:319-323`、`pipe_3d.c:302-306` | 降到 < 30（如 16）或扩大事件位图 |
+| N1 | 高 | `sched[3]` 槽位被 `sched_dec[1]`（dec1）与 `sched_enc[0]`（enc0）共用 → ENC scheduler 覆盖 DEC id1；dec1 的 scheduler 泄漏；INFO 报 DEC=2；`engine_id=1` 的 DEC 提交落到 ENC 调度器 | `sched.c:310-314`、`:335-339`、`:351-355`、`ctx.c:97-130` | **已修（2026-11-10，`6502f19`）**：`sched[]` 扩到 7 + 显式下标（3d=0..1、dec=2..3、enc=4、2d=5、dma=6），遍历用 `MWV207_MAX_SCHED_NR` |
+| N2 | 中 | 3D 的 `hw_submission = 30` 与硬件事件数 30 相等，与源码注释"must be lower"冲突 | `sched.c:319-323`、`pipe_3d.c:302-306` | **已修（2026-11-10，`6502f19`）**：降为 28（`MWV207_3D_HW_SUBMISSION`） |
 | N3 | 中 | DEC/ENC 用 1 ms 周期轮询内核线程推进 fence，无中断；完成延迟与 CPU 占用被动依赖轮询调度 | `pipe_dec.c:81-112`、`pipe_enc.c:90-116` | 改用事件中断（hwirq 表预留），或延长轮询间隔 |
 | N4 | 中 | DMA 提交在 `run_job` 上下文中忙等最多 5 s 并返回 stub fence → 调度器工作线程被长时间占用、fence 语义退化为"同步完成" | `pipe_dma.c:177-186`、`:366` | 改为真实 fence + 中断/轮询 |
 | N5 | 中 | `pipe_dma_destroy`/`pipe_dma_reset` 是 `pr_info("todo")` 空壳；LLI 表靠 `dmam_alloc_coherent`（devres）兜住才不泄漏，但 DMA 通道未被停表 | `pipe_dma.c:129-138`、`:370-375`、`:402-408` | 实现 stop/reset |
 | N6 | 低 | primary plane 的 `rgb_formats[]` 未含 `ARGB2101010`，但 update 分支里有该格式 → 死代码/声明不一致 | `va.c:48-54` vs `:198-201` | 统一格式表 |
 | N7 | 低 | `mwv207_drm_fb_helper_init` 忽略 `crtc_count`/`max_conn_count` 参数（恒传 `num_crtcs`） | `fb.c:35-41`、`:135-139` | 参数生效或删参 |
 | N8 | 低 | `request_irq`/`free_irq` 用 `pdev->irq` 而非 `pci_irq_vector(pdev, 0)` | `irq.c:161`、`:189` | 统一取值方式 |
-| N9 | 低 | `kms.c:172` 与 `hdmi.c:1057` 保留 `BUG_ON(irq == 0)`（3D/2D 已用可回退写法） | `kms.c:172`、`hdmi.c:1057` vs `pipe_3d.c:589-592` | 改为返回错误 |
+| N9 | 低 | `kms.c:172` 与 `hdmi.c:1057` 保留 `BUG_ON(irq == 0)`（3D/2D 已用可回退写法） | `kms.c:172`、`hdmi.c:1057` vs `pipe_3d.c:589-592` | **已修（2026-11-10，`6502f19`）**：改 `pr_err` + `-ENODEV` 回退 |
 | N10 | 低 | HDMI `mode_valid` 的首个条件使 384–594 MHz 全部被拒；`phy_configure` 恒传 bpp = 8，PHY 表 10/12 bpp 项不可达 | `hdmi.c:903-916`、`:858` | 按 sink 能力放宽；按色深选 bpp |
 | N11 | 低 | `irq_enable_reg[]` 无锁共享（K9 的残留形态） | `irq.c:31` vs `:53-81` | ISR 内也持 `irq_lock` 读影子，或用 `READ_ONCE` |
 | N12 | 低 | `mwv207_i2c_put_byte` 非 static 但无头文件声明；`mwv207_i2c_set_addr` 恒返回 0（不校验 channel，靠 `create` 限 0..5） | `i2c.c:214-233`、`:171-212`、`:252` | 补声明、加校验 |
@@ -1078,7 +1091,7 @@ PLL 硬件命令通道（`mwv207_vcmd.c`）：
 |---|---|
 | K1–K7、K10 已修 | 一致（逐条给出证据行） |
 | K11 仍在（`drv.c:445`） | 一致 |
-| **K8/K9/K12 未复核** | **本文补齐**：K8 已修（irq 侧）+ 两处残留 `BUG_ON`；K9 原机制不成立、但等价风险在 VA/影子两处；K12 确认仍在，另发现 3D/2D/DEC 三条管线 reset 丢在飞 fence 不 signal 的疑点（N14） |
+| **K8/K9/K12 未复核** | **本文补齐**：K8 已修（irq 侧）+ 两处残留 `BUG_ON`（N9，2026-11-10 已改为可回退错误）；K9 原机制不成立、但等价风险在 VA/影子两处（影子 K9-② 已于 2026-11-10 用 `READ_ONCE`/`WRITE_ONCE` 修掉，VA vblank K9-① 仍需硬件语义确认）；K12 已于 2026-11-10 改为 `mwv207_devfreq_reset_busy()` 清零（`6502f19`），另发现 3D/2D/DEC 三条管线 reset 丢在飞 fence 不 signal 的疑点（N14，已修 `22145e9`） |
 | — | 新增 N1（sched[3] 槽位碰撞，高）等 14 条本树发现 |
 
 ---
@@ -1092,7 +1105,7 @@ PLL 硬件命令通道（`mwv207_vcmd.c`）：
 | U3 | 3D 环形缓冲/2D 环形缓冲的"命令打包"格式（`pipe_2d_submit` / `pipe_3d_loadstate` 之前的指针运算） | 属 UMD↔硬件协议细节，已由 `docs/registers/` 系列覆盖；本轮只按依赖核查 |
 | U4 | `mwv207_pipe_codec_common.c` 的软后处理寄存器语义（`wb[i].reg` 表） | 只确认"提交时写、完成后回读"的行为，未逐项解码 |
 | U5 | 管线 `reset`（3D/2D/DEC）丢弃的在飞 fence 是否会导致用户态永久等待（N14） | **已按 §9 的 N14 修法修好（2026-11-10，`22145e9`）**；3D reset 通路已用 `tests/n14-reset/` 探针实测（6 轮 TDR、`pipe_3d_force_complete` 命中 6/6、用户 fence 12.3 s 完成）；旧「永久等待」场景因 6.6 `drm_sched_stop/start(full_recovery)` 会以 `-ECANCELED` 兜底而无法对照复现，2D/DEC/ENC 与 destroy 路径未覆盖 |
-| U6 | N1 在实机上是否真的导致 DEC id1 提交错路由 | 静态代码可证指针别名（`sched_dec[1] == sched_enc[0] == &sched[3]`）；实际影响取决于 UMD 是否使用 `engine_id=1` 的 DEC（`01-WINSYS-KMD.md` O 系列记录 UMD 当前 `engine_id` 恒 0，故当前可能不触发） |
+| U6 | N1 在实机上是否真的导致 DEC id1 提交错路由 | 静态代码可证指针别名（`sched_dec[1] == sched_enc[0] == &sched[3]`）；实际影响取决于 UMD 是否使用 `engine_id=1` 的 DEC（`01-WINSYS-KMD.md` O 系列记录 UMD 当前 `engine_id` 恒 0，故当前可能不触发）。**已修（2026-11-10，`6502f19`）**：槽位分离后 dec1 有自己的 scheduler；仍需一个 `engine_id=1` 的自写提交做端到端确认（UMD 不改） |
 | U7 | HDMI 384–594 MHz 被拒是否有意为之（如 PHY/板级限制） | 无硬件文档；标为功能限制 |
 | U8 | `0x12c0000` lite 判据在先前的 91/92 变体上是否普遍成立 | 源码只给出该魔数比较；`hdmi.c:1078` 用同一处，逻辑自洽，但未见硬件文档 |
 | U9 | `irq.c:146` 循环对 64 个 hwirq 全建映射是否必要（可能浪费 virq 空间） | 属设计选择，未找到驱动侧注释说明 |
