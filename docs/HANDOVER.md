@@ -22,8 +22,8 @@ OpenCL/VA-API/VDPAU 全走我们的栈；自建 KMD 在跑（srcversion `039F972
 | 机器 | Deepin 25 aarch64，内核 `6.6.155-arm64-desktop-hwe`（143 也装了 DKMS 包，但不是启动内核），GPU `[0731:9100]` PCI 07:00.0，HDMI-1 1920×1080@100Hz，无免密 sudo（用 `printf '666\n' \| sudo -S`） |
 | 仓库 | `/home/admin/jm9100-oss`（git，远端 `git@github.com:MianJu28/jm9100-oss.git`，已推送同步） |
 | 源码 | `src/mwv207-umd/`（UMD，唯一可改处；上游树 `ref/oh-mesa/.../src/gallium/{drivers,winsys}/mwv207` 是指向它的符号链接）、`src/kernel-6.6/`（KMD，已并入本仓库） |
-| 已装栈 | `/usr/local/lib/mwv207-oss/`（r16，DRI md5 `01904e3a…`，EGL md5 `300daa41…`），`/lib/modules/…/updates/dkms/mwv207.ko`（自建 KMD） |
-| 载荷 | `payload-41`（`24.1.2-fullstack-r16`）；历史快照在 `/var/lib/mwv207-oss/switch-history` |
+| 已装栈 | `/usr/local/lib/mwv207-oss/`（r16，DRI md5 `01904e3a…`，EGL md5 `300daa41…`；r17 目标值 DRI `2a7c3855…` / VA `1532a20e…`），`/lib/modules/…/updates/dkms/mwv207.ko`（自建 KMD） |
+| 载荷 | 运行中 `payload-41`（`24.1.2-fullstack-r16`）；**`payload-42`（`24.1.2-fullstack-r17`，含 I-1 修复）已生成、`umd check` 通过、未安装**，装用 `sudo ./switch-mwv207.sh umd install`（会重启 lightdm，在本地终端/TTY 执行）；历史快照在 `/var/lib/mwv207-oss/switch-history` |
 | 快速回归副本 | `/tmp/gd3/`（测试用；`/tmp` 是 7.8G tmpfs，重启即空，记得清理大文件）。实验构建流程：改 `src/mwv207-umd` → `ninja -C ref/oh-mesa/User_source_code/mesa-24.1.2/build-full src/gallium/targets/dri/libmwv207_dri.so` → `cp` 到 `/tmp/gd3/` → 用 `LIBGL_DRIVERS_PATH=/tmp/gd3 MESA_LOADER_DRIVER_OVERRIDE=mwv207` 测 |
 | 出包安装 | `./tools/make-payload.sh -v 24.1.2-fullstack-rN` → `printf '666\n' \| sudo -S ./switch-mwv207.sh umd install --force`（**install 调用常显示 interrupted，实装已完成——必须用 `status` + md5 比对确认，勿盲目重跑**） |
 | 构建陷阱 | 性能实验必须用 `build-full`（`build-glvnd` 是旧二进制）；`meson setup --wipe` 会把 glvnd 从 auto 变 enabled → 必须显式 `-Dglvnd=false -Dgles1/2=enabled` |
@@ -128,7 +128,13 @@ OpenCL/VA-API/VDPAU 全走我们的栈；自建 KMD 在跑（srcversion `039F972
    （`mwv207` refcnt 恒为 2，只有 reboot 才释放）。
 6. **性能**：buffer 写入等待的吞吐代价只做了 glxgears 观测（110 FPS 无回退），重负载未量化；
    Firefox WebGL 42–44 FPS 的剩余瓶颈在 WebRender 帧调度。
-7. **DKMS 一致性**：改 KMD 源码后必须重跑 `tools/dkms-sync.sh`（它会 dkms build/install
+7. **UMD r17（I-1）待安装**：`payload-42` 已生成、`umd check` 通过，预验证用的是载荷
+   内的同一份二进制（`libmwv207_dri.so` 跑 glxinfo/glxgears/query 4-4，
+   `libEGL_mwv207` 跑 EGL/GBM smoke 全 OK，`libmwv207_drv_video.so` 跑 8bit/Main10
+   2 tile 列逐位一致与 VP9 回归 18/18）。安装命令 `sudo ./switch-mwv207.sh umd install`
+   **会重启 lightdm**，因此要在本地终端/TTY 执行（在 dsh web 会话里执行会连带杀掉
+   本会话）；装完 `umd status` 应显示 r17，DRI md5 `2a7c3855…`、VA md5 `1532a20e…`。
+8. **DKMS 一致性**：改 KMD 源码后必须重跑 `tools/dkms-sync.sh`（它会 dkms build/install
    两个内核）。注意 `switch-mwv207.sh kmd stage` 会用仓库构建的 .ko 覆盖 DKMS 安装路径，
  `dkms status` 会因此重新报 `Diff between built and installed module!`——差异来自
    DKMS 的 MOK 签名与构建方式，功能等价；要恢复干净状态，再跑一次
