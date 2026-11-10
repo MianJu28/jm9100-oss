@@ -13,9 +13,9 @@
 桌面零 env 下 GL 4.0 / GLES 3.2 / `Video memory: 2048MB`，glxgears 110 FPS；
 OpenCL/VA-API/VDPAU 全走我们的栈；自建 KMD 在跑（srcversion `D5EEF36617A4D3FBF4AFD1D`，
 含 N14 的 reset/fence 修复与 N1/N2/K12/K9-②/N9 批次，**2026-11-10 13:29 重启后已验证生效**；
-再下一批 N4（DMA 异步完成 + 真 fence）/K11（中断窗口 + `pci_disable_device`）已构建为
-`0EFB7F4433EA5311B08E88C` 并装到两个内核、initramfs 已刷，**待重启生效**；
-DKMS 包 `mwv207-oss/1.0.0`）。**VP9 Profile0 8bit 硬解已与软件逐位一致**（回归 18/18，
+再下一批 N4（DMA 异步完成 + 真 fence）/K11（中断窗口 + `pci_disable_device`）即
+`0EFB7F4433EA5311B08E88C`，2026-11-10 14:36 重启后**已验证生效**（一键验收
+`tests/verify-installed.sh` 22 项全过）；DKMS 包 `mwv207-oss/1.0.0`）。**VP9 Profile0 8bit 硬解已与软件逐位一致**（回归 18/18，
 含真实 720p/1080p 影视内容）。**Firefox 两处渲染缺陷已根治**：字形/图标撕裂（`f8f693a`）、
 标签栏"微缩 chrome"（`6ec1e17`）。剩余项见 §5。
 
@@ -26,7 +26,7 @@ DKMS 包 `mwv207-oss/1.0.0`）。**VP9 Profile0 8bit 硬解已与软件逐位一
 | 机器 | Deepin 25 aarch64，内核 `6.6.155-arm64-desktop-hwe`（143 也装了 DKMS 包，但不是启动内核），GPU `[0731:9100]` PCI 07:00.0，HDMI-1 1920×1080@100Hz，无免密 sudo（用 `printf '666\n' \| sudo -S`） |
 | 仓库 | `/home/admin/jm9100-oss`（git，远端 `git@github.com:MianJu28/jm9100-oss.git`，已推送同步） |
 | 源码 | `src/mwv207-umd/`（UMD，唯一可改处；上游树 `ref/oh-mesa/.../src/gallium/{drivers,winsys}/mwv207` 是指向它的符号链接）、`src/kernel-6.6/`（KMD，已并入本仓库） |
-| 已装栈 | `/usr/local/lib/mwv207-oss/`（r19，DRI md5 `5408ee72…`、VA md5 `eec6bfe5…`、EGL_mwv207 md5 `d038036a…`），`/lib/modules/…/updates/dkms/mwv207.ko`（自建 KMD，运行中 `D5EEF36…`，已装待重启 `0EFB7F4…`） |
+| 已装栈 | `/usr/local/lib/mwv207-oss/`（r19，DRI md5 `5408ee72…`、VA md5 `eec6bfe5…`、EGL_mwv207 md5 `d038036a…`），`/lib/modules/…/updates/dkms/mwv207.ko`（自建 KMD，运行中 `0EFB7F4…`） |
 | 载荷 | 运行中 `payload-42`（`24.1.2-fullstack-r19`，含 I-1/I-2/I-3/I-4；2026-11-10 13:25 安装、重启后复核 `vainfo` 只剩 ConstrainedBaseline/Main/High + HEVC Main/Main10 + VP9Profile0、H.264 High10 正确回退、HEVC 8bit 逐位一致）；`payload-41`（r16）为上一份可回滚点，历史快照在 `/var/lib/mwv207-oss/switch-history` |
 | 快速回归副本 | `/tmp/gd3/`（测试用；`/tmp` 是 7.8G tmpfs，重启即空，记得清理大文件）。实验构建流程：改 `src/mwv207-umd` → `ninja -C ref/oh-mesa/User_source_code/mesa-24.1.2/build-full src/gallium/targets/dri/libmwv207_dri.so` → `cp` 到 `/tmp/gd3/` → 用 `LIBGL_DRIVERS_PATH=/tmp/gd3 MESA_LOADER_DRIVER_OVERRIDE=mwv207` 测 |
 | 出包安装 | `./tools/make-payload.sh -v 24.1.2-fullstack-rN` → `printf '666\n' \| sudo -S ./switch-mwv207.sh umd install --force`（**install 调用常显示 interrupted，实装已完成——必须用 `status` + md5 比对确认，勿盲目重跑**） |
@@ -119,7 +119,7 @@ DKMS 包 `mwv207-oss/1.0.0`）。**VP9 Profile0 8bit 硬解已与软件逐位一
   H.264 8bit 逐位一致 / `tests/n14-reset/` 6·6 / dmesg 无 WARN·BUG 全过；
   引擎计数用新增的 `tests/engines/run-engines.sh` 核对（本机 lite：
   3d=1 dec=1 enc=0 2d=1 dma=1，见 `docs/UNRESOLVED.md` §2.2）。
-- **KMD 批次 3（`fbed27f`，待重启生效）**：N4 —— `pipe_dma_commit()` 原来在 drm_sched 的
+- **KMD 批次 3（`fbed27f`，2026-11-10 14:36 重启后验证生效）**：N4 —— `pipe_dma_commit()` 原来在 drm_sched 的
   `run_job` 线程里 `cpu_relax()` 自旋最多 5 s，再返回 `dma_fence_get_stub()`（提交即已
   signal）。改成 submit 只启动引擎 + 返回真实 fence，完成/清通道/失效缓存/signal 交给本管线
   自己的 `WQ_MEM_RECLAIM` 有序队列睡眠式轮询（上限 1500 ms < 调度器 2000 ms 超时），
@@ -155,13 +155,13 @@ DKMS 包 `mwv207-oss/1.0.0`）。**VP9 Profile0 8bit 硬解已与软件逐位一
    "参考自身几何 + hscale/vscale"路径，需要一个自写 VAAPI 客户端（ffmpeg 在分辨率变化时
    会重建 VA context，绕不过去）。
 4. **其余 KMD 项**：N1/N2/K12/K9-②/N9 已修并重启验证（`6502f19`）；N4/K11 已修、
-   两内核已装 **待重启生效**（`fbed27f`，srcversion `0EFB7F4…`，验证判据见
-   `docs/UNRESOLVED.md` §2.3——重点是 TTM 搬移全走这条路径，glxgears/query/VP9/
-   HEVC/H.264 都要逐位复核）；K9-① 已核实为与厂商一致（非缺陷）；只剩 N10（只文档化）
+   两内核已装并**重启验证生效**（`fbed27f`，运行中 srcversion `0EFB7F4…`；判据见
+   `docs/UNRESOLVED.md` §2.3）；K9-① 已核实为与厂商一致（非缺陷）；只剩 N10（只文档化）
    与 20 处 `BUG_ON` 的防御性收敛。
-   **重启后一条命令验收**：`printf '666\n' | sudo -S ./tests/verify-installed.sh 0EFB7F4433EA5311B08E88C`
-   （2026-11-10 新增 `tests/verify-installed.sh`；`--no-n14` 跳过 TDR 探针）。当前在
-   `D5EE…` + r19 上预跑：普通用户 `PASS=18 FAIL=0 SKIP=3`、root `PASS=21 FAIL=0 SKIP=1`。
+   **一条命令验收**：`printf '666\n' | sudo -S ./tests/verify-installed.sh 0EFB7F4433EA5311B08E88C`
+   （`--no-n14` 跳过 TDR 探针）。2026-11-10 14:36 重启后实跑：
+   `PASS=22 FAIL=0 SKIP=1`（SKIP 为 TDR 探针后预期的 6 条 `timed out`），
+   另测 glxgears 102.7 FPS、`tools/vp9-regression.sh` 18/18。
 5. **vendor 态端到端验证**：`stack vendor` 会重启，尚未人工实跑；热切换已证不可行
    （`mwv207` refcnt 恒为 2，只有 reboot 才释放）。
 6. **性能**：buffer 写入等待的吞吐代价只做了 glxgears 观测（110 FPS 无回退），重负载未量化；

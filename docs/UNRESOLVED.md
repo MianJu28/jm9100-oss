@@ -3,8 +3,8 @@
 > 汇总截至 **2026-11-10**（运行中的 UMD 已是 **r19**，`payload-42/VERSION = 24.1.2-fullstack-r19`，
 > 2026-11-10 13:25 安装、重启后复核 `vainfo` 只剩 ConstrainedBaseline/Main/High + HEVC
 > Main/Main10 + VP9Profile0，H.264 High10 流正确回退、HEVC 8bit 逐位一致；内核
-> `6.6.155-arm64-desktop-hwe` 侧运行中的 `D5EEF36617A4D3FBF4AFD1D` 一批已于 2026-11-10
-> 13:29 重启验证生效，**另有 `0EFB7F4433EA5311B08E88C`（N4/K11）已装待重启**），
+> `6.6.155-arm64-desktop-hwe` 侧运行中的 `0EFB7F4433EA5311B08E88C`（N4/K11，2026-11-10
+> 14:36 重启后 `tests/verify-installed.sh` 全过 `PASS=22 FAIL=0 SKIP=1`）），
 > 对应外层仓库工作树（含 `src/mwv207-umd/` 分层）。
 > 取代散落在 `api/06-KNOWN-ISSUES.md`、`api/11-FIX-FEASIBILITY.md` 里的分散记录：
 > 本文件是**唯一索引**，那两个文件保留历史细节与推导过程。
@@ -30,10 +30,10 @@
 此前本节写作"从未真机加载"，**已过时**。实测：
 
 ```
-cat /sys/module/mwv207/srcversion        -> D5EEF36617A4D3FBF4AFD1D（运行中）
+cat /sys/module/mwv207/srcversion        -> 0EFB7F4433EA5311B08E88C（运行中）
 modinfo -n mwv207                        -> /lib/modules/6.6.155-…/updates/dkms/mwv207.ko
-modinfo src/kernel-6.6/mwv207.ko         -> srcversion 0EFB7F4433EA5311B08E88C（待重启）
-modinfo /lib/modules/…/updates/dkms/…    -> srcversion 0EFB7F4433EA5311B08E88C（待重启）
+modinfo src/kernel-6.6/mwv207.ko         -> srcversion 0EFB7F4433EA5311B08E88C
+modinfo /lib/modules/…/updates/dkms/…    -> srcversion 0EFB7F4433EA5311B08E88C
 ```
 
 三方一致 ⇒ **运行中的就是自建版**，且包含：
@@ -43,10 +43,10 @@ modinfo /lib/modules/…/updates/dkms/…    -> srcversion 0EFB7F4433EA5311B08E8
 - `22145e9` 修的 N14（reset/destroy 时 signal 在飞 fence，见 §2.1）；
 - `6502f19` 修的 N1 / N2 / K12 / K9-② / N9（见 §2.2，运行中 srcversion 已是
   `D5EEF36617A4D3FBF4AFD1D`，2026-11-10 13:29 重启后回归全过）；
-- `fbed27f` 修的 N4 / K11（见 §2.3）**尚未重启生效**：两内核已装
-  `0EFB7F4433EA5311B08E88C`，initramfs 已刷，运行中仍是 `D5EE…`。
+- `fbed27f` 修的 N4 / K11（见 §2.3）：两内核已装 `0EFB7F4433EA5311B08E88C`，
+  2026-11-10 14:36 重启后**已验证生效**（一键验收 22 项全过）。
 
-因此 **K 系列、N14、§2.2 的 5 条修复均已生效**；N4/K11 已构建部署待重启。
+因此 **K 系列、N14、§2.2 的 5 条、§2.3 的 N4/K11 均已生效**。
 剩下的是 N10（决定只文档化）与 20 处 `BUG_ON` 的防御性收敛（见 §2 / §2.3）。
 自建模块会打印 `loading out-of-tree module taints kernel` 与
 `module verification failed: signature and/or required key missing`（DKMS 签了名，
@@ -66,7 +66,7 @@ modinfo /lib/modules/…/updates/dkms/…    -> srcversion 0EFB7F4433EA5311B08E8
 | 4 | KMD | **N14 已修，重启后已验证生效** | 修复见 §2.1（`22145e9`）；运行中 srcversion 已是 `039F972EFE3279A155EE225`，GL/query/VP9 回归全过；reset 通路已用 `tests/n14-reset/` 探针实测（6 轮 TDR、force_complete 6/6） | 本文 §2.1 |
 | 4b | KMD | **N1/N2/K12/K9-②/N9 已修，重启后已验证生效** | 修复见 §2.2（`6502f19`）；2026-11-10 13:29 重启后 srcversion = `D5EEF36617A4D3FBF4AFD1D`，GL/query 4·4/VP9 18·18/H.264 8bit 逐位一致/N14 探针 6·6 全过，dmesg 无 WARN/BUG；引擎计数用 `tests/engines/` 核对（lite 机型 3d=1 dec=1 enc=0 2d=1 dma=1） | 本文 §2.2 |
 | 4c | UMD 视频 | **I-4：H.264 High10 已定案（2026-11-10 收回声明）** —— 按当前寄存器配置提交 10bit H.264 会让 DEC 管线挂死（6 次 TDR、输出全 0）；缺 Hantro 的 high10p 位流预转换 | 客户端现在对该类流直接回退（`hwaccel initialisation returned error`），DEC 零超时；原厂闭源驱动同样不声明 High10 | 本文 §1.2 / `api/05-VIDEO-CODEC.md` §6.7 |
-| 4d | KMD | **N4/K11 已修，待重启生效** | 修复见 §2.3（`fbed27f`）：DMA 提交改异步完成 + 真 fence；移除路径补 `pci_disable_device`。两内核已装、initramfs 已刷（srcversion `0EFB7F4433EA5311B08E88C`），运行中仍是 `D5EE…` | 本文 §2.3 |
+| 4d | KMD | **N4/K11 已修并重启验证生效** | 修复见 §2.3（`fbed27f`）：DMA 提交改异步完成 + 真 fence；移除路径补 `pci_disable_device` 与 `free_irq` 前硬件侧关中断。运行中 srcversion `0EFB7F4433EA5311B08E88C`，2026-11-10 14:36 重启后一键验收 `PASS=22 FAIL=0 SKIP=1` | 本文 §2.3 |
 | 5 | KMD | 剩余 N10（只文档化）+ 20 处 `BUG_ON` | K9-① 已核实为与厂商一致（非缺陷）；N10 改为只记录；`BUG_ON` 属防御性收敛，非缺陷修复 | 本文 §2 / §2.3 |
 | 6 | 切换脚本 | **vendor 态端到端未实跑** | `stack vendor` 会重启，需人工确认；热切换已证不可行（refcnt 恒 2） | `switch-mwv207.sh` / §5 |
 | 7 | 打包 | **DKMS 一致性警告（走 stage 时会复现，已记录处理步骤）** | `tools/dkms-sync.sh` 重建后两个内核都干净；`kmd stage` 直接覆盖仓库构建的 .ko 会让 6.6.155 重新报 `Diff between built and installed module!`，用 `dkms install --force` + `depmod` + `update-initramfs` 恢复即可 | §2.1、§5 |
@@ -196,7 +196,7 @@ ffmpeg `-hwaccel vaapi` 能建 device，但 `hwdownload` 报 `Function not imple
 > 所以下表全部是**真实存在于当前系统上**的未修缺陷，不是"待部署"的纸上问题。
 > 下表之外，K1–K8/K10、N15、N14、N1/N2/K12/K9-②/N9 已修好并在运行
 > （N14 见 §2.1、`6502f19` 一批见 §2.2，均已于 2026-11-10 重启后验证）；
-> **N4/K11 已修（`fbed27f`，见 §2.3，待重启生效）**；K9-① 经与厂商源码对照
+> **N4/K11 已修（`fbed27f`，见 §2.3，2026-11-10 重启后验证生效）**；K9-① 经与厂商源码对照
 > 确认**不是缺陷**（见 §2.3），N10 决定只文档化。
 
 | # | 级别 | 位置 | 问题 |
@@ -324,7 +324,7 @@ ffmpeg `-hwaccel vaapi` 能建 device，但 `hwdownload` 报 `Function not imple
 （正常桌面在飞数远小于 28，`BUG_ON` 未命中即为间接证据）；② `engine_id=1` 的
 DEC1 提交路径在 lite 机型上不存在，无法实测，只能靠非 lite 硬件或代码审查。
 
-### 2.3 N4/K11 修复与 K9-①/N10 定案（2026-11-10，`fbed27f`）
+### 2.3 N4/K11 修复与 K9-①/N10 定案（2026-11-10，`fbed27f`；已重启验证）
 
 | 项 | 原实现 | 现实现 |
 |---|---|---|
@@ -340,7 +340,7 @@ LLI 数组是复用的（`0x400000 / sizeof(lli)` 条），超过约 64 MB 的�
 那条路径仍必须同步等待（否则会覆盖引擎正在读的 LLI），代码里保留了
 `pipe_dma_commit()` 并注明原因。
 
-**部署状态（2026-11-10，待重启生效）**：`tools/dkms-sync.sh` 重建并安装到 6.6.155，
+**部署状态（2026-11-10，已重启验证生效）**：`tools/dkms-sync.sh` 重建并安装到 6.6.155，
 6.6.143 用 `dkms install --force` 补装；两内核 `dkms status` 均 `installed`、无 `Diff`
 警告；两个 initramfs 都已刷新，解包核对
 `updates/dkms/mwv207.ko` 的 srcversion 均为 **`0EFB7F4433EA5311B08E88C`**
@@ -350,18 +350,31 @@ LLI 数组是复用的（`0x400000 / sizeof(lli)` 条），超过约 64 MB 的�
 以及随后 idle 上的 `WARNING at kernel/context_tracking.c:128 ct_kernel_exit`，
 而同参数的 `cp --reflink=auto --sparse=auto -fL` 在命令行手跑 3/3 成功 —— 属该内核
 （`vfs_monitor(OE)` 等树外模块在场、`Tainted: D`）在 initramfs 工具链大批量搬文件时的
-既有不稳定性，不是 GPU 管线触发。运行中仍是 `D5EEF36617A4D3FBF4AFD1D`。
+既有不稳定性，不是 GPU 管线触发。运行中已是 `0EFB7F4433EA5311B08E88C`（2026-11-10 14:36 重启）。
 
 **一键验收**：`printf '666\n' | sudo -S ./tests/verify-installed.sh 0EFB7F4433EA5311B08E88C`
 （`tests/verify-installed.sh`，2026-11-10 新增；`--no-n14` 可跳过 TDR 探针）——它把下面的
 判据全部脚本化，含 srcversion 比对、`modinfo -n` 来源、glxinfo/query/引擎计数、
 VAAPI profile 归位、三类解码逐位一致、High10 回退与 DEC 零超时、TDR 探针、
 以及"只看本次运行新增"的 dmesg 告警检查（`kernel.dmesg_restrict=1` 时普通用户跑会
-明确 SKIP 而不是假 PASS）。当前在运行中的 `D5EE…` + r19 上跑过：普通用户
-`PASS=18 FAIL=0 SKIP=3`，root 全跑 `PASS=21 FAIL=0 SKIP=1`（SKIP 为 TDR 探针后预期的
-6 条 `timed out`）。
+明确 SKIP 而不是假 PASS）。重启前在 `D5EE…` + r19 上预跑：普通用户
+`PASS=18 FAIL=0 SKIP=3`、root `PASS=21 FAIL=0 SKIP=1`；重启后的正式结果是 22 项全过，
+见下。
 
-**重启后的判据**：`cat /sys/module/mwv207/srcversion` 应为 `0EFB7F4433EA5311B08E88C`；
+**重启后验证结果（2026-11-10 14:36，均实测通过）**：`/sys/module/mwv207/srcversion`
+= `0EFB7F4433EA5311B08E88C`、`modinfo -n` 指向 `updates/dkms`；`glxinfo -B` MWV207/GL4.0/
+accelerated yes；`glxgears` 102.7 FPS（vsync 同步）；query `PASS=4 FAIL=0`；
+`tests/engines` `3d=1 dec=1 enc=0 2d=1 dma=1`；`tools/vp9-regression.sh` **18/18**；
+H.264 High 420 / HEVC 8bit / HEVC Main10 **逐位一致**（这三类每次搬移都走 N4 改过的
+异步完成路径）；H.264 High10 正确回退、DEC 零超时；`tests/n14-reset` PASS（TDR 6 次、
+`force_complete` 6 次）；dmesg 无 `DMA timeout`/`WARN`/`BUG`/`nobody cared`，
+也无 `WARN_ON(pipe->current_fence)` 命中；一键验收 `PASS=22 FAIL=0 SKIP=1`
+（SKIP 为探针后预期的 6 条 `timed out`）。
+**路径确实被走到（kprobe 计数）**：对 `pipe_dma_start` 与 `pipe_dma_complete_work`
+挂 kprobe 后跑一次 HEVC Main10 解码，两者各命中 **45 次**（一一对应）——说明新异步
+完成路径是真的在执行，不是被绕过或只跑同步兜底分支。
+
+**原定判据**（保留作背景）：`cat /sys/module/mwv207/srcversion` 应为 `0EFB7F4433EA5311B08E88C`；
 随后 `glxinfo -B`、`tests/query/run-query-tests.sh`（`DRI_DIR=/usr/local/lib/mwv207-oss`）、
 `tools/vp9-regression.sh`、HEVC 8bit/Main10 与 H.264 High 逐位一致（**这三类测试的每一次
 缓冲搬移都走这条改动过的路径，是 N4 的主要功能覆盖**）、`tests/engines/run-engines.sh`
@@ -369,8 +382,8 @@ VAAPI profile 归位、三类解码逐位一致、High10 回退与 DEC 零超时
 `dmesg | grep -iE "DMA timeout|WARN|BUG"` 应为空（`WARN_ON(pipe->current_fence)`
 是本次新加的重入防御，命中即说明调度器串行假设被破坏）。
 
-**残余验证缺口**：① 异步完成路径只能在重启后验证，之前在运行中的 `D5EE…` 模块上无法
-预跑；② 没有构造"DMA 引擎真的挂住"的场景（需要让引擎停在半路，风险高），
+**残余验证缺口**：① 异步完成路径已随 2026-11-10 14:36 重启验证（见上），但只在
+桌面常规负载下走过，未做高吞吐压力；② 没有构造"DMA 引擎真的挂住"的场景（需要让引擎停在半路，风险高），
 `-ETIMEDOUT` 分支只有代码审查；③ 中间批次（>64 MB 搬移）仍走同步等待，未单独压测。
 
 ---
@@ -439,7 +452,7 @@ VAAPI profile 归位、三类解码逐位一致、High10 回退与 DEC 零超时
 
 | 日期 | 项 | 提交 |
 |---|---|---|
-| 2026-11-10 | KMD：DMA 提交忙等 5 s + stub fence（N4）、移除路径缺 `pci_disable_device` 与 `free_irq` 前未在硬件侧关中断（K11） | `fbed27f`（`src/kernel-6.6`；两内核已装、initramfs 已刷，重启后生效） |
+| 2026-11-10 | KMD：DMA 提交忙等 5 s + stub fence（N4）、移除路径缺 `pci_disable_device` 与 `free_irq` 前未在硬件侧关中断（K11） | `fbed27f`（`src/kernel-6.6`；2026-11-10 重启后验证生效，一键验收 22 项全过） |
 | 2026-11-10 | KMD：sched 槽位撞车（N1）、3D 在飞上限撞事件表（N2）、超时路径 devfreq 多减（K12）、ISR 影子寄存器数据竞争（K9-②）、显示侧两处 `BUG_ON(irq == 0)`（N9） | `6502f19`（`src/kernel-6.6`；两内核已装、initramfs 已刷，重启后生效） |
 | 2026-11-10 | KMD：3D/2D/DEC/ENC `reset`/`destroy` 对在飞 fence 只 `dma_fence_put` 不 signal（N14），2D `destroy` 不排空 `fence_queue` | `22145e9`（`src/kernel-6.6`；模块已暂存，重启后生效） |
 | 2026-11-10 | UMD：HEVC `tile_buffer_size` 用位深当帧高（I-1），tile 缓冲按错误高度分配 | `385ed81`（`src/mwv207-umd`） |
