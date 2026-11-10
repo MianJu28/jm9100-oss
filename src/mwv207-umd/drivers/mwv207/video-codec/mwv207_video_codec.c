@@ -71,6 +71,12 @@ mwv207_profile_supported(struct pipe_screen *screen,
    case PIPE_VIDEO_PROFILE_HEVC_MAIN_10:
    case PIPE_VIDEO_PROFILE_VP9_PROFILE0:
       return entrypoint != PIPE_VIDEO_ENTRYPOINT_ENCODE;
+   case PIPE_VIDEO_PROFILE_VP9_PROFILE2:
+      /* A5：Profile 2（10bit 4:2:0）2026-11-10 实测通过（64x64 ~ 1080p 多帧、
+       * 含 inter 帧，与软件解码逐位一致、零 TDR），默认声明。仍拒绝
+       * Profile 1/3（4:2:2 / 4:4:4）—— 硬件没有采样格式选择字段。 */
+      return mwv207_vp9_10bit_enabled() &&
+             entrypoint != PIPE_VIDEO_ENTRYPOINT_ENCODE;
    default:
       return false;
    }
@@ -160,6 +166,11 @@ mwv207_is_video_format_supported(struct pipe_screen *pscreen,
       case PIPE_VIDEO_PROFILE_HEVC_MAIN:
       case PIPE_VIDEO_PROFILE_HEVC_MAIN_10:
       case PIPE_VIDEO_PROFILE_VP9_PROFILE0:
+         break;
+      case PIPE_VIDEO_PROFILE_VP9_PROFILE2:
+         /* A5：P010 面 + Profile 2。MWV207_VP9_10BIT_DISABLE 可整体关掉。 */
+         if (!mwv207_vp9_10bit_enabled())
+            ret = false;
          break;
       default:
          ret = false;

@@ -30,6 +30,23 @@
 #include "mwv207_dec_vp9.h"
 #include "mwv207_video_decoder.h"
 #include "util/u_memory.h"
+#include <stdlib.h>
+
+bool
+mwv207_vp9_10bit_enabled(void)
+{
+   static int enabled = -1;
+
+   if (enabled < 0) {
+      const char *env = getenv("MWV207_VP9_10BIT_DISABLE");
+
+      enabled = (env && env[0] && env[0] != '0') ? 0 : 1;
+      if (!enabled)
+         fprintf(stderr, "mwv207: VP9 10bit 已按 MWV207_VP9_10BIT_DISABLE 关闭"
+                 "（只声明 Profile 0）\n");
+   }
+   return enabled == 1;
+}
 
 void
 mwv207_dec_set_common_config_regs(struct mwv207_video_dec *dec)

@@ -1051,12 +1051,21 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
       }
    }
    if (sh->vp_profile != 0 || sh->bit_depth != 8) {
-      MWV207_LOG(MWV207_LEVEL_ERROR,
-                 "vp9: unsupported profile %u (%u-bit), only Profile 0 8-bit "
-                 "4:2:0 is decoded; frame skipped\n",
-                 sh->vp_profile, sh->bit_depth);
-      reg_buf->set_reg(reg_buf, JMDEC_DEC_E, 0);
-      return;
+      /* A5：Profile 2（10bit 4:2:0）在探测模式下放行 —— 输出/PP 侧走与 HEVC
+       * Main10 相同的 P010 通路（BIT_DEPTH_OUT/Y/C 已按 sh->bit_depth 编程，
+       * dec_param.bit_depth 也已同步）。Profile 1/3（4:2:2/4:4:4）仍然拒绝：
+       * 解码器没有色度采样格式选择字段，提交只会让 ASIC 自旋。 */
+      if (!(mwv207_vp9_10bit_enabled() &&
+            sh->vp_profile == 2 && sh->bit_depth == 10)) {
+         MWV207_LOG(MWV207_LEVEL_ERROR,
+                    "vp9: unsupported profile %u (%u-bit), only Profile 0 8-bit "
+                    "4:2:0 is decoded%s; frame skipped\n",
+                    sh->vp_profile, sh->bit_depth,
+                    " (Profile 2 10bit 可用 MWV207_VP9_10BIT_DISABLE=1 关闭)");
+         reg_buf->set_reg(reg_buf, JMDEC_DEC_E, 0);
+         return;
+      }
+      dec->dec_param.use_p010_output = 1;
    }
 
    width = sh->width ? sh->width : width;

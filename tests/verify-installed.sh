@@ -30,6 +30,8 @@ for arg in "$@"; do
 done
 
 mkdir -p "$TMP"
+# root 跑过一次之后 $TMP 属 root，普通用户再跑会 Permission denied（VP9 样片生成失败）。
+chmod 0777 "$TMP" 2>/dev/null || true
 
 # dmesg 基线：只检查本次运行之后新增的行，避免把历史告警算到这次头上。
 # 有些系统开了 kernel.dmesg_restrict，非 root 读不到 —— 这种情况必须明确 SKIP，
@@ -114,7 +116,8 @@ if need vainfo; then
 	if [ -z "$v" ]; then
 		bad "vainfo 无输出"
 	else
-		for p in H264ConstrainedBaseline H264Main H264High HEVCMain HEVCMain10 VP9Profile0; do
+		for p in H264ConstrainedBaseline H264Main H264High HEVCMain HEVCMain10 \
+			VP9Profile0 VP9Profile2; do
 			printf '%s' "$v" | grep -q "VAProfile$p" && ok "声明 $p" || bad "缺 $p"
 		done
 		for p in H264High10 H264High422 H264High444; do
@@ -165,6 +168,15 @@ else
 	bitcmp h264_420.mp4 h264-420 nv12 yuv420p
 	bitcmp hevc_8.mp4 hevc-8bit nv12 yuv420p
 	bitcmp hevc_10.mp4 hevc-10bit p010 yuv420p10le
+
+	# A5：VP9 Profile 2（10bit 4:2:0）
+	ffmpeg -v error -y -f lavfi -i "testsrc2=size=320x240:rate=30" -frames:v 10 \
+		-pix_fmt yuv420p10le -c:v libvpx-vp9 -profile:v 2 "$TMP/vp9_10.webm" >/dev/null 2>&1
+	if [ -s "$TMP/vp9_10.webm" ]; then
+		bitcmp vp9_10.webm vp9-profile2-10bit p010 yuv420p10le
+	else
+		skp "vp9 profile2 样片生成失败（ffmpeg 无 libvpx-vp9？）"
+	fi
 
 	# H.264 High10 必须走软件回退（不能把 DEC 打挂）
 	ffmpeg -v error -y -f lavfi -i "testsrc2=size=352x288:rate=30" -frames:v 10 \

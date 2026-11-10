@@ -163,5 +163,13 @@ int mwv207_dec_pp_params_init(struct mwv207_video_dec *dec,
                              uint32_t bit_depth,
                              struct pipe_video_buffer *target);
 
+/* A5：VP9 Profile 2（10bit 4:2:0）。2026-11-10 上机验证通过 —— 64x64 / 640x360
+ * / 1280x720 / 1920x1080 多帧（含 inter 帧）解码输出与软件逐位一致，全程零 TDR，
+ * 走的是与 HEVC Main10 相同的 P010 通路，因此默认对外声明并放行。
+ * 仍拒绝 Profile 1/3（4:2:2 / 4:4:4）：解码器没有色度采样格式选择字段（UNRESOLVED
+ * §1.5），提交只会让 ASIC 自旋。MWV207_VP9_10BIT_DISABLE=1 可整体关掉 10bit
+ * 声明/放行，用于对照与排障。 */
+bool mwv207_vp9_10bit_enabled(void);
+
 #endif
 
