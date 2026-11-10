@@ -1057,7 +1057,13 @@ dec_hevc_check_and_alloc_asic_buffer(
    struct mwv207_video_buffer *buf = (struct mwv207_video_buffer *)target;
 
    
-   uint32_t pic_height = pic_param->pps.sps.bit_depth_chroma_minus8;
+   /* FIX(jm9100-oss): 原代码把 pic_height 取成 bit_depth_chroma_minus8
+    * （0 或 2），于是 height64 = 0（8bit）或 64（10bit），tile 专用的
+    * filter/BSD/SAO RAM 全部按错误高度分配与偏移。720p + 2 tile 列时
+    * 三块 RAM 合计 3840 B 恰好落在一个 4 KB 页内，所以此前实测无差异；
+    * tile 列数或高度再大就会写到 BO 之外。这里改用真实的帧高
+    * （SPS 的 pic_height_in_luma_samples），height64 即按 64 行对齐。 */
+   uint32_t pic_height = pic_param->pps.sps.pic_height_in_luma_samples;
    uint32_t num_tile_cols = pic_param->pps.num_tile_columns_minus1 + 1;
    uint32_t pixel_width = (pic_param->pps.sps.bit_depth_luma_minus8 == 0
                       && pic_param->pps.sps.bit_depth_chroma_minus8 == 0)
