@@ -633,6 +633,26 @@ mwv207_video_decoder_end_frame(struct pipe_video_codec *decoder,
          dec->decoder->reg_buf->bos_clear(dec->decoder->reg_buf);
          return;
       }
+      /* FIX(jm9100-oss): I-4 —— 高位深（High10）H.264 同样跳过：按当前寄存器
+       * 配置提交会让 DEC 管线挂死（实测一个 10 帧样片触发 6 次 TDR，
+       * `job from 'av:h264:df0' to 'mwv207_dec0', timed out!`，输出面全 0）。
+       * Hantro 系的 10bit H.264 需要 high10p 位流预转换，本驱动未实现，
+       * 能力表里也已收回 High10 声明。客户端若绕过能力表硬塞 10bit 码流，
+       * 这里直接拒绝，不把 DEC 管线拖进超时循环。 */
+      if (h264_pic->pps && h264_pic->pps->sps &&
+          h264_pic->pps->sps->bit_depth_luma_minus8 > 0) {
+         static bool warned;
+         if (!warned) {
+            warned = true;
+            MWV207_LOG(MWV207_LEVEL_ERROR,
+                       "H.264 bit_depth=%u (High10) 不被硬件支持，已跳过解码\n",
+                       h264_pic->pps->sps->bit_depth_luma_minus8 + 8);
+         }
+         memset(dec->streams_len, 0, sizeof(dec->streams_len));
+         dec->streams_num = 0;
+         dec->decoder->reg_buf->bos_clear(dec->decoder->reg_buf);
+         return;
+      }
       get_h264_msg(dec, h264_pic);
       break;
    }

@@ -51,14 +51,22 @@ mwv207_profile_supported(struct pipe_screen *screen,
     * 该硬件的 H.264 硬解只有 4:0:0 与 4:2:0 两种采样；本驱动此前把
     * chroma_format_idc 硬置为 1、视频缓冲模板硬编码 420，声明 422/444
     * 只会让客户端（如 ffmpeg 按 pix_fmt 直接要 VA_RT_FORMAT_YUV422）建出
-    * 无法下载/解码正确的配置。收回声明后客户端会正确回退到软件解码。 */
+    * 无法下载/解码正确的配置。收回声明后客户端会正确回退到软件解码。
+    *
+    * 同理收回 PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH10（I-4）：原厂特性表对
+    * hw_build_id 0x1F76 确实写了 h264_high10_support=1，但本驱动直接按
+    * bit_depth=10 提交时 **解码作业会挂死 DEC 管线**（实测一个 10 帧
+    * High10 样片触发 6 次 `job from 'av:h264:df0' to 'mwv207_dec0',
+    * timed out!`，irq state reg 0x00010102，靠 TDR 回收），输出面全 0。
+    * Hantro 系的 10bit H.264 需要 high10p 位流预转换，本驱动没有实现；
+    * 原厂闭源驱动自己也不声明 High10。收回声明后 ffmpeg 会回退软件解码，
+    * 不会再把 DEC 管线拖进超时循环。 */
    switch (profile) {
    case PIPE_VIDEO_PROFILE_MPEG4_AVC_BASELINE:
    case PIPE_VIDEO_PROFILE_MPEG4_AVC_CONSTRAINED_BASELINE:
    case PIPE_VIDEO_PROFILE_MPEG4_AVC_MAIN:
    case PIPE_VIDEO_PROFILE_MPEG4_AVC_EXTENDED:
    case PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH:
-   case PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH10:
    case PIPE_VIDEO_PROFILE_HEVC_MAIN:
    case PIPE_VIDEO_PROFILE_HEVC_MAIN_10:
    case PIPE_VIDEO_PROFILE_VP9_PROFILE0:
@@ -139,7 +147,9 @@ mwv207_is_video_format_supported(struct pipe_screen *pscreen,
     * 例外: VPP 配置传入 PIPE_VIDEO_PROFILE_UNKNOWN, 不做 profile 过滤。
     * I-3: 这里不再列 MPEG4_AVC_HIGH422/HIGH444 —— 硬件只有 4:0:0/4:2:0，
     * 声明了只会让 ffmpeg 按 pix_fmt 直接要 VA_RT_FORMAT_YUV422 并建出
-    * 无法正确解码的配置（详见 mwv207_profile_supported 上方注释）。 */
+    * 无法正确解码的配置（详见 mwv207_profile_supported 上方注释）。
+    * I-4: 同样不列 MPEG4_AVC_HIGH10 —— 10bit H.264 提交会挂死 DEC 管线
+    * （见上方注释），声明只会把 ffmpeg 拖进 TDR 超时循环。 */
    if (ret && profile != PIPE_VIDEO_PROFILE_UNKNOWN) {
       switch (profile) {
       case PIPE_VIDEO_PROFILE_MPEG4_AVC_BASELINE:
@@ -147,7 +157,6 @@ mwv207_is_video_format_supported(struct pipe_screen *pscreen,
       case PIPE_VIDEO_PROFILE_MPEG4_AVC_MAIN:
       case PIPE_VIDEO_PROFILE_MPEG4_AVC_EXTENDED:
       case PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH:
-      case PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH10:
       case PIPE_VIDEO_PROFILE_HEVC_MAIN:
       case PIPE_VIDEO_PROFILE_HEVC_MAIN_10:
       case PIPE_VIDEO_PROFILE_VP9_PROFILE0:
