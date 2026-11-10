@@ -348,6 +348,19 @@ mwv207_dec_vp9_set_regs() ERROR vp9: reference 0 (slot 0) has no decoded picture
 
 这既是 B2 的真实内容（要么支持跨尺寸参考，要么让"跳过"对上层可见），也是 I-6 候选：
 **解码失败必须让 surface 标记失败/让 fence 带错误，而不是静默出图**。
+
+跳过时到底发生了什么（代码层面）：三处"跳过"都是 `reg_buf->set_reg(JMDEC_DEC_E, 0);
+return;`（`mwv207_dec_vp9.c:1017-1050`），而 **PPU 的输出面配置在函数末尾
+（`mwv207_pp_set_regs()`，约 :1433）**，提前返回后根本没编程 —— 也就是硬件既不解码、
+也不写目标 surface；应用拿到的"画面"其实是那块 surface 的**旧内容/未初始化显存**。
+所以修复有两条路，且都还没做：
+
+1. **占位填充**：跳过时在 CPU 侧把目标 surface 填成可识别的中性色（例如 0x80 灰），
+   让用户看到"这里没解出来"而不是随机噪点。要注意 NV12/P010 与 64B 对齐/tiled 布局，
+   必须先确认 `target` 的实际内存布局再动。
+2. **失败上报**：让 `vaEndPicture`/`vaSyncSurface` 看到错误。`pipe_video_codec::end_frame`
+   返回 void，Mesa 的 va 前端也没有逐帧错误通道，需要我们自己加一个
+   "本帧跳过"标志并让 `frontends/va` 读到（会动共享前端代码，需谨慎）。
 复跑：`ffmpeg -hwaccel vaapi -hwaccel_output_format vaapi -i <向量> -vf hwdownload,format=nv12`
 与 `-c:v libvpx-vp9` 逐字节比对；向量在
 <https://storage.googleapis.com/downloads.webmproject.org/test_data/libvpx/>。
