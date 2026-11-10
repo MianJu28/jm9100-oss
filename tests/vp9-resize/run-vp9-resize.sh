@@ -7,7 +7,12 @@
 # 各自用 libvpx 软件解码与 mwv207 硬件解码，逐字节比对，并收集驱动打印的
 # "reference ... has no decoded picture; frame skipped" 行数。
 #
-# 这是诊断工具：它记录当前状态（后者"跳过但仍出图"就是 I-6），不判 PASS/FAIL。
+# I-6 修复后（2026-11-10），被跳过的帧不再静默返回脏图：驱动会通过
+# get_decoder_fence() 让 vaSyncSurface() 报错，ffmpeg 侧表现为
+# "Failed to sync surface ..." 并停止输出。所以本脚本的判据是：
+#   skipped=0 → 必须 IDENTICAL；
+#   skipped>0 → 硬件日志里必须出现 "Failed to sync surface"（否则就是又退回
+#                "跳过但仍出图" 的静默行为）。
 
 set -u
 
@@ -49,7 +54,16 @@ decode() { # <样本> <输出前缀>
 
     local skipped
     skipped=$(grep -c "has no decoded picture" "$prefix-hw.log" 2>/dev/null || true)
-    printf '%-52s sw=%-9s hw=%-9s %-9s 跳过帧=%s\n' \
+
+    if [ "${skipped:-0}" != 0 ]; then
+        if grep -q "Failed to sync surface" "$prefix-hw.log"; then
+            verdict=SKIPPED-AS-ERROR
+        else
+            verdict=SKIPPED-MUTE   # I-6 复发：跳过但应用毫无察觉
+        fi
+    fi
+
+    printf '%-52s sw=%-9s hw=%-9s %-16s 跳过帧=%s\n' \
            "$(basename "$sample")" "$sw" "$hw" "$verdict" "${skipped:-0}"
 
     if [ "$skipped" != 0 ]; then
@@ -79,5 +93,6 @@ for sample in vp90-2-14-resize-10frames-fp-tiles-1-2.webm \
 done
 
 echo
-echo "说明：IDENTICAL 表示该序列的跨尺寸/瓦片处理正确；DIFF 且带"跳过帧"表示驱动"
-echo "把帧判为参考缺失后仍按正常帧输出（B2 的拦截没有传到应用，见 §1.8）。"
+echo "说明：SKIPPED-AS-ERROR 表示该向量里的跨尺寸参考帧被驱动按设计拒绝，"
+echo "      并且失败已经传到应用（vaSyncSurface 报错）；SKIPPED-MUTE 则说明"
+echo "      I-6（跳过却静默返回旧内容）又回来了。"

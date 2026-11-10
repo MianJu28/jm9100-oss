@@ -54,6 +54,12 @@ struct mwv207_video_decoder {
 
    uint32_t cur_buffer;
 
+   /* I-6：解码器（codec 层）发现本帧无法解码时置位 frame_skipped，
+    * end_frame 据此不再提交作业、而是把一个"失败"告知上层；
+    * frame_failed 由 get_decoder_fence() 消费后清零。 */
+   bool frame_skipped;
+   bool frame_failed;
+
    struct mwv207_video_cs cs;
 
    union {

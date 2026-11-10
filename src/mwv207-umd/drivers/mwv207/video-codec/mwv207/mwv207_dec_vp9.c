@@ -946,14 +946,14 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
 
    if (!width || !height || !stream || !bs_buf) {
       MWV207_LOG(MWV207_LEVEL_ERROR, "vp9: invalid frame setup\n");
-      reg_buf->set_reg(reg_buf, JMDEC_DEC_E, 0);
+      reg_buf->set_reg(reg_buf, JMDEC_DEC_E, 0); decoder->frame_skipped = true;
       return;
    }
 
    st = vp9_get_state(decoder, width, height);
    if (!st) {
       MWV207_LOG(MWV207_LEVEL_ERROR, "vp9: scratch allocation failed\n");
-      reg_buf->set_reg(reg_buf, JMDEC_DEC_E, 0);
+      reg_buf->set_reg(reg_buf, JMDEC_DEC_E, 0); decoder->frame_skipped = true;
       return;
    }
    sh = &st->sh;
@@ -1001,7 +1001,7 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
    }
    if (ret) {
       MWV207_LOG(MWV207_LEVEL_ERROR, "vp9: header parse failed (%d)\n", ret);
-      reg_buf->set_reg(reg_buf, JMDEC_DEC_E, 0);
+      reg_buf->set_reg(reg_buf, JMDEC_DEC_E, 0); decoder->frame_skipped = true;
       return;
    }
 
@@ -1025,7 +1025,7 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
             MWV207_LOG(MWV207_LEVEL_ERROR,
                        "vp9: reference %u maps to slot %u, out of range;"
                        " frame skipped\n", k, slot);
-            reg_buf->set_reg(reg_buf, JMDEC_DEC_E, 0);
+            reg_buf->set_reg(reg_buf, JMDEC_DEC_E, 0); decoder->frame_skipped = true;
             return;
          }
          /* Decoding an inter frame whose reference has never been decoded
@@ -1035,7 +1035,7 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
             MWV207_LOG(MWV207_LEVEL_ERROR,
                        "vp9: reference %u (slot %u) has no decoded picture;"
                        " frame skipped\n", k, slot);
-            reg_buf->set_reg(reg_buf, JMDEC_DEC_E, 0);
+            reg_buf->set_reg(reg_buf, JMDEC_DEC_E, 0); decoder->frame_skipped = true;
             return;
          }
          if (st->ref_slot_w[slot] != sh->width ||
@@ -1045,7 +1045,7 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
                        " unsupported; frame skipped\n",
                        k, st->ref_slot_w[slot], st->ref_slot_h[slot],
                        sh->width, sh->height);
-            reg_buf->set_reg(reg_buf, JMDEC_DEC_E, 0);
+            reg_buf->set_reg(reg_buf, JMDEC_DEC_E, 0); decoder->frame_skipped = true;
             return;
          }
       }
@@ -1062,7 +1062,7 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
                     "4:2:0 is decoded%s; frame skipped\n",
                     sh->vp_profile, sh->bit_depth,
                     " (Profile 2 10bit 可用 MWV207_VP9_10BIT_DISABLE=1 关闭)");
-         reg_buf->set_reg(reg_buf, JMDEC_DEC_E, 0);
+         reg_buf->set_reg(reg_buf, JMDEC_DEC_E, 0); decoder->frame_skipped = true;
          return;
       }
       dec->dec_param.use_p010_output = 1;
@@ -1082,7 +1082,7 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
    if (tile_off >= stream_len) {
       MWV207_LOG(MWV207_LEVEL_ERROR, "vp9: bad partition sizes (%u/%u)\n",
                  sh->frame_tag_size, sh->offset_to_dct_parts);
-      reg_buf->set_reg(reg_buf, JMDEC_DEC_E, 0);
+      reg_buf->set_reg(reg_buf, JMDEC_DEC_E, 0); decoder->frame_skipped = true;
       return;
    }
    tile_len = stream_len - tile_off;
@@ -1110,7 +1110,7 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
       if (l2c > 6 || l2r > 2) {
          MWV207_LOG(MWV207_LEVEL_ERROR,
                     "vp9: invalid tile grid %u x %u\n", ncol, nrow);
-         reg_buf->set_reg(reg_buf, JMDEC_DEC_E, 0);
+         reg_buf->set_reg(reg_buf, JMDEC_DEC_E, 0); decoder->frame_skipped = true;
          return;
       }
 
@@ -1123,7 +1123,7 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
          if (off > stream_len) {
             MWV207_LOG(MWV207_LEVEL_ERROR,
                        "vp9: tile size table beyond the frame\n");
-            reg_buf->set_reg(reg_buf, JMDEC_DEC_E, 0);
+            reg_buf->set_reg(reg_buf, JMDEC_DEC_E, 0); decoder->frame_skipped = true;
             return;
          }
          /* VP9 interleaves each tile with a 4-byte big-endian size in front
@@ -1138,7 +1138,7 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
             if (sz == 0 || off + sz > stream_len) {
                MWV207_LOG(MWV207_LEVEL_ERROR,
                           "vp9: bad tile size %u (tile %u)\n", sz, i2);
-               reg_buf->set_reg(reg_buf, JMDEC_DEC_E, 0);
+               reg_buf->set_reg(reg_buf, JMDEC_DEC_E, 0); decoder->frame_skipped = true;
                return;
             }
             st->tile_off[i2] = off;
@@ -1211,7 +1211,7 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
                                           buff_size, PIPE_USAGE_STAGING);
       if (!buf->res) {
          MWV207_LOG(MWV207_LEVEL_ERROR, "vp9: output buffer allocation failed\n");
-         reg_buf->set_reg(reg_buf, JMDEC_DEC_E, 0);
+         reg_buf->set_reg(reg_buf, JMDEC_DEC_E, 0); decoder->frame_skipped = true;
          return;
       }
       /* A show_existing_frame packet carries no coded picture: it asks for
@@ -1235,7 +1235,7 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
                        "vp9: show_existing_frame slot %u unavailable\n",
                        slot);
          }
-         reg_buf->set_reg(reg_buf, JMDEC_DEC_E, 0);
+         reg_buf->set_reg(reg_buf, JMDEC_DEC_E, 0); decoder->frame_skipped = true;
          st->pending = NULL;
          return;
       }

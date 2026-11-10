@@ -597,6 +597,60 @@ get_vp9_msg(struct mwv207_video_decoder *dec,
 }
 
 /**
+ * 把"本帧解码失败"告知上层（I-6）。
+ *
+ * Mesa 的 va 前端只有在 *picture->fence 非空时才会调 get_decoder_fence()，
+ * 而 vaSyncSurface() 又只把该函数的返回值当作成功/超时来翻译（返回 0 →
+ * VA_STATUS_ERROR_TIMEDOUT）。所以这里给一个"永远就绪"的桩 fence
+ * （fd = -1，见 mwv207_drm_cs.c 的 fence_create/fence_wait），真正的失败
+ * 信号由 get_decoder_fence() 的返回值传出。
+ *
+ * 在此之前的行为是：跳过解码但照常返回，VAAPI 侧一无所知，应用拿到的是
+ * 目标 surface 里的旧内容（B2 的 resize_inter 向量、I-3/I-4 的拒绝路径
+ * 都是如此）。
+ */
+static void
+mwv207_video_decoder_mark_frame_failed(struct mwv207_video_decoder *dec,
+                                       struct pipe_picture_desc *picture)
+{
+   struct pipe_fence_handle *stub;
+
+   dec->frame_failed = true;
+
+   if (!picture || !picture->fence)
+      return;
+
+   stub = dec->ws->fence_create(dec->ws, -1);
+   if (!stub)
+      return;
+
+   dec->ws->fence_reference(picture->fence, stub);
+   dec->ws->fence_reference(&stub, NULL);
+}
+
+/**
+ * vaSyncSurface() 的实现入口：等待上一帧的 fence，并把"这一帧失败了"
+ * 通过返回值 0 传给 Mesa（→ VA_STATUS_ERROR_TIMEDOUT）。
+ */
+static int
+mwv207_video_decoder_get_decoder_fence(struct pipe_video_codec *decoder,
+                                       struct pipe_fence_handle *fence,
+                                       uint64_t timeout)
+{
+   struct mwv207_video_decoder *dec = mwv207_video_dec(decoder);
+
+   if (dec->frame_failed) {
+      dec->frame_failed = false;
+      return 0;
+   }
+
+   if (!fence)
+      return 1;
+
+   return dec->ws->fence_wait(dec->ws, fence, timeout);
+}
+
+/**
  * end decoding of the current frame
  */
 static void
@@ -631,6 +685,7 @@ mwv207_video_decoder_end_frame(struct pipe_video_codec *decoder,
          memset(dec->streams_len, 0, sizeof(dec->streams_len));
          dec->streams_num = 0;
          dec->decoder->reg_buf->bos_clear(dec->decoder->reg_buf);
+         mwv207_video_decoder_mark_frame_failed(dec, picture);
          return;
       }
       /* FIX(jm9100-oss): I-4 —— 高位深（High10）H.264 同样跳过：按当前寄存器
@@ -651,6 +706,7 @@ mwv207_video_decoder_end_frame(struct pipe_video_codec *decoder,
          memset(dec->streams_len, 0, sizeof(dec->streams_len));
          dec->streams_num = 0;
          dec->decoder->reg_buf->bos_clear(dec->decoder->reg_buf);
+         mwv207_video_decoder_mark_frame_failed(dec, picture);
          return;
       }
       get_h264_msg(dec, h264_pic);
@@ -677,11 +733,27 @@ mwv207_video_decoder_end_frame(struct pipe_video_codec *decoder,
       break;
 
    default:
-      
+      mwv207_video_decoder_mark_frame_failed(dec, picture);
       return;
    }
 
    mwv207_9200_video_dec_picture(dec, target);
+
+   /* I-6：codec 层在 set_regs() 里发现本帧不能解码（参数不支持、参考缺失、
+    * 尺寸不一致……）时只把 JMDEC_DEC_E 清掉并返回，PPU 输出面根本没编程。
+    * 以前这里照常提交，应用于是拿到目标 surface 的旧内容；现在改成不提交、
+    * 并把失败传给 vaSyncSurface()。 */
+   if (dec->frame_skipped) {
+      dec->frame_skipped = false;
+      mwv207_video_decoder_mark_frame_failed(dec, picture);
+      dec->streams_num = 0;
+      memset(dec->streams_len, 0, sizeof(dec->streams_len));
+      dec->decoder->reg_buf->bos_clear(dec->decoder->reg_buf);
+      mwv207_video_dec_destroy_buffer(dec->decoder);
+      ++dec->cur_buffer;
+      dec->cur_buffer %= MWV207_NUM_BUFFERS;
+      return;
+   }
 
    // struct pipe_h264_picture_desc *pic_param = &decoder->picture_desc.h264;
    // struct mwv207_h264_picture_desc *pic_param = &dec->picture_desc.h264;
@@ -757,6 +829,7 @@ mwv207_create_decoder(struct pipe_context *context,
    dec->base.decode_macroblock = mwv207_video_decoder_decode_macroblock;
    dec->base.decode_bitstream = mwv207_video_decoder_decode_bitstream;
    dec->base.end_frame = mwv207_video_decoder_end_frame;
+   dec->base.get_decoder_fence = mwv207_video_decoder_get_decoder_fence;
    dec->base.flush = mwv207_video_decoder_flush;
 
    dec->screen = context->screen;
