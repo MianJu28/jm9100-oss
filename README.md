@@ -17,7 +17,8 @@ r16 修复 Firefox 两处渲染缺陷 —— 字形/图标撕裂（上传暂存 
 GBM/Wayland 平台打通 → 健壮性批次修复 → dual-source blend 崩溃修复 →
 UMD 视频批次（HEVC tile 缓冲高度 I-1、word7 bit30 复用 I-2、收回 H.264
 High422/444 声明 I-3、收回 H.264 High10 声明 I-4 —— 10bit H.264 提交会挂死
-DEC 管线；载荷 `payload-42` r19 已安装）→ 一键验收脚本
+DEC 管线；载荷 `payload-42` r19 已安装）→ **VP9 Profile 2（10bit 4:2:0）硬解**（A5，
+与软件解码逐位一致，载荷 r20 待安装）→ 一键验收脚本
 `tests/verify-installed.sh`（版本/GL/引擎/VAAPI 能力/三类解码逐位一致/TDR/dmesg，
 `sudo ./tests/verify-installed.sh <srcversion>` 一条命令跑完）。
 
@@ -42,7 +43,7 @@ sudo ./switch-mwv207.sh kmd install         # KMD 切换为自建带修复版 (�
 | `switch-mwv207.sh` | 统一切换脚本 (根目录入口, 1200+ 行): `umd` 用户态层 + `kmd` 内核态层; 不带层名的 `status`/`check`/`verify` 同时跑两层。全局选项 `--root`/`--dry-run` 可写在任意位置。EGL ICD 采用**原地改写**（不删厂商 `10_mwv207.json`，保住 `/etc/cdi/jmgpu.yaml` 的 CDI 挂载源 → 玲珑应用可用） |
 | `src/mwv207-umd/` | 我们维护的用户态驱动源码（`drivers/mwv207` + `winsys/mwv207`，唯一可改处；上游树 `ref/oh-mesa/...` 里是指向它的符号链接） |
 | `src/kernel-6.6/` | 我们维护的内核态驱动（2026-11-03 并入本仓库管理；原独立 git 仓历史在 `ref/kernel-6.6-old-git`。社区 6.6 移植基线 + K1–K8/K10 修复 + N15 零重定位 submit BUG 修复） |
-| `payload-40/`…`payload-42/` | `payload-42` = **运行中的** `24.1.2-fullstack-r19`（含 I-1 HEVC tile 缓冲高度、I-2 word7 bit30 复用、I-3 收回 H.264 High422/444 声明、I-4 收回 H.264 High10 声明；2026-11-10 安装并复核）；`payload-41` = 上一份 `24.1.2-fullstack-r16`（回滚点）。每份 11 个实体文件含 glvnd ICD `libEGL_jm.so.0`，MANIFEST 校验。历史载荷已清理，只在 `/var/lib/mwv207-oss/switch-history` 留最近 4 个回滚快照 |
+| `payload-40/`…`payload-42/` | `payload-42` = **r20（已生成、待安装）**，在下面 r19 的基础上追加 A5：VP9 Profile 2（10bit 4:2:0）硬解（`82e7b02`）；运行中的仍是 r19（含 I-1 HEVC tile 缓冲高度、I-2 word7 bit30 复用、I-3 收回 H.264 High422/444 声明、I-4 收回 H.264 High10 声明；2026-11-10 安装并复核）；`payload-41` = 上一份 `24.1.2-fullstack-r16`（回滚点）。每份 11 个实体文件含 glvnd ICD `libEGL_jm.so.0`，MANIFEST 校验。历史载荷已清理，只在 `/var/lib/mwv207-oss/switch-history` 留最近 4 个回滚快照 |
 | `tools/` | `make-payload.sh`（从构建树组装载荷: 版本戳一致性自检/rpath/MANIFEST/与上游 md5 差异）；`build-umd.sh`（check/relink/build/sim）；`map-monitor.c`（X Map 死区缓解守护）；`enable-ssh-rescue.sh`（黑屏 SSH 救援通道） |
 | `docs/` | 驱动 API 与寄存器参考（19 文件 / 约 1.83 万行）+ `UNRESOLVED.md` 未修问题总账（含 2026-11-10 速览、已修索引与批次推进表） |
 | `ref/` | 参考材料（不入库大文件除外）：上游 mesa-22.3.7 / oh-mesa(24.1.2) / kernel-5.10 / linux-source-6.6 / 厂商 1.8.0 / 旧 KMD git 仓 / `reverse-source/`（闭源栈反编译: 符号表、反汇编、寄存器映射 JSON、六篇文档） |

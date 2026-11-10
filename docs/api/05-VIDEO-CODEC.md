@@ -151,7 +151,9 @@ mwv207_context_video_codec_init(&ctx->base);
 | ~~`PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH444`~~ | 48 | **已收回声明**，同上 |
 | `PIPE_VIDEO_PROFILE_HEVC_MAIN` | 49 | ✅ |
 | `PIPE_VIDEO_PROFILE_HEVC_MAIN_10` | 50 | ✅ |
-| 其它（含 HEVC_MAIN_12/444、VP9、AV1、VC1…） | 54 | ❌ `return false` |
+| `PIPE_VIDEO_PROFILE_VP9_PROFILE0` | — | ✅ 8bit 4:2:0（2026-11 完成，回归 18/18） |
+| `PIPE_VIDEO_PROFILE_VP9_PROFILE2` | — | ✅ **2026-11-10 起声明（A5，`82e7b02`）**：10bit 4:2:0，与软件解码逐位一致；`MWV207_VP9_10BIT_DISABLE=1` 可关。Profile 1/3（4:2:2/4:4:4）不声明 |
+| 其它（含 HEVC_MAIN_12/444、AV1、VC1…） | 54 | ❌ `return false` |
 
 返回值为（`:51`）：
 
@@ -651,6 +653,8 @@ VAProfile 都没有 → 本机物理上只有 4:0:0 与 4:2:0（详见 `UNRESOLV
 > High10 声明，并在 `end_frame` 对 `bit_depth_luma_minus8 > 0` 直接跳过，
 > 避免把 DEC 管线拖进超时循环。`JMDEC_BIT_DEPTH_OUT_MINUS8`（word 8）目前只有
 > VP9 在 `mwv207_dec_vp9.c:1265` 写 —— 若将来补 high10p，这里也要一并处理。
+> （VP9 的 10bit 输出已在 2026-11-10 走通：Profile 2 与 HEVC Main10 共用这条路径，
+> 见 `UNRESOLVED.md` §1.6。）
 
 ---
 

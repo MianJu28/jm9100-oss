@@ -362,7 +362,7 @@ K8/K9/K12 引自原报告，本树未复核（KMD 的 `irq.c`/`sched.c`/`ttm.c` 
 
 ## I. 视频编解码层的通读发现（来源：`05-VIDEO-CODEC.md`）
 
-### I.1 四个新缺陷（I-1/I-2 已修，I-3/I-4 已定案并收回声明）
+### I.1 四个新缺陷（I-1/I-2 已修，I-3/I-4 已定案并收回声明；A5 已补上 VP9 Profile 2）
 
 | # | 位置 | 问题 | 影响 |
 |---|---|---|---|
@@ -388,10 +388,13 @@ K8/K9/K12 引自原报告，本树未复核（KMD 的 `irq.c`/`sched.c`/`ttm.c` 
   与 C2/C3 同类，属**过度声明**（不会崩，但色度格式与声明不符）。
 - **编码完全未实现**：`base.encode_bitstream` 从未安装，全树 `encode` 相关只有
   入口排除 / 枚举 / 注释 3 处（见 `05-VIDEO-CODEC.md` §12）。
-- **VP9 的准确表述**：切片解析器与 bool 解码器**已编入库但零调用者**，
-  连 `.h` 都未导出原型；唯一缺口是 `mwv207_dec_vp9_set_regs()`
-  （`video-codec/mwv207/mwv207_video_dec.c:180-193` 无 VP9 分支）。
-  硬件侧 `mwv207_video_dec_vpu_features_list.h:35-36` 宣告 `vp9_support=1`。
+- **VP9 的准确表述**：切片解析器与 bool 解码器已编入库且有完整调用者（Profile0 8bit
+  自 2026-11-06 起逐位一致、回归 18/18）；~~"零调用者"~~ 是 2026-11 早期结论，已作废。
+  **2026-11-10 追加 Profile 2（10bit 4:2:0）**（`82e7b02`）：与软件解码逐位一致，
+  默认声明 `VAProfileVP9Profile2`；Profile 1/3（4:2:2/4:4:4）定案不可实现
+  （解码器没有色度采样格式选择字段，证据见 `UNRESOLVED.md` §1.5/§1.6）。
+  硬件侧 `mwv207_video_dec_vpu_features_list.h:35-36` 的 `vp9_support=1`、
+  `vp9_profile2_support=1` 与实测一致。
 
 ### I.4 寄存器映射（解码块）
 

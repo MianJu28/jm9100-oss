@@ -26,8 +26,8 @@ OpenCL/VA-API/VDPAU 全走我们的栈；自建 KMD 在跑（srcversion `D5EEF36
 | 机器 | Deepin 25 aarch64，内核 `6.6.155-arm64-desktop-hwe`（143 也装了 DKMS 包，但不是启动内核），GPU `[0731:9100]` PCI 07:00.0，HDMI-1 1920×1080@100Hz，无免密 sudo（用 `printf '666\n' \| sudo -S`） |
 | 仓库 | `/home/admin/jm9100-oss`（git，远端 `git@github.com:MianJu28/jm9100-oss.git`，已推送同步） |
 | 源码 | `src/mwv207-umd/`（UMD，唯一可改处；上游树 `ref/oh-mesa/.../src/gallium/{drivers,winsys}/mwv207` 是指向它的符号链接）、`src/kernel-6.6/`（KMD，已并入本仓库） |
-| 已装栈 | `/usr/local/lib/mwv207-oss/`（r19，DRI md5 `5408ee72…`、VA md5 `eec6bfe5…`、EGL_mwv207 md5 `d038036a…`），`/lib/modules/…/updates/dkms/mwv207.ko`（自建 KMD，运行中 `0EFB7F4…`） |
-| 载荷 | 运行中 `payload-42`（`24.1.2-fullstack-r19`，含 I-1/I-2/I-3/I-4；2026-11-10 13:25 安装、重启后复核 `vainfo` 只剩 ConstrainedBaseline/Main/High + HEVC Main/Main10 + VP9Profile0、H.264 High10 正确回退、HEVC 8bit 逐位一致）；`payload-41`（r16）为上一份可回滚点，历史快照在 `/var/lib/mwv207-oss/switch-history` |
+| 已装栈 | `/usr/local/lib/mwv207-oss/`（运行中 r19：DRI md5 `5408ee72…`、VA md5 `eec6bfe5…`、EGL_mwv207 md5 `d038036a…`；**r20 已生成待装**：DRI `39f38c6f5fd2f5ec64d0b90459f31e89`、VA `fa63148dfb01b97461897106a4591346`、vdpau `f10fcec15f26…`、OpenCL `a3fb2f47559b…`），`/lib/modules/…/updates/dkms/mwv207.ko`（自建 KMD，运行中 `0EFB7F4…`） |
+| 载荷 | 运行中 `payload-42`（`24.1.2-fullstack-r19`，含 I-1/I-2/I-3/I-4；2026-11-10 13:25 安装）；**`payload-42` 已重新组装为 `24.1.2-fullstack-r20`**（追加 A5：VP9 Profile 2 10bit 4:2:0），`umd check` 通过、`/tmp/p42` 预验证（glxinfo/query 4·4/720p60 10bit 逐位一致），**安装需用户在自己终端跑 `sudo ./switch-mwv207.sh umd install`（会重启 lightdm）**；`payload-41`（r16）为上一份可回滚点，历史快照在 `/var/lib/mwv207-oss/switch-history` |
 | 快速回归副本 | `/tmp/gd3/`（测试用；`/tmp` 是 7.8G tmpfs，重启即空，记得清理大文件）。实验构建流程：改 `src/mwv207-umd` → `ninja -C ref/oh-mesa/User_source_code/mesa-24.1.2/build-full src/gallium/targets/dri/libmwv207_dri.so` → `cp` 到 `/tmp/gd3/` → 用 `LIBGL_DRIVERS_PATH=/tmp/gd3 MESA_LOADER_DRIVER_OVERRIDE=mwv207` 测 |
 | 出包安装 | `./tools/make-payload.sh -v 24.1.2-fullstack-rN` → `printf '666\n' \| sudo -S ./switch-mwv207.sh umd install --force`（**install 调用常显示 interrupted，实装已完成——必须用 `status` + md5 比对确认，勿盲目重跑**） |
 | 构建陷阱 | 性能实验必须用 `build-full`（`build-glvnd` 是旧二进制）；`meson setup --wipe` 会把 glvnd 从 auto 变 enabled → 必须显式 `-Dglvnd=false -Dgles1/2=enabled` |
@@ -148,8 +148,10 @@ OpenCL/VA-API/VDPAU 全走我们的栈；自建 KMD 在跑（srcversion `D5EEF36
   上预跑通过（root 全跑 `PASS=21 FAIL=0 SKIP=1`）。
 
 ### 待办（按价值排序）
-1. **A5：VP9 10bit（Profile 2）/4:2:2** —— 当前 `vp_profile!=0 || bit_depth!=8` 直接拒绝
-   （Profile1/2 会让 ASIC 自旋挂死整机）。要先有安全试错路径（超时/看门狗）再放开。
+1. **A5 已完成（2026-11-10，`82e7b02`）**：VP9 Profile 2（10bit 4:2:0）与软件解码逐位
+   一致（64x64~1080p，含 inter 帧，零 TDR），默认声明；`MWV207_VP9_10BIT_DISABLE=1`
+   可关。4:2:2/4:4:4 定案不可实现（解码器无色度采样格式选择字段）。12bit 未验证。
+   这一步**只需装 r20 载荷**，不需要改内核。
 2. **B3：VP9 intra-only 非关键帧样片** —— 本机编码器产不出，需外部样片或自写构造器。
 3. **B2：真正的跨尺寸参考** —— 已有"缺参考/尺寸不同即拒绝"保护（`72f9523`）；要验证
    "参考自身几何 + hscale/vscale"路径，需要一个自写 VAAPI 客户端（ffmpeg 在分辨率变化时

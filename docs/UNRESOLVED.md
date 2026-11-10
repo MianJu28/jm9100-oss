@@ -1,8 +1,11 @@
 # 未修复缺陷与未实现功能 · 总清单
 
-> 汇总截至 **2026-11-10**（运行中的 UMD 已是 **r19**，`payload-42/VERSION = 24.1.2-fullstack-r19`，
-> 2026-11-10 13:25 安装、重启后复核 `vainfo` 只剩 ConstrainedBaseline/Main/High + HEVC
-> Main/Main10 + VP9Profile0，H.264 High10 流正确回退、HEVC 8bit 逐位一致；内核
+> 汇总截至 **2026-11-10 15:30**（运行中的 UMD 是 **r19**（`payload-42/VERSION =
+> 24.1.2-fullstack-r19`，2026-11-10 13:25 安装、重启后复核 `vainfo` 只剩
+> ConstrainedBaseline/Main/High + HEVC Main/Main10 + VP9Profile0，H.264 High10 流正确回退、
+> HEVC 8bit 逐位一致）；**r20 已生成、待安装** —— 含 A5 的 VP9 Profile 2（10bit 4:2:0），
+> 装上后 `vainfo` 会多一行 `VAProfileVP9Profile2`（见 §1.6，DRI md5
+> `39f38c6f5fd2f5ec64d0b90459f31e89`、VA md5 `fa63148dfb01b97461897106a4591346`）；内核
 > `6.6.155-arm64-desktop-hwe` 侧运行中的 `0EFB7F4433EA5311B08E88C`（N4/K11，2026-11-10
 > 14:36 重启后 `tests/verify-installed.sh` 全过 `PASS=22 FAIL=0 SKIP=1`）），
 > 对应外层仓库工作树（含 `src/mwv207-umd/` 分层）。
@@ -60,7 +63,7 @@ modinfo /lib/modules/…/updates/dkms/…    -> srcversion 0EFB7F4433EA5311B08E8
 
 | # | 领域 | 未解决项 | 影响 | 位置 |
 |---|---|---|---|---|
-| 1 | VAAPI/VP9 | **A5 10bit（Profile 2）与 4:2:2 未实现** | 只能解 Profile0 8bit；Profile1/2 被显式拒绝（放开会让 ASIC 自旋挂死整机） | `docs/HANDOVER-VP9.md` §10 A5 |
+| 1 | VAAPI/VP9 | **A5：Profile 2（10bit 4:2:0）已支持；4:2:2/4:4:4 定案不可实现** | 2026-11-10 `82e7b02`：Profile 2 与软件解码**逐位一致**（64x64/640x360/720p60/1080p30，含 inter 帧，零 TDR），默认声明，`MWV207_VP9_10BIT_DISABLE=1` 可关。Profile 1/3 与 H.264 422/444 同理不可实现：解码器没有色度采样格式选择字段（§1.5）。**残余**：12bit VP9 未验证（代码只放行 10bit） | 本文 §1.6 |
 | 2 | VAAPI/VP9 | **B3 intra-only 非关键帧样片缺** | 该分支未上机验证；本机编码器产不出 | `docs/HANDOVER-VP9.md` §10 B3 |
 | 3 | VAAPI/VP9 | **B2 真正的跨尺寸参考未验证** | 已有"缺参考/尺寸不同即拒绝"的保护（`72f9523`），缩放路径未跑通；需自写 VAAPI 客户端 | `docs/HANDOVER-VP9.md` §10 B2 |
 | 4 | KMD | **N14 已修，重启后已验证生效** | 修复见 §2.1（`22145e9`）；运行中 srcversion 已是 `039F972EFE3279A155EE225`，GL/query/VP9 回归全过；reset 通路已用 `tests/n14-reset/` 探针实测（6 轮 TDR、force_complete 6/6） | 本文 §2.1 |
@@ -186,6 +189,43 @@ ffmpeg `-hwaccel vaapi` 能建 device，但 `hwdownload` 报 `Function not imple
 
 > H.264 的另一个色度/位深相关结论见 §1.2 的 **I-4**：High10（10bit）提交会挂死 DEC 管线，
 > 已同日定案并收回声明（`4ecca0d`），缺 high10p 位流预转换。
+
+### 1.6 A5：VP9 Profile 2（10bit 4:2:0）已支持；4:2:2 / 4:4:4 定案不可实现
+
+**结论（2026-11-10，`82e7b02`）**：VP9 **Profile 2（10bit 4:2:0）已实现并通过逐位验证**；
+Profile 1/3（4:2:2 / 4:4:4）与 H.264 422/444 同理**不可实现**——解码器没有色度采样格式选择
+字段（证据链见 §1.5）。此前"Profile 2 会让 ASIC 自旋"的判断已被实测推翻。
+
+**为什么 10bit 只差一个 gate**（不是缺一整条通路）：
+
+| 环节 | 现状 | 位置 |
+|---|---|---|
+| 位深寄存器 | `JMDEC_BIT_DEPTH_OUT_MINUS8` / `_Y_MINUS8` / `_C_MINUS8` 早已按 `sh->bit_depth` 编程 | `mwv207_dec_vp9.c:1265-1267` |
+| 解码参数 | `dec->dec_param.bit_depth = sh->bit_depth;` 在 set_regs 早期、PP 之前 | `mwv207_dec_vp9.c:1170` |
+| 输出格式 | PP 按 `pixel_width > 8` 出 `PP_OUT_FMT_YUV420_P010`，与 HEVC Main10 同一段代码 | `mwv207_dec_ppu.c`（`out_p010` / `tiled_e && pixel_width > 8`） |
+| stride | `out_w_y = NEXT_MULTIPLE(4 * … * bit_depth, …)` 与 HEVC 的 `4*out_w*pixel_width` 同构，10bit 无需改 | `mwv207_dec_vp9.c:1230 附近` |
+| 缺的 | 入口处 `profile != 0 \|\| bit_depth != 8` 一刀切拒绝；profile 查询/格式支持不声明 Profile 2 | `mwv207_dec_vp9.c`、`mwv207_video_codec.c` |
+
+**改动**：放行 `profile == 2 && bit_depth == 10`（Profile 1/3 继续拒绝）；在
+`mwv207_profile_supported()` 与 `mwv207_is_video_format_supported()` 同时声明
+`PIPE_VIDEO_PROFILE_VP9_PROFILE2`（VAAPI 要 P010 面 + 该 profile 的组合才肯建配置）；
+新增 `mwv207_vp9_10bit_enabled()`（默认开，`MWV207_VP9_10BIT_DISABLE=1` 可整体关）。
+
+**逐位验证**（dev 驱动，`LIBVA_DRIVERS_PATH=/tmp/gd3`，ffmpeg `-hwaccel vaapi
+-hwaccel_output_format vaapi` + `hwdownload,format=p010`，与软件解码 `cmp`）：
+
+| 样片 | 帧数 | 结果 | dmesg |
+|---|---|---|---|
+| 64x64（x265 同类小图） | 3 | IDENTICAL | 零超时 |
+| 640x360（含 inter，g=10） | 30 | IDENTICAL | 零超时 |
+| 1280x720（含 inter，g=30） | 60 | IDENTICAL | 零超时 |
+| 1920x1080（g=15） | 30 | IDENTICAL | 零超时 |
+
+回归：`tools/vp9-regression.sh` 18/18；H.264 High 420、HEVC 8bit/Main10 逐位一致；
+`tests/verify-installed.sh`（dev 驱动）PASS；载荷 r20 的 `libmwv207_dri.so`/`_drv_video.so`
+直接参与上述比对（`/tmp/p42` 复核 glxinfo + query 4/4 + 10bit 逐位一致）。
+
+**残余缺口**：12bit VP9（Profile 2 语法允许）未验证，代码只放行 10bit；Profile 1/3 永久拒绝。
 
 ---
 
@@ -392,7 +432,7 @@ H.264 High 420 / HEVC 8bit / HEVC Main10 **逐位一致**（这三类每次搬�
 
 | # | 目标 | 可行性 | 状态 / 缺口 |
 |---|---|---|---|
-| **D1** | **VP9 解码** | 已落地 Profile0，余项见 A5 | **Profile0 8bit 已实现并上机验证**（`mwv207_dec_vp9.c` 的切片/bool 解析 + `mwv207_video_dec.c` 的 `mwv207_dec_vp9_set_regs()` 分支；`tools/vp9-regression.sh` 18/18 逐位一致）。**剩下的是 §0.1 的 A5**：Profile1/2（10bit）与 4:2:2 被显式拒绝，放开会让 ASIC 自旋挂死整机，需先有安全试错/看门狗路径。芯片档位 `0x00001F76` 的 `vp9_support=1`、`vp9_profile2_support=1` 说明硬件能力在，缺的是驱动侧 10bit 通路 |
+| **D1** | **VP9 解码** | **已完成：Profile0 + Profile2 均落地** | **Profile0 8bit** 已实现并上机验证（`mwv207_dec_vp9.c` 的切片/bool 解析 + `mwv207_video_dec.c` 的 `mwv207_dec_vp9_set_regs()` 分支；`tools/vp9-regression.sh` 18/18 逐位一致）。**Profile2（10bit 4:2:0）** 2026-11-10 完成（`82e7b02`，见 §1.6）：4 组样片与软件解码逐位一致、零 TDR。Profile1/3（4:2:2/4:4:4）定案不可实现——解码器没有色度采样格式选择字段 |
 | ~~D2~~ | ~~**H264 4:2:2 / 4:4:4**~~ | **已定案（2026-11-10）：不可实现** | 原 I-3 二选一已终结 —— 硬件只有 4:0:0/4:2:0，已收回声明（`a5a938b`），见 §1.5；`chroma_format_idc` 硬置保持 1，另加 `chroma_format_idc>1` 即跳过解码的防线 |
 | **D3** | **编码（H264/HEVC）** | 大（从零） | UMD 侧 `base.encode_bitstream` **从未安装**（全树 0 处）；KMD 有 `mwv207_pipe_enc.c`。硬件侧有 HEVC 编码证据（闭源串含 `jmenc/source/hevc/hevcencapi.c`） |
 | **D4** | 4 个未实现的扩展 opcode：`WAIT_GROUP_EVENT`(0x11) / `TD_OP`(0x12) / `TEX_INVALIDATE`(0x14) / `PRE_NORM`(0x15) | 小-中 | 厂商枚举齐全（`MWV207REG_SH_EXTENDED_OPCODE`），需逐个确定语义 |
@@ -458,6 +498,7 @@ H.264 High 420 / HEVC 8bit / HEVC Main10 **逐位一致**（这三类每次搬�
 | 2026-11-10 | UMD：HEVC `tile_buffer_size` 用位深当帧高（I-1），tile 缓冲按错误高度分配 | `385ed81`（`src/mwv207-umd`） |
 | 2026-11-10 | UMD：收回 H.264 High422/High444 声明（不可实现，见 §1.5）＋ word7 bit30 复用导致的单色标志被清零（I-2/I-3） | `a5a938b`（`src/mwv207-umd`） |
 | 2026-11-10 | UMD：收回 H.264 High10 声明（I-4：10bit 提交会挂死 DEC 管线，缺 high10p 位流预转换）＋ `end_frame` 拒绝高位深码流 | `4ecca0d`（`src/mwv207-umd`）；载荷 `payload-42`（r19）已重新生成并通过 `umd check`/预验证，**安装需 `sudo ./switch-mwv207.sh umd install`（会重启 lightdm）** |
+| 2026-11-10 | UMD：VP9 Profile 2（10bit 4:2:0）硬解落地（A5）——放行 `profile==2 && bit_depth==10`、声明 `VP9Profile2` + P010 面、`mwv207_vp9_10bit_enabled()` 开关；4 组样片（64x64/640x360/720p60/1080p30，含 inter 帧）与软件解码逐位一致、零 TDR，VP9 回归 18/18 | `82e7b02`（`src/mwv207-umd`）；载荷 `payload-42` 升为 r20（DRI `39f38c6f…`、VA `fa63148d…`） |
 | 2026-11-10 | Firefox 标签栏"微缩 chrome"：buffer 写入前等待 GPU（`mwv207_resource.c`） | `6ec1e17`（`src/mwv207-umd`） |
 | 2026-11-10 | mesa：`loader_dri3_query_buffer_age()` 恒 0（我们不做交换后缓冲保留） | `248659c`（`ref/oh-mesa`，本地） |
 | 2026-11-07 | Firefox 字形/图标撕裂：上传暂存 BO 延迟释放（`retired_staging` 环） | `f8f693a`（`src/mwv207-umd`） |
