@@ -5,8 +5,10 @@
 > 内核 `6.6.155-arm64-desktop-hwe` 侧运行中的是 `8DFC520FB8FCDECFBC911AA`（20 处 `BUG_ON`
 > 收敛 + N16 + N4 异步 DMA/K11 + N17 引用计数，2026-11-10 17:55 重启后
 > `tests/verify-installed.sh 8DFC520FB8FCDECFBC911AA --bad-submit` 全过
-> `PASS=25 FAIL=0 SKIP=1`；N17 的引用计数对账 2052/2052），仓库 HEAD 已含 I-5 修复
-> `8f6e964`），
+> `PASS=25 FAIL=0 SKIP=1`；N17 的引用计数对账 2052/2052）；`payload-42` 已重打为
+> **r23**（`24.1.2-fullstack-r23`，含 I-5 修复 `8f6e964`，DRI `8f52e997…`、
+> VA `e2ddc5bb…`），`umd check` 通过、预验证 glxinfo 与 query 4/4 正常，**待用户在
+> 自己终端安装**），
 > 对应外层仓库工作树（含 `src/mwv207-umd/` 分层）。
 > 取代散落在 `api/06-KNOWN-ISSUES.md`、`api/11-FIX-FEASIBILITY.md` 里的分散记录：
 > 本文件是**唯一索引**，那两个文件保留历史细节与推导过程。
