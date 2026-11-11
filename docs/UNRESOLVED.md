@@ -597,6 +597,17 @@ inter），包里多了一个由拼装脚本写坏的包，导致逐帧对位整
 （与 libvpx 逐字节一致），是我把"本机 30 帧流"的错误结论套到了寄存器实验上。
 教训：拼装测试流之后必须核对帧数与包数，再用一个已知正确的样本做正对照。
 
+**两条接口事实（2026-11-11，用于解释"为什么自造样本难复现"）**：
+① Profile 0 的 intra-only 帧**不携带 color config**，libvpx 按规范回落成
+`CS_BT_601` + studio range + 4:2:0 + 8bit（`/tmp/vp9dec.c:2722-2731` 有原文注释）；
+本机 `libvpx-vp9` 编出的关键帧默认写 `color_space=0`（未指定），于是"关键帧 +
+intra-only 混用"时 libvpx 会报 `Referenced frame has incompatible color format`。
+用 `ffmpeg … -colorspace bt470bg -color_range tv` 重编后关键帧写 `cs=1`，两边才
+一致（此时"首帧 intra-only + 29 个 inter"的自造流仍是 **29/29 逐帧一致**）。
+② 官方 sub3 实际用到了 **slot 0/1/2 三个参考槽**（驱动日志：`reference 1 (slot 1)
+has no decoded picture; frame skipped`），所以不能把官方向量简化成 `[sub0, sub3]`
+—— libvpx 也拒绝这种缺槽的流。要复现必须保留 `sub0/1/2` 三个 intra-only 帧。
+
 补充（同一轮的否定实验）：给解析后的 `sh->frame_context_idx` 强行赋值
 （0/1/2/3）再解同一个流，va3 的最好匹配分别变成 40.3/83.9/83.9/83.9，都比
 自然运行的 15.4 差 —— 但这条实验本身不成立：`frame_context_idx` 在解析之后
