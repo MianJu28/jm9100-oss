@@ -1,14 +1,13 @@
 # 未修复缺陷与未实现功能 · 总清单
 
-> 汇总截至 **2026-11-11 11:40**（运行中的 UMD 是 **r22**（`payload-42/VERSION =
-> 24.1.2-fullstack-r22`，2026-11-11 09:09 安装，含 N18；r22 之前的 `payload-42` 是 r21；
+> 汇总截至 **2026-11-11 12:10**（运行中的 UMD 是 **r23**（`payload-42/VERSION =
+> 24.1.2-fullstack-r23`，2026-11-11 12:07 安装，含 I-5；DRI `8f52e997…`、
+> VA `e2ddc5bb…`）；r23 之前的 `payload-42` 依次是 r22（含 N18）、r21；
 > 内核 `6.6.155-arm64-desktop-hwe` 侧运行中的是 `8DFC520FB8FCDECFBC911AA`（20 处 `BUG_ON`
 > 收敛 + N16 + N4 异步 DMA/K11 + N17 引用计数，2026-11-10 17:55 重启后
 > `tests/verify-installed.sh 8DFC520FB8FCDECFBC911AA --bad-submit` 全过
-> `PASS=25 FAIL=0 SKIP=1`；N17 的引用计数对账 2052/2052）；`payload-42` 已重打为
-> **r23**（`24.1.2-fullstack-r23`，含 I-5 修复 `8f6e964`，DRI `8f52e997…`、
-> VA `e2ddc5bb…`），`umd check` 通过、预验证 glxinfo 与 query 4/4 正常，**待用户在
-> 自己终端安装**），
+> `PASS=25 FAIL=0 SKIP=1`；N17 的引用计数对账 2052/2052；r23 安装后同一脚本再次
+> `PASS=25 FAIL=0 SKIP=1`），
 > 对应外层仓库工作树（含 `src/mwv207-umd/` 分层）。
 > 取代散落在 `api/06-KNOWN-ISSUES.md`、`api/11-FIX-FEASIBILITY.md` 里的分散记录：
 > 本文件是**唯一索引**，那两个文件保留历史细节与推导过程。
@@ -81,7 +80,7 @@ modinfo /lib/modules/…/updates/dkms/…    -> srcversion 0EFB7F4433EA5311B08E8
 | 4e | KMD | **20 处 `BUG_ON` 已收敛为可恢复错误，重启后已验证生效** | `53b3229`：用户提交路径仍可能触发的那几处（`mem_type` 非 VRAM/TT、`reloc->idx` 越界、DMA `cmd_size` 不符、3D 事件槽耗尽）现在返回 `-EINVAL`/`-EIO`/`-EBUSY`；寄存器/ring 描述符类改 `WARN_ON_ONCE` + 跳过，由 TDR 回收 | 本文 §2.4 |
 | 4f | KMD | **N16 已修，重启后已验证生效**（新发现）：畸形 submit（`nr_cmd_dat>0` 而 `cmd_dats==NULL`）会让 `mwv207_job_fini()` 空指针解引用 → 内核 oops，任何本地进程可触发 | `c01af40`：清理条件加 `&& mjob->cmd_dats`；配套 `tests/bad-submit/` 9 个用例（默认不跑，老模块会 oops）。两内核已装 `5A5B4018…` | 本文 §2.5 |
 | 4g | KMD | **N17 已修，重启后已验证生效**（新发现）：N4 的异步 DMA 在 `queue_work()` 之后才 `dma_fence_get()`，worker 抢跑时对已释放 fence 做 refcount_inc（`refcount_t: addition on 0; use-after-free`，PC 在 `mwv207_pipe_dma_submit`），等待者可能永远收不到 signal —— 与 16:30 整屏卡死（Xorg 收 SIGTERM 不退、只能 SIGKILL）症状一致 | `1fc9b21`：给调度器的引用在 `queue_work` 之前取；运行中已是 `8DFC520FB8FCDECFBC911AA`，17:55 重启后 `verify-installed.sh --bad-submit` PASS=25，kprobe 压测 submit/complete 2052·2052 平衡、refcount 告警 0、X 最大延迟 5 ms | 本文 §2.6 |
-| 4h | UMD 视频 | **I-5 已修（`8f6e964`，待随载荷发布）** | 三处根因：`vp9_setup_past_independence()` 漏 intra-only、自适应基准该用默认表、`show_existing` 污染 `saved_ctx`；官方向量 7 个真实解码帧与 libvpx 逐字节一致。N18（`6225e97`）为同批复用缺陷 | 本文 §1.7 |
+| 4h | UMD 视频 | **I-5 已修并随 r23 部署验证**（`8f6e964`） | 三处根因：`vp9_setup_past_independence()` 漏 intra-only、自适应基准该用默认表、`show_existing` 污染 `saved_ctx`；安装态（r23）用 ffmpeg 完整路径解官方 intra-only 向量，**7 帧与 libvpx 全部逐字节一致**。N18（`6225e97`）为同批复用缺陷 | 本文 §1.7 |
 | 4i | UMD 视频 | **I-6 已修（`bb5cd9e`）**：跳过帧（参考缺失/尺寸不符/参数不支持/分配失败）以前只清 `JMDEC_DEC_E` 就返回，PPU 输出面没编程、`vaSyncSurface()` 照样成功，应用拿到旧内容 | 现在 `end_frame()` 置 `frame_failed` + 桩 fence，`get_decoder_fence()` 返回 0 → `vaSyncSurface()` 报错；回归（VP9 P2 10bit / show_existing / res14 / HEVC8 / H264 8）全部逐位一致 | 本文 §1.8 |
 | 5 | KMD | 只剩 N10（决定只文档化） | K9-① 已核实为与厂商一致（非缺陷）；N10 改为只记录 | 本文 §2.3 |
 | 6 | 切换脚本 | **vendor 态端到端未实跑** | `stack vendor` 会重启，需人工确认；热切换已证不可行（refcnt 恒 2） | `switch-mwv207.sh` / §5 |
@@ -759,6 +758,17 @@ ffmpeg 不输出隐藏帧，逐帧索引不能直接对位（要按 show_existin
 | 本机 352×288 20 帧、每 5 帧一个关键帧、`-frame-parallel 0` | 12 帧 DIFF（第 2 个 GOP 起） | **20/20 EXACT** |
 | `tools/vp9-regression.sh` | 18/18 | 18/18 |
 | H.264 High 420 / HEVC 8bit / Main10 / VP9 Profile 2 10bit / query | — | 全 IDENTICAL / 4·0 |
+
+**随 r23 装到安装栈后的复核（2026-11-11 12:08）**：`switch-mwv207.sh umd status` 显示
+活动栈 `oss-24.1.2-fullstack-r23`（DRI `8f52e9972ffb78f9949f0a92c07b6c61`、VA
+`e2ddc5bb769a7bd7d54d73e78a90ae69`）；`sudo ./tests/verify-installed.sh
+8DFC520FB8FCDECFBC911AA --bad-submit` → **PASS=25 FAIL=0 SKIP=1**（含 N14 探针、畸形
+提交、H.264/HEVC/VP9 P2 解码逐位一致）；**官方 intra-only 样本走完整 ffmpeg 路径**
+（`ffmpeg -hwaccel vaapi -hwaccel_output_format vaapi -i vp90-2-16-intra-only.webm -vf
+hwdownload,format=nv12 -pix_fmt yuv420p`）与 `-c:v libvpx-vp9` 逐帧比对：
+**7 帧全部 IDENTICAL（0 差异帧）**；`tools/vp9-regression.sh` 18/18；
+`tests/vp9-resize/run-vp9-resize.sh --local /tmp/vp9b2` → `vp90-2-14 … IDENTICAL 跳过帧=0`、
+`vp90-2-21 … SKIPPED-AS-ERROR 跳过帧=9`。
 
 **仍然存在的独立限制**：官方流里 3 个 `show_existing` 重放帧（`va5/6/7`）仍是黑图，
 原因见上文"整条解码+PPU 由 `JMDEC_DEC_E` 启动"，与解码正确性无关；`tests/vp9-intraonly/`

@@ -27,7 +27,7 @@ OpenCL/VA-API/VDPAU 全走我们的栈；自建 KMD 在跑（srcversion `D5EEF36
 | 仓库 | `/home/admin/jm9100-oss`（git，远端 `git@github.com:MianJu28/jm9100-oss.git`，已推送同步） |
 | 源码 | `src/mwv207-umd/`（UMD，唯一可改处；上游树 `ref/oh-mesa/.../src/gallium/{drivers,winsys}/mwv207` 是指向它的符号链接）、`src/kernel-6.6/`（KMD，已并入本仓库） |
 | 已装栈 | `/usr/local/lib/mwv207-oss/`（运行中 **r20**：DRI md5 `39f38c6f5fd2f5ec64d0b90459f31e89`、VA md5 `fa63148dfb01b97461897106a4591346`、EGL_mwv207 `d038036a…`、vdpau `f10fcec15f26…`、OpenCL `a3fb2f47559b…`；`payload-41`=r16/`payload-42`=r20 可回滚），`/lib/modules/…/updates/dkms/mwv207.ko`（自建 KMD，运行中 `8DFC520FB8FCDECFBC911AA`；2026-11-10 17:55 重启后已验证） |
-| 载荷 | 运行中 `payload-42`（`24.1.2-fullstack-r22`，含 I-1…I-6 + N18；2026-11-11 09:09 安装，DRI `2b62dd7a752e73c8c474efd9ece696c8`、VA `7424586ec2b6edb53c82d283d24632a6`）；**`payload-42` 已重打为 `24.1.2-fullstack-r23`（含 I-5 修复 `8f6e964`，DRI `8f52e9972ffb78f9949f0a92c07b6c61`、VA `e2ddc5bb769a7bd7d54d73e78a90ae69`），`umd check` 通过、预验证 glxinfo 与 query 4/4 正常，待安装**；**安装需用户在自己终端跑 `sudo ./switch-mwv207.sh umd install`（会重启 lightdm）**；`payload-41`（r16）为上一份可回滚点，历史快照在 `/var/lib/mwv207-oss/switch-history` |
+| 载荷 | 运行中 `payload-42`（`24.1.2-fullstack-r23`，含 I-1…I-6 + N18 + I-5；2026-11-11 12:07 安装，DRI `8f52e9972ffb78f9949f0a92c07b6c61`、VA `e2ddc5bb769a7bd7d54d73e78a90ae69`）；安装后 `tests/verify-installed.sh … --bad-submit` → `PASS=25 FAIL=0 SKIP=1`，官方 VP9 intra-only 向量 7 帧与 libvpx 逐字节一致；`payload-41`（r16）为上一份可回滚点，前一版是 r22（DRI `2b62dd7a…`），历史快照在 `/var/lib/mwv207-oss/switch-history` |
 | 快速回归副本 | `/tmp/gd3/`（测试用；`/tmp` 是 7.8G tmpfs，重启即空，记得清理大文件）。实验构建流程：改 `src/mwv207-umd` → `ninja -C ref/oh-mesa/User_source_code/mesa-24.1.2/build-full src/gallium/targets/dri/libmwv207_dri.so` → `cp` 到 `/tmp/gd3/` → 用 `LIBGL_DRIVERS_PATH=/tmp/gd3 MESA_LOADER_DRIVER_OVERRIDE=mwv207` 测 |
 | 出包安装 | `./tools/make-payload.sh -v 24.1.2-fullstack-rN` → `printf '666\n' \| sudo -S ./switch-mwv207.sh umd install --force`（**install 调用常显示 interrupted，实装已完成——必须用 `status` + md5 比对确认，勿盲目重跑**） |
 | 构建陷阱 | 性能实验必须用 `build-full`（`build-glvnd` 是旧二进制）；`meson setup --wipe` 会把 glvnd 从 auto 变 enabled → 必须显式 `-Dglvnd=false -Dgles1/2=enabled` |
@@ -177,6 +177,10 @@ OpenCL/VA-API/VDPAU 全走我们的栈；自建 KMD 在跑（srcversion `D5EEF36
   `-frame-parallel 0` 样本 20/20 一致；只剩 3 个 `show_existing` 重放帧仍是黑图
   （独立限制：整条解码+PPU 由 `JMDEC_DEC_E` 启动，重放不启动 PPU）。
   定位工具：`tests/vaapi-client/vadec.c`（直连 libva）+ `tests/vp9-intraonly/`。
+  2026-11-11 12:07 随 **r23** 装进安装栈并复核：完整 ffmpeg 路径
+  （`-hwaccel vaapi -hwaccel_output_format vaapi … -vf hwdownload,format=nv12`）解官方
+  intra-only 向量 7 帧全部与 `-c:v libvpx-vp9` **逐字节一致（0 差异帧）**，
+  `tests/verify-installed.sh` PASS=25、`tools/vp9-regression.sh` 18/18。
 - **一键验收脚本（2026-11-10，`tests/verify-installed.sh`）**：把 KMD 版本/来源、
   glxinfo/query/引擎计数、VAAPI profile 归位、H.264-High/HEVC 8/10bit 逐位一致、
   High10 回退与 DEC 零超时、TDR 探针、dmesg 新增告警（带基线，只查本次运行新增行）
