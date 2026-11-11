@@ -608,6 +608,13 @@ intra-only 混用"时 libvpx 会报 `Referenced frame has incompatible color for
 has no decoded picture; frame skipped`），所以不能把官方向量简化成 `[sub0, sub3]`
 —— libvpx 也拒绝这种缺槽的流。要复现必须保留 `sub0/1/2` 三个 intra-only 帧。
 
+**对上面这条的否定（同日，同帧正对照）**：在**本机自造、解码完全正确**的流
+（`own_cs.ivf`，30/30 与 libvpx 一致）上做同样的 dump，参考槽内容与显示帧也
+相差 **mean 67.4** ⇒ **"槽内容 ≠ 显示帧"是 ASIC 的正常布局（槽里是解码单元的
+内部布局，显示帧是 PPU 转换后的结果），不是缺陷**。官方流那次量到 23.6 只是
+内容不同造成的幅度差异，不能当证据。此前的"参考槽布局可疑"因此降级为"已否定"，
+I-5 仍未定位。
+
 **新疑点：参考槽拷的是"PP 之前的原始缓冲"（2026-11-11）**。给
 `vp9_refresh_slots()` 加临时 dump（已撤回）后发现：同一次运行里，官方 sub0 写进
 参考槽的字节与它**显示出来**的画面（`va0`，与 libvpx 逐字节相同）差 mean 23.6；
