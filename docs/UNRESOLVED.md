@@ -608,6 +608,15 @@ intra-only 混用"时 libvpx 会报 `Referenced frame has incompatible color for
 has no decoded picture; frame skipped`），所以不能把官方向量简化成 `[sub0, sub3]`
 —— libvpx 也拒绝这种缺槽的流。要复现必须保留 `sub0/1/2` 三个 intra-only 帧。
 
+**探针精度问题（2026-11-11）**：`tests/vp9-intraonly/vp9-parse-probe` 调
+`mwv207_vp9_parse_frame()` 时把 `saved_ctx` 传 **NULL**，而驱动实际传的是
+`st->saved_ctx`（已自适应的上下文数组）。两者会走不同的参考槽解析路径：
+探针对 sub3 打印 `active_ref_idx=0,0,0`（三个参考都当 slot 0），但驱动在只解过
+sub0 的流上却报 `reference 1 (slot 1) has no decoded picture` ⇒ sub3 的第二个
+参考实际落在 slot 1。结论：**之前用探针得出的"三路同指 slot 0"不可信**，
+它把"官方 sub3 只用一张参考图"这个判断带偏了；后续要用探针给出的结论，必须先
+让它按真实 `saved_ctx` 解析（或在驱动侧把解析结果打印出来）。
+
 补充（同一轮的否定实验）：给解析后的 `sh->frame_context_idx` 强行赋值
 （0/1/2/3）再解同一个流，va3 的最好匹配分别变成 40.3/83.9/83.9/83.9，都比
 自然运行的 15.4 差 —— 但这条实验本身不成立：`frame_context_idx` 在解析之后
