@@ -608,6 +608,15 @@ intra-only 混用"时 libvpx 会报 `Referenced frame has incompatible color for
 has no decoded picture; frame skipped`），所以不能把官方向量简化成 `[sub0, sub3]`
 —— libvpx 也拒绝这种缺槽的流。要复现必须保留 `sub0/1/2` 三个 intra-only 帧。
 
+**sub3 的真实参考槽（2026-11-11，驱动侧实测）**：在驱动里临时打印解析结果后确认
+官方 sub3 是 `refs=0,1,2 map=0,1,2`（`active_ref_idx` 三个值分别是 slot 0/1/2），
+即**三路参考指向三张不同的图**（sub0/sub1/sub2）。之前探针打印 `0,0,0` 是因为
+探针每次都从空的 `ref_frame_map` 起解析（驱动是跨帧维护的）。这条推翻了
+"三路同指 slot 0"的判断，也使"inter 帧用多张不同参考"成为 I-5 最可疑的方向。
+本机自造的样本（首帧 intra-only、alt-ref 隐藏帧、30 帧 inter、`--lag-in-frames=8`
++ `--auto-alt-ref=1`）全部逐帧一致，**唯独"三个参考槽装着三张不同的图"这个组合
+还没造出来**（本机编码器产不出"三个 intra-only 帧轮流刷新 slot 0/1/2"的结构）。
+
 **探针精度问题（2026-11-11）**：`tests/vp9-intraonly/vp9-parse-probe` 调
 `mwv207_vp9_parse_frame()` 时把 `saved_ctx` 传 **NULL**，而驱动实际传的是
 `st->saved_ctx`（已自适应的上下文数组）。两者会走不同的参考槽解析路径：

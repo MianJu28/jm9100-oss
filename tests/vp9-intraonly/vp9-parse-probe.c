@@ -47,8 +47,17 @@ main(int argc, char **argv)
    memset(&sh, 0, sizeof(sh));
    uint32_t fbw = argc > 2 ? (uint32_t)strtoul(argv[2], NULL, 0) : 0;
    uint32_t fbh = argc > 3 ? (uint32_t)strtoul(argv[3], NULL, 0) : 0;
+   /* 传一个零初始化的 saved_ctx 数组，模拟驱动侧的上下文数组（argv[4]=1 时），
+    * 否则传 NULL。两条路径对参考槽的解析不同，比较时要注意。 */
+   static struct mwv207_vp9_entropy_probs ctx[NUM_FRAME_CONTEXTS];
+   struct mwv207_vp9_entropy_probs *saved = NULL;
+   if (argc > 4 && atoi(argv[4]) != 0) {
+      memset(ctx, 0, sizeof(ctx));
+      saved = ctx;
+   }
+   uint32_t hint_hdr = argc > 5 ? (uint32_t)strtoul(argv[5], NULL, 0) : 0;
    uint32_t used = mwv207_vp9_parse_frame(&sh, data, (uint32_t)size,
-                                          fbw, fbh, NULL, 0, 0);
+                                          fbw, fbh, saved, hint_hdr, 0);
 
    printf("used=%u tag=%u parts=%u key=%u intra=%u show=%u showex=%u err=%u "
           "prof=%u w=%u h=%u refresh=0x%02x txmode=%u fpar=%u lf=%u qyac=%u\n",
