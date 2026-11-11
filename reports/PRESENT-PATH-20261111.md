@@ -193,7 +193,28 @@ stripped 但有函数名；源码 `ref/vendor-1.8.0` 的 75 个 `.c`）：
 （其 KMD 有 overlay plane，`jmgpu_crtc_set_overlay` 只写 4 个寄存器），
 而不是靠"更快的拷贝"。这条也是 B 方案（扫描出平铺）的又一条反证。
 
-## 10. 复现命令
+
+## 10. 方案 A 已实现并安装（2026-11-11）
+
+- 补丁：`patches/xserver/0001-glamor-blit-fast-path.patch`（对 xorg-server 21.1.16 的
+  `glamor/glamor_copy.c`），新增 `glamor_copy_fbo_fbo_blit()`：当拷贝是
+  单 box、GXcopy、无 reverse/upsidedown/bitplane、两个 pixmap 都在单块 FBO 内、
+  GL 纹理格式一致且不重叠时，直接 `glBlitFramebuffer`，否则回退原有着色器路径。
+  可用 `GLAMOR_NO_BLIT=1` 关闭做 A/B。
+- 构建/安装脚本：`tools/build-xglamor.sh`（下载 21.1.16 源码 → 打补丁 → meson 构建
+  `libglamoregl.so` → 备份系统模块为 `libglamoregl.so.mwv207-orig` 后替换）；
+  撤销：`sudo ./tools/build-xglamor.sh --rollback` 或 `/usr/local/sbin/xglamor-rollback`
+  （供 VT 下自救用，无需进入仓库）。
+- ABI 校验：从同一上游版本 21.1.16 构建；导出符号是系统版本的超集（系统有而我们缺的
+  为 0）；未定义符号里除 libc/libepoxy/pixman/libdrm 外全部由 `/usr/lib/xorg/Xorg`
+  导出。glamor 的结构体布局只受 `GLAMOR_HAS_GBM` 影响，本构建已启用。
+- 当前状态：模块已装（`md5 cbf0e4af…`，原文件 `03fe0a6e…`），**需重启图形会话生效**。
+- 待验证（重启后）：`tests/present-bench/run-present-bench.sh 800 600 300`
+  ——基线（旧模块，`vblank_mode=0`）为 swap-only **0.643 ms**、clear+swap **0.927 ms**；
+  期望降到 ≈0.25–0.35 ms。再跑 `glmark2 -b :duration=3` 看总分（基线 723）。
+  若异常：`sudo /usr/local/sbin/xglamor-rollback` 后重启会话即可回到旧模块。
+
+## 11. 复现命令
 
 ```sh
 export DISPLAY=:1 XAUTHORITY=/home/admin/.Xauthority
