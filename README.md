@@ -23,7 +23,7 @@ DEC 管线；载荷 `payload-42` r19 已安装）→ **VP9 Profile 2（10bit 4:2
 `sudo ./tests/verify-installed.sh <srcversion>` 一条命令跑完）→ **VP9 intra-only
 参考帧之后的 inter 帧解码修复**（I-5，`8f6e964`：`vp9_setup_past_independence()`
 对 intra-only 漏了上下文重置、自适应基准取错、`show_existing` 污染保存的概率表；
-官方 intra-only 向量 7 个真实解码帧现与 libvpx 逐字节一致，已随 r23 载荷装到安装栈并复核）。
+官方 intra-only 向量 7 个真实解码帧现与 libvpx 逐字节一致，已随 r23 载荷装到安装栈并复核）→ **VP9 跨尺寸参考第一版**（B2，`351e6ed`：删掉"参考尺寸必须等于当前帧"的跳过分支，硬件本来就按每个参考槽自己的几何 + 14 位 hscale/vscale 编程；厂商栈在同一向量上逐字节正确。**尚未实测**，需切回自研栈跑 `tests/vp9-resize/run-vp9-resize.sh`）。
 
 ## 快速使用
 

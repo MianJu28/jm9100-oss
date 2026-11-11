@@ -181,6 +181,16 @@ OpenCL/VA-API/VDPAU 全走我们的栈；自建 KMD 在跑（srcversion `D5EEF36
   （`-hwaccel vaapi -hwaccel_output_format vaapi … -vf hwdownload,format=nv12`）解官方
   intra-only 向量 7 帧全部与 `-c:v libvpx-vp9` **逐字节一致（0 差异帧）**，
   `tests/verify-installed.sh` PASS=25、`tools/vp9-regression.sh` 18/18。
+- **B2：VP9 跨尺寸参考第一版（2026-11-11，`351e6ed`，待实测）**：厂商栈 `jmgpu` 能解
+  官方 `vp90-2-21-resize_inter_320x180_5_1-2.webm`（逐字节正确），我方此前因"参考尺寸
+  必须等于当前帧"整帧跳过。改动：删掉该跳过分支（硬件本来就按每个参考槽自己的
+  `ref_w_reg`/`ref_h_reg`/`ref_y_stride_reg` 与 14 位定点 `HOR/VER_SCALE` 编程），保留
+  "槽从未解码过就跳过"；staging 缓冲（`buf->res`，本地暂存）在帧变大时释放重建，避免
+  越界写。**尚未实测**（切换在 vendor 栈）：需要切回自研栈后跑
+  `tests/vp9-resize/run-vp9-resize.sh`，期望 `跳过帧=0` 且 IDENTICAL。
+  若仍跳过，`docs/UNRESOLVED.md` §1.8 已列出三条待查：客户端重建 VA context 导致槽空
+  （厂商直接用 `pic_param->ref[]` 客户端 surface，没有第二份副本）、PPU 恒 1:1 的输出
+  尺寸、命令流缓冲按最大帧分配（曾见 `submit failed: -34 ERANGE`）。
 - **一键验收脚本（2026-11-10，`tests/verify-installed.sh`）**：把 KMD 版本/来源、
   glxinfo/query/引擎计数、VAAPI profile 归位、H.264-High/HEVC 8/10bit 逐位一致、
   High10 回退与 DEC 零超时、TDR 探针、dmesg 新增告警（带基线，只查本次运行新增行）
@@ -196,10 +206,13 @@ OpenCL/VA-API/VDPAU 全走我们的栈；自建 KMD 在跑（srcversion `D5EEF36
    解码帧全部与 libvpx 逐字节一致，诊断脚本 `tests/vp9-intraonly/run-vp9-intraonly.sh`，
    细节见 `docs/UNRESOLVED.md` §1.7。剩下的只是 `show_existing` 重放帧的黑图问题
    （PPU 不经 `JMDEC_DEC_E` 就无法启动），属独立课题，不在 B3 判据内。
-3. **B2：真正的跨尺寸参考** —— 已有"缺参考/尺寸不同即拒绝"保护（`72f9523`），且
-   I-6 已修（`bb5cd9e`）：被跳过的帧现在会显式失败（`vaSyncSurface` 报错、ffmpeg 停止
-   输出），不再静默出脏图。要真正**支持**跨尺寸参考，还需要自写 VAAPI 客户端验证
-   "参考自身几何 + hscale/vscale"路径（ffmpeg 在分辨率变化时会重建 VA context，绕不过去）。
+3. **B2：跨尺寸参考 —— 第一版已实现（`351e6ed`），待实测** —— 删掉了"参考尺寸必须
+   等于当前帧"的跳过分支（硬件本来按每槽自己的几何 + 14 位 hscale/vscale 编程），
+   staging 缓冲改成可增长。厂商栈 `jmgpu` 在 `vp90-2-21-resize_inter_320x180` 上逐字节
+   正确，说明硬件能力没问题。**未验证**：本机现处 vendor 栈，需切回自研栈后跑
+   `tests/vp9-resize/run-vp9-resize.sh`，确认 `跳过帧=0` 且 IDENTICAL；若仍跳过，
+   §1.8 已列出三条待查（客户端重建 VA context 导致槽空、PPU 恒 1:1 的输出尺寸、
+   命令流缓冲按最大帧分配）。
 4. **其余 KMD 项**：N1/N2/K12/K9-②/N9 已修并重启验证（`6502f19`）；N4/K11 已修、
    **重启验证生效**（`fbed27f`，运行中 srcversion `0EFB7F4…`；判据见
    `docs/UNRESOLVED.md` §2.3）；K9-① 已核实为与厂商一致（非缺陷）；20 处 `BUG_ON`
