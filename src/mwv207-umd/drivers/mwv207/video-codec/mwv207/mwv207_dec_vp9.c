@@ -501,13 +501,78 @@ vp9_refresh_slots(struct mwv207_video_decoder *decoder,
    st->ref_frame_bytes = frame_bytes;
 }
 
+/* FIX(jm9100-oss): B2 —— 参考槽副本的"跨解码器实例"移交。
+ *
+ * 客户端在分辨率变化时会重建 VA context（ffmpeg 的 vaapi 解码器就这么做），
+ * Mesa 随之销毁并重建 pipe_video_codec，我们私有的 ref_store（参考槽副本）就会
+ * 跟着新实例一起归零。于是分辨率变化后的第一帧 inter 会命中
+ * "reference (slot N) has no decoded picture" 而被跳过 —— 官方向量
+ * vp90-2-21-resize_inter_320x180_5_1-2.webm 实测 9 帧全被跳过、ffmpeg 报
+ * "Failed to sync surface"，而厂商驱动能完整解出来。
+ *
+ * 参考槽里存的是 ASIC 内部布局的像素（不是应用 surface 的线性布局），
+ * 无法从客户端 surface 反推，所以在销毁状态时把它移交到进程级缓存，
+ * 让重建出来的下一个实例直接接手。合法 VP9 流总是以关键帧开头
+ * （refresh_frame_flags=0xff，会覆盖全部 8 个槽），因此不会把旧内容当成
+ * 新流的参考。
+ */
+static struct {
+   struct mwv207_video_buffer *store;
+   uint32_t buf_size, stride, luma, frame_bytes;
+   uint16_t slot_w[16], slot_h[16];
+   uint32_t slot_luma[16], slot_bytes[16];
+} vp9_ref_carry;
+
+static void
+vp9_ref_carry_publish(struct mwv207_vp9_state *st)
+{
+   if (!st || !st->ref_store || !st->ref_store->res)
+      return;
+   if (vp9_ref_carry.store &&
+       vp9_ref_carry.store != st->ref_store)
+      mwv207_video_buffer_destroy((struct pipe_video_buffer *)vp9_ref_carry.store);
+   memcpy(vp9_ref_carry.slot_w, st->ref_slot_w, sizeof(vp9_ref_carry.slot_w));
+   memcpy(vp9_ref_carry.slot_h, st->ref_slot_h, sizeof(vp9_ref_carry.slot_h));
+   memcpy(vp9_ref_carry.slot_luma, st->ref_slot_luma, sizeof(vp9_ref_carry.slot_luma));
+   memcpy(vp9_ref_carry.slot_bytes, st->ref_slot_bytes, sizeof(vp9_ref_carry.slot_bytes));
+   vp9_ref_carry.buf_size = st->ref_buf_size;
+   vp9_ref_carry.stride = st->ref_stride;
+   vp9_ref_carry.luma = st->ref_luma;
+   vp9_ref_carry.frame_bytes = st->ref_frame_bytes;
+   vp9_ref_carry.store = st->ref_store;
+   /* 所有权移交: 状态销毁时不再重复释放/使用该 BO。 */
+   st->ref_store = NULL;
+}
+
+static void
+vp9_ref_carry_adopt(struct mwv207_vp9_state *st)
+{
+   if (!st || !vp9_ref_carry.store)
+      return;
+   st->ref_store = vp9_ref_carry.store;
+   memcpy(st->ref_slot_w, vp9_ref_carry.slot_w, sizeof(st->ref_slot_w));
+   memcpy(st->ref_slot_h, vp9_ref_carry.slot_h, sizeof(st->ref_slot_h));
+   memcpy(st->ref_slot_luma, vp9_ref_carry.slot_luma, sizeof(st->ref_slot_luma));
+   memcpy(st->ref_slot_bytes, vp9_ref_carry.slot_bytes, sizeof(st->ref_slot_bytes));
+   st->ref_buf_size = vp9_ref_carry.buf_size;
+   st->ref_stride = vp9_ref_carry.stride;
+   st->ref_luma = vp9_ref_carry.luma;
+   st->ref_frame_bytes = vp9_ref_carry.frame_bytes;
+   vp9_ref_carry.store = NULL;
+}
+
 static void
 vp9_destroy_state(struct mwv207_vp9_state *st)
 {
    if (!st)
       return;
+   /* FIX(jm9100-oss): B2 —— 参考槽副本不跟着状态一起丢，交给下一个实例。
+    * scratch 仍在下面释放（它是本实例的暂存区，参考槽不依赖它）。 */
+   vp9_ref_carry_publish(st);
    if (st->scratch)
       mwv207_video_buffer_destroy((struct pipe_video_buffer *)st->scratch);
+   if (st->ref_store)
+      mwv207_video_buffer_destroy((struct pipe_video_buffer *)st->ref_store);
    FREE(st);
 }
 
@@ -575,6 +640,9 @@ vp9_get_state(struct mwv207_video_decoder *decoder, uint32_t width,
          return NULL;
       }
       memset(st->scratch_cpu, 0, st->scratch_size);
+      /* FIX(jm9100-oss): B2 —— 接手上一个解码器实例留下的参考槽副本（如果有），
+       * 见 vp9_ref_carry 处的说明。 */
+      vp9_ref_carry_adopt(st);
       dec->vp9_state = st;
    }
 
