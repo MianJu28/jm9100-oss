@@ -615,6 +615,31 @@ has no decoded picture; frame skipped`），所以不能把官方向量简化成
 内容不同造成的幅度差异，不能当证据。此前的"参考槽布局可疑"因此降级为"已否定"，
 I-5 仍未定位。
 
+**可复现的本机样本（2026-11-11，I-5 的缩小版，尚未解释）**。用
+`ffmpeg -f lavfi -i testsrc2=size=352x288:rate=30 -frames:v 20 -c:v libvpx-vp9
+-b:v 1M -g 5 -frame-parallel 0 -pix_fmt yuv420p -colorspace bt470bg
+-color_trc bt709 -f ivf fp0g5.ivf` 造 20 帧（每 5 帧一个关键帧、
+`frame_parallel_decoding_mode=0`）：vadec 与 `-c:v libvpx-vp9` 比对，
+**差异帧 = 6,7,8,9, 11,12,13,14, 16,17,18,19**，即第 2 个 GOP 起的所有
+inter 帧（第 1 个 GOP 的 1–4 帧完全一致，关键帧本身也都一致）。同样的流用
+`-frame-parallel 1`（`default`）编时 **20/20 全对** ⇒ 触发条件是
+**fpar=0 + 多个 GOP**。把第 2 个 GOP 的 5 个包单独拆成 `seg2.ivf` 解码
+**5/5 全对** ⇒ 是**上一段留下的状态**（概率上下文/计数/槽）在关键帧之后没有
+被正确重置，与帧内容本身无关。
+
+已尝试但**无效**的修法（各做过一次、均已撤回）：① 在概率上下文重置条件里补
+`intra_only`（`mwv207_decoder_vp9_slice_header.c` 两处）；② 把
+`frame_context_idx` 在 key/intra_only/error_resilient 时强制为 0（对应 libvpx
+`vp9_setup_past_independence()`）；③ 关键帧也清段映射缓冲区；④ 每帧清
+`VP9_COUNTER_OFFSET` 的计数缓冲。**反向实验**：关掉 `vp9_adapt_probs()`
+（临时 env 门控）会让第 1 个 GOP 也全错 ⇒ 自适应本身是必需的，且在 GOP 1 里是
+对的，问题在"跨 GOP 的状态"。
+
+下一步方向：在关键帧前后各 dump 一次 `st->saved_ctx[0..3]`、计数缓冲与
+`st->ref_store` 槽内容，找出第一处不符的字节；或对照 libvpx 的
+`vp9_setup_past_independence()` 完整清单（它还重置 `lf_ref_delta`/`lf_mode_delta`、
+段特征、参考槽映射）。
+
 **新疑点：参考槽拷的是"PP 之前的原始缓冲"（2026-11-11）**。给
 `vp9_refresh_slots()` 加临时 dump（已撤回）后发现：同一次运行里，官方 sub0 写进
 参考槽的字节与它**显示出来**的画面（`va0`，与 libvpx 逐字节相同）差 mean 23.6；
