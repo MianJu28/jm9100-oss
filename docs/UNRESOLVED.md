@@ -575,6 +575,13 @@ PP/输出布局（intra 帧逐字节一致已证明这条路正常）。
 尚未做的：把 sub3 的熵解码结果（模式/MV/残差）与 libvpx 逐块比对；或用
 "同内容重编"造出参数一致但编码器不同的 inter 帧做对照。
 
+补充（同一轮的否定实验）：给解析后的 `sh->frame_context_idx` 强行赋值
+（0/1/2/3）再解同一个流，va3 的最好匹配分别变成 40.3/83.9/83.9/83.9，都比
+自然运行的 15.4 差 —— 但这条实验本身不成立：`frame_context_idx` 在解析之后
+才被改，而概率更新已经写进了原本的上下文，且自适应会把结果写进被强制的那个
+槽，后续帧被污染。要做这个判定必须在**解析之前**换基上下文（例如把
+`saved_ctx[k]` 拷到 `saved_ctx[sh->frame_context_idx]` 再解析），本轮未做。
+
 复跑：`LIBVA_DRIVERS_PATH=<构建目录> LIBVA_DRIVER_NAME=mwv207 vadec <向量.ivf> out.yuv`
 与 `ffmpeg -c:v libvpx-vp9 -i <向量.webm> -pix_fmt nv12 -f rawvideo` 比对；注意
 ffmpeg 不输出隐藏帧，逐帧索引不能直接对位（要按 show_existing/可见帧对齐）。
