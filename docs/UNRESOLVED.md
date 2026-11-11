@@ -1466,17 +1466,35 @@ initramfs 已刷并解包核对（`modinfo -F srcversion` 均为 `8DFC52…`）�
   **没有 blit 路径**（`glamor.c:770` 的 `has_fbo_blit` 置位后全树再无使用）⇒
   glamor 的合成拷贝必然走着色器；我方 GL 是广播 `GL_EXT_framebuffer_blit` 的，
   属 glamor 缺路径而非驱动缺能力。
+- **2026-11-11 第三层补测（把"平铺"与"tile status 压缩"分开）**：临时让平铺资源
+  不分配 TS（`MWV207_NO_TS=1`，测完已回退）得到三方对照：
+
+  | 目标布局 | `glBlitFramebuffer` 800×600 | 着色器写 1.9 MB |
+  |---|---|---|
+  | 平铺 + TS | **0.100 ms（38.4 GB/s）** | **0.180 ms（21.3 GB/s）** |
+  | 平铺、无 TS | 0.205 ms（18.7 GB/s） | 0.300 ms（12.8 GB/s） |
+  | 线性 | 0.222 ms（17.3 GB/s） | 0.576 ms（6.7 GB/s） |
+
+  ⇒ ① blit 引擎写线性并不慢（0.222 ≈ 平铺无 TS 的 0.205），慢的是 **PE 写线性**
+  （0.576）——所以"让 glamor 改走 blit"只能拿到 0.65 → ≈0.25 ms，不是 0.10；
+  ② TS/压缩另外带来 2×，而 TS 只给平铺资源分配（`mwv207_resource.c:212`
+  `if (res->mode != MWV207_LINEAR) mwv207_get_tile_info(...)`），线性资源双重劣势；
+  ③ PE 写线性慢属硬件行为（平铺无 TS 也只有 12.8 GB/s），**没有可修的配置项**。
 - **可选改法（按性价比重排）**：
   ① **A. 让 glamor 用 blit**：打 X server 补丁（在 `glamor_copy_gl()` 里对
-     同格式、无变换的拷贝走 `glBlitFramebuffer`）——present 0.65 → ≈0.30 ms、
-     `build` ≈0.65 ms（≈1500 FPS）；不动驱动与 KMD，风险最低，但要把 xorg-server
+     同格式、无变换的拷贝走 `glBlitFramebuffer`）——present 0.65 → ≈0.25 ms、
+     `build` ≈0.55 ms（≈1800 FPS）；不动驱动与 KMD，风险最低，但要把 xorg-server
      纳入我们的构建/打包流程。
-  ② **C. 先查我方 3D"写线性"为何只有 3.3 GB/s**：若只是 PE 写策略/寄存器问题，
-     修好后可直接接近 blit 速率（0.22 ms），收益最大且只动 UMD；目前尚无证据链。
+  ② **C. 查 3D"写线性"为何只有 3.3 GB/s**：已查明属 PE 对线性目标的固有限制
+     （平铺无 TS 也只有 12.8 GB/s），**没有便宜的修法**，排除。
   ③ **B. 扫描出平铺（原方案②）**：证据基础已被上面的反汇编削弱（厂商自己也没这么做），
      需 KMD 编 DE supertile 且布局不一致会花屏，风险最高、收益 ≈2200 FPS（仍差厂商 2.7×）。
   ④ 只平铺窗口 pixmap —— 收益被写线性端抵消，基本无效；开合成同样要采样线性纹理
      （无收益），只有全屏 direct-scanout 才变真 flip。
+  ⑤ **D. 窗口 present 走 overlay plane（零拷贝）**：厂商 KMD 有 `jmgpu_crtc_set_overlay`
+     （只写 4 个寄存器），我方 KMD 完全没有 overlay 面；同条件厂商 `build` 0.167 ms
+     **已经快于我们一次 800×600 线性 blit 的 0.222 ms**，说明它很可能压根不做整帧拷贝。
+     工程量最大（KMD 新增 plane + Present 对接），但上限最高。
 - 详细数据与复现命令：`reports/PRESENT-PATH-20261111.md`。
 - 关联：`reports/GLMARK2-VENDOR-VS-OSS-20261111.md`（同条件总分与逐场景对照）。
 - 另注：`glxgears` 的 `vblank_mode=0` 我方 3462–5275 FPS vs 厂商 15134–17621，

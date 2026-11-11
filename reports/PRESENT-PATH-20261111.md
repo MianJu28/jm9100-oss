@@ -124,7 +124,7 @@ vs 厂商 ≈0.05–0.09 ms），那是另一条线（着色器/光栅化开销�
 `PIPE_BIND_SCANOUT` 走 `MWV207_SUPERTILED`。
 
 
-## 5. 进一步取证：厂商栈是不是真的用"平铺扫描出"？
+## 6. 进一步取证：厂商栈是不是真的用"平铺扫描出"？
 
 对厂商 KMD 做的对照（`/lib/modules/6.6.155-arm64-desktop-hwe/updates/dkms/jmgpu.ko`，
 stripped 但有函数名；源码 `ref/vendor-1.8.0` 的 75 个 `.c`）：
@@ -142,7 +142,7 @@ stripped 但有函数名；源码 `ref/vendor-1.8.0` 的 75 个 `.c`）：
 - 结论：**没有证据表明厂商用平铺缓冲扫描出**。厂商的 `present` 更快，更可能是
   它的 DDX 用 2D 引擎（EXA）做合成拷贝，而不是 glamor 的 3D 着色器采样。
 
-## 6. 关键补充测量：blit 写线性目标远快于 3D 写线性目标
+## 7. 关键补充测量：blit 写线性目标远快于 3D 写线性目标
 
 同一对 FBO（800×600），只改驱动布局（`MWV207_FORCE_LINEAR=1` 的临时构建）：
 
@@ -154,18 +154,46 @@ stripped 但有函数名；源码 `ref/vendor-1.8.0` 的 75 个 `.c`）：
 ⇒ 线性目标上，**blit 比着色器快 2.6×**（0.222 vs 0.576）。这解释了厂商的快：
 2D/EXA 路径是 blit 级别，glamor 是着色器级别。
 
-## 7. 由此得出的三个可实施项（按性价比）
+## 8. 由此得出的四个可实施项（按性价比）
 
 | 方案 | 改动 | present（800×600） | `glmark2 build` | 备注 |
 |---|---|---|---|---|
-| A. 让 glamor 用 blit 而不是着色器 | **X server 补丁**（glamor 21.1 只有着色器路径，已查 `glamor_copy.c`） | 0.65 → ≈0.30 ms | ≈0.65 ms（≈1500 FPS） | 不动驱动与 KMD，风险最低；需自编 xorg-server |
+| A. 让 glamor 用 blit 而不是着色器 | **X server 补丁**（glamor 21.1 只有着色器路径） | 0.65 → ≈0.25 ms | ≈0.55 ms（≈1800 FPS） | 不动驱动与 KMD，风险最低；需自编 xorg-server |
 | B. 扫描出平铺（UMD+KMD） | UMD 放开 SCANOUT 平铺 + KMD 新增平铺显示支持 | ≈0.10–0.15 ms | ≈0.45 ms（≈2200 FPS） | 但见第 5 节：厂商也没这么做，KMD 侧寄存器序列无公开证据，风险高 |
-| C. 只查我们的 3D "写线性"慢在哪 | 仅 UMD（PE 寄存器/缓存策略） | 若是 PE 写策略问题，可直接降到 blit 级 | — | 最省事，但尚无证据链 |
+| C. 查 3D "写线性"慢在哪 | 仅 UMD | 已查明：PE 写线性 3.3 GB/s 属硬件行为（平铺无 TS 也只有 12.8），**无便宜修法** | — | 结论：没有可修的配置项 |
+| D. 窗口 present 走 overlay plane（零拷贝） | **KMD 新增 overlay plane + DDX/Present 对接** | ≈0 ms | ≈0.32 ms（≈3100 FPS） | 厂商 KMD 有 `jmgpu_crtc_set_overlay`，我方 KMD 无 overlay 面；工程量最大但上限最高 |
 
-建议顺序：**C（先查 3D 写线性为何只有 3.3 GB/s）→ A（glamor blit 补丁）→ B（最后做）**。
-其中 B 的证据基础比原先设想的弱：厂商 plane 更新与我们完全相同，看不出平铺扫描出。
+建议顺序：**A（glamor blit 补丁，改动最小、收益确定 ≈0.25 ms）→ D（overlay plane 零拷贝 present，上限最高）→ B（扫描出平铺，证据已被反汇编削弱）**；C 已排除（第 9 节）。
 
-## 8. 复现命令
+## 9. 再补一层：把"平铺"和"tile status（压缩）"分开测
+
+为了判断线性慢到底是"布局"还是"缺 tile-status/压缩"，用 `MWV207_NO_TS=1`
+（临时改 `mwv207_set_miptree()`：强制 `MWV207_SUPERTILED`、但跳过
+`mwv207_get_tile_info()` 的 TS 缓冲分配；测完已 `git checkout` 回退）做了三方对照：
+
+| 目标布局 | `glBlitFramebuffer` 800×600 | 着色器写 1.9 MB |
+|---|---|---|
+| 平铺 + TS | **0.100 ms（38.4 GB/s）** | **0.180 ms（21.3 GB/s）** |
+| 平铺、无 TS | 0.205 ms（18.7 GB/s） | 0.300 ms（12.8 GB/s） |
+| 线性 | 0.222 ms（17.3 GB/s） | 0.576 ms（6.7 GB/s） |
+
+三点结论：
+
+1. **blit 引擎对线性目标并不慢**（0.222 ms，与"平铺无 TS"的 0.205 基本同档），
+   慢的是 **PE（3D）写线性**（0.576 ms）。blit 快 2.6× 的原因就在这里。
+2. **TS/压缩带来另外 2×**（平铺 0.205 → 0.100；着色器 0.300 → 0.180），
+   而且 **TS 只对平铺资源分配**（`mwv207_resource.c:212`
+   `if (res->mode != MWV207_LINEAR) mwv207_get_tile_info(...)`）⇒ 线性资源既没有
+   平铺也没有 TS，是双重劣势。
+3. 因此"让 glamor 改走 blit"能拿到的是 **0.65 → ≈0.25 ms**（不是 0.65 → 0.10），
+   剩下那 2× 必须靠平铺 + TS。
+
+另外，厂商同条件 `build` 场景 5982 FPS（0.167 ms/帧）**已经低于我们 blit 一次
+800×600 线性拷贝的 0.222 ms**，说明厂商的窗口 present 很可能压根不做整帧拷贝
+（其 KMD 有 overlay plane，`jmgpu_crtc_set_overlay` 只写 4 个寄存器），
+而不是靠"更快的拷贝"。这条也是 B 方案（扫描出平铺）的又一条反证。
+
+## 10. 复现命令
 
 ```sh
 export DISPLAY=:1 XAUTHORITY=/home/admin/.Xauthority

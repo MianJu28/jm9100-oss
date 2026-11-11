@@ -219,9 +219,14 @@ OpenCL/VA-API/VDPAU 全走我们的栈；自建 KMD 在跑（srcversion `D5EEF36
   21.1 的 `glamor_copy.c` 根本没有 blit 路径（只有着色器）。
   实测同一对 FBO：`glBlitFramebuffer` 线性目标 **0.222 ms（17.3 GB/s）**、
   着色器 0.576 ms ⇒ **blit 快 2.6×**。
+  再补一层（把平铺与 tile-status 分开）：平铺+TS 的 blit 0.100 ms / 着色器 0.180，
+  **平铺无 TS 0.205 / 0.300**，线性 0.222 / 0.576 ⇒ blit 引擎写线性并不慢，
+  慢的是 PE 写线性；TS 压缩另给 2×，但 TS 只分配给平铺资源
+  （`mwv207_resource.c:212`），线性资源双重劣势。PE 写线性慢属硬件行为，无便宜修法。
   因此改法按性价比重排：**A. 给 glamor 加 blit 快路径（X server 补丁，不动驱动，
-  ≈0.30 ms/≈1500 FPS）→ C. 查我方 3D 写线性为何只有 3.3 GB/s（只动 UMD，潜力最大）
-  → B. 扫描出平铺（证据基础被削弱、风险最高）**。
+  ≈0.25 ms/≈1800 FPS）→ D. 窗口 present 走 overlay plane（KMD 新增 plane，厂商有
+  `jmgpu_crtc_set_overlay`，上限最高）→ B. 扫描出平铺（证据基础被削弱、风险最高）**；
+  C（查 UMD 侧 3D 写线性）已排除。
   数据见 `reports/PRESENT-PATH-20261111.md` 与 `docs/UNRESOLVED.md` 同名小节。
 
 ### 待办（按价值排序）
