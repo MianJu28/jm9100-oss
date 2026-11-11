@@ -207,6 +207,13 @@ OpenCL/VA-API/VDPAU 全走我们的栈；自建 KMD 在跑（srcversion `D5EEF36
   串成一条命令；`kernel.dmesg_restrict=1` 时明确 SKIP 而非假 PASS。已在 r19 + `D5EE…`
   上预跑通过（root 全跑 `PASS=21 FAIL=0 SKIP=1`）。
 
+- **`present` 性能根因（2026-11-11，仅定位未修）**：glamor 每帧用 3D 着色器把窗口
+  pixmap 合成到屏幕 pixmap，而两者都被 `mwv207_can_tile()` 的
+  `enable_scanout_tile = false` 强制成线性；本驱动对线性表面的采样只有
+  6.7 GB/s（平铺为 20.9 GB/s），于是 800×600 的 present 要 ≈0.55 ms
+  （纯 swap 0.65 ms，而 blit 只要 0.20 ms）。数据与两条可选改法见
+  `reports/PRESENT-PATH-20261111.md` 与 `docs/UNRESOLVED.md` 同名小节。
+
 ### 待办（按价值排序）
 1. **A5 已完成（2026-11-10，`82e7b02`）**：VP9 Profile 2（10bit 4:2:0）与软件解码逐位
    一致（64x64~1080p，含 inter 帧，零 TDR），默认声明；`MWV207_VP9_10BIT_DISABLE=1`

@@ -1413,6 +1413,44 @@ initramfs 已刷并解包核对（`modinfo -F srcversion` 均为 `8DFC52…`）�
 - 验证：三个玲珑应用均可启动；`eglinfo -B` 只枚举 1 个 platform device；
   火狐 WebRender 页面渲染不受影响（直方图与修复后一致）。
 
+## `present` 每帧多花 ~0.55 ms：根因是线性表面的采样带宽（性能，未修）
+
+- 现象（2026-11-11，r25，`:1`）：`glmark2 -b build:duration=3` 我方 **1049 FPS（0.953 ms）**，
+  厂商同条件 5982–14856 FPS（0.067–0.167 ms）。逐场景差距集中在"便宜帧"
+  （`build`/`texture`/`conditionals` 4–10×），GPU 重场景只差 1.25–1.3×
+  （`terrain` 105/155、`refract` 96/123）。
+- **拆分开销**：同场景 `--off-screen` 3607 FPS（0.277 ms，无 present）→
+  `--frame-end=finish` 2447 FPS（0.409 ms）→ 默认 swap 1049 FPS（0.953 ms）
+  ⇒ **present ≈0.55 ms/帧，占整帧 58%**。
+- **根因（已定位，三层证据）**：
+  1. 纯 `glXSwapBuffers`（不画）800×600 就要 **0.653–0.661 ms**，
+     1920×1080 要 2.304 ms；1×1 时 0.125 ms ⇒ 固定开销 0.11 ms + 与像素成正比的拷贝。
+  2. `qdbus org.kde.KWin /Compositor suspend` 前后 **0.770 → 0.767 ms（无变化）**，
+     且 `org.kde.kwin.Compositing.active` = **false** ⇒ 成本在 **X 的 glamor**
+     合成拷贝，不在 kwin；CPU 账也不支持 CPU 拷贝（Xorg 0.057 ms/帧、客户端 0.026）。
+  3. GPU 能力实测：`glBlitFramebuffer` **19.0 GB/s**（线性/平铺同速）；
+     而**采样绘制**对**平铺**源为 **20.9 GB/s**（0.184 ms），对**线性**源只有
+     **6.7 GB/s**（0.576 ms，3.1× 慢，且与 stride 3072–4352 对齐无关）。
+     0.576 ms + 0.11 ms 固定开销 ≈ 实测 0.65 ms。
+- **为什么源是线性的**：`src/mwv207-umd/drivers/mwv207/mwv207_resource.c` 的
+  `mwv207_can_tile()` 里 `const bool enable_scanout_tile = false;`，
+  凡带 `PIPE_BIND_SCANOUT` / `PIPE_BIND_LINEAR` 的资源一律 `MWV207_LINEAR`；
+  GLX 窗口缓冲与 X 屏幕 pixmap 都带 `PIPE_BIND_SCANOUT` ⇒ glamor 每帧都用
+  6.7 GB/s 的线性采样速率做一次全屏合成。
+- **可选改法（均未实施，代价递增）**：① 只让"被采样的窗口 pixmap"平铺、
+  屏幕 pixmap 保持线性（按 2.3 推算 present 0.55 → ≈0.25 ms，`build` 0.95 → ≈0.6 ms；
+  难点是 Mesa 里 `SCANOUT|RENDER_TARGET` 同时置位，bind 位区分不出"会真被 flip"的缓冲）；
+  ② 扫描出也走 supertile（`enable_scanout_tile = true`）——硬件有
+  `MWV207REG_DE_GENERAL_CONFIG_SUPERTILE_VERSION`（V1/V2/V3）与
+  `JM_MINOR_FEATURES4_DE_SUPERTILE_AVAILABLE`，但**我方 KMD 的 `dc/` 从不编程 DE
+  supertile**，直接开会花屏，需先做 KMD 侧对齐；③ 不改驱动改合成路径——开合成同样
+  要采样线性纹理（无收益），只有全屏 direct-scanout 才变真 flip（实测全屏 + 无合成时
+  被 vblank 锁到 9.9 ms/帧）。
+- 详细数据与复现命令：`reports/PRESENT-PATH-20261111.md`。
+- 关联：`reports/GLMARK2-VENDOR-VS-OSS-20261111.md`（同条件总分与逐场景对照）。
+- 另注：`glxgears` 的 `vblank_mode=0` 我方 3462–5275 FPS vs 厂商 15134–17621，
+  与 present 结论一致（glxgears 每帧只画几个三角形，几乎全是 present 开销）。
+
 ## 火狐 WebGL 页仍未到 vsync 上限（性能，剩余项）
 
 - 现状（r9 测得，零 env；r12 未重新测数）：CSS 动画页 **96.6 FPS / 10.35ms**（已到 100Hz 面板上限），
