@@ -426,6 +426,12 @@ va1 与 va0 差 mean 105.85、非零采样 522/1568）。原因已查清：整�
 依赖它（单帧 intra-only 已与 libvpx 逐字节一致）。参考槽副本本身内容正常
 （`vp9_refresh_slots()` 的源缓冲非零）。
 
+**驱动不认 superframe（新登记的限制，暂不影响内置播放链）**：把官方首包（117963 B 的
+superframe）当成**一个**缓冲直接送 `vaRenderPicture`，驱动会把它当单帧解，输出与
+libvpx 差 mean 17.37 —— 说明 `mwv207_dec_vp9_set_regs()` 没有拆 superframe。ffmpeg 在
+送驱动之前就按 superframe 索引拆好了，所以播放链路不受影响；但**直连 VAAPI 的客户端
+必须自己拆**（`tests/vp9-intraonly/extract-webm-packets.py` 里的 IVF 拆分逻辑可复用）。
+
 **降低范围的一条反证**：本机自造的 "关键帧 / 改写后的 intra-only + inter" 对照
 （`io_fp0` 序列）里，硬件把 intra-only 帧当参考解出的 inter 帧与软件**逐位一致**
 （`hw A[0] == B[1]`、`sw A[0] == B[1]`），所以"intra-only 当参考"本身没有问题，
