@@ -635,6 +635,25 @@ inter 帧（第 1 个 GOP 的 1–4 帧完全一致，关键帧本身也都一�
 （临时 env 门控）会让第 1 个 GOP 也全错 ⇒ 自适应本身是必需的，且在 GOP 1 里是
 对的，问题在"跨 GOP 的状态"。
 
+**状态 dump 的实测结果（2026-11-11）**：在 `mwv207_dec_vp9_set_regs()` 入口按帧打印
+`st->saved_ctx` 的 FNV 哈希与 `prev_was_inter/prev_was_shown`，并在解析后打印
+`key/intra_only/fci/rfc/fpar/refresh_entropy_probs` 与 `sh->entropy`、
+`sh->entropy_last[0..3]` 的哈希。对 20 帧流与"只解第 2 个 GOP"两例对照：
+
+- 关键帧（第 6 帧 vs seg2 的帧 0）**解析结果完全相同**（`ent=ac4d21e5ba5342bd`、
+  `l0..l3=29b85013eef86153`），说明解析阶段没有历史泄漏；
+- 但**关键帧处理完之后**两例的 `saved_ctx` 哈希不同（长流 `de9b33a04e26aa96`、
+  seg2 `ff3667d7dfeb1edf`）⇒ **差异产生在"关键帧之后的上下文落盘"这一步**
+  （`vp9_adapt_probs()` 写回 `saved_ctx` 的数据依赖了本帧之前的状态）。
+  本流的关键帧是 `er=0, fpar=0, refresh_entropy_probs=1`，与"关键帧必然
+  error_resilient"的假设不同，因此 `vp9_setup_past_independence()` 的路径需要
+  按"intra-only、但刷新上下文"来模拟。
+
+尝试过但**使 GOP 1 也变错**的改法（已撤回）：把自适应基准从
+`st->pre_ctx[fci]`（帧头更新前的表）改成 `sh->entropy`（帧头更新后的表），以及
+把重置时的 `saved_ctx[i]` 从 `sh->entropy` 改成"默认表"。⇒ 现有实现的自适应基准
+就是"帧头更新前"的表，与实际需要的语义只差在"哪些帧的更新该被落下"。
+
 下一步方向：在关键帧前后各 dump 一次 `st->saved_ctx[0..3]`、计数缓冲与
 `st->ref_store` 槽内容，找出第一处不符的字节；或对照 libvpx 的
 `vp9_setup_past_independence()` 完整清单（它还重置 `lf_ref_delta`/`lf_mode_delta`、
