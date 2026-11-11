@@ -53,6 +53,8 @@ KMD `8DFC520FB8FCDECFBC911AA`，UMD 载荷 `oss-24.1.2-fullstack-r25`
 | 采样+绘制，源纹理**平铺** | **20.9 GB/s**（0.184 ms） | |
 | 采样+绘制，源纹理**线性** | **6.7 GB/s**（0.576 ms） | **3.1× 慢** |
 | 线性源，stride 3072 / 3200 / 3328 / 3840 / 4096 / 4352 | 5.9–6.8 GB/s | 与 stride 对齐无关 |
+| **只写不读**（clear + 不采样的三角形）→ **平铺**目标 | **10.4 GB/s**（0.185 ms） | |
+| **只写不读**（clear + 不采样的三角形）→ **线性**目标 | **3.3 GB/s**（0.582 ms） | **写入端同样慢 3.1×** |
 
 对照实现：把 `mwv207_can_tile()` 临时改成"一律线性"（`MWV207_FORCE_LINEAR=1` 门控，
 测量后已删除该临时改动），同一支程序的结果即是上表最后一行；恢复后回到 20.9 GB/s。
@@ -83,24 +85,45 @@ GLX 的窗口缓冲（DRI3 present 源）与 X 的屏幕 pixmap 都带 `PIPE_BIN
 做合成拷贝（不经过 3D 采样），其窗口缓冲也可以走 supertile；我方走 glamor 的
 着色器合成，且缓冲被强制线性。
 
-## 4. 可选的改法（按代价排序，均未实施）
+## 4. 关键修正：线性慢的不只是"读"，写也一样
 
-1. **让被采样的窗口 pixmap 走平铺**（保持屏幕 pixmap 线性、扫描出仍线性）——
-   收益按 2.3 推算：present 0.55 → ≈0.25 ms，`build` 0.95 → ≈0.6 ms。
-   风险：`PIPE_BIND_SCANOUT` 与 `PIPE_BIND_RENDER_TARGET` 在 Mesa 里同时置位，
-   无法从 bind 位区分"会真被 flip 的缓冲"；需要按 `drw->is_different_buffer` /
-   DRI3 的 flip 支持另开判据。
-2. **扫描出也走 supertile**（`enable_scanout_tile = true`）——硬件具备：
-   厂商头文件有 `MWV207REG_DE_GENERAL_CONFIG_SUPERTILE_VERSION`（V1/V2/V3）
-   与能力位 `JM_MINOR_FEATURES4_DE_SUPERTILE_AVAILABLE`；但**我方 KMD 的 dc/
-   从不编程 DE supertile**，直接打开会让显示输出花屏。需要 KMD 侧先把 DE
-   supertile 版本/布局对齐 UMD 的 4 KB 平铺格式，属中等工程。
-3. **不改驱动，改合成路径**：让桌面开合成（kwin 当前是关的）并不会更快——
-   合成同样要采样线性窗口纹理；除非把窗口全屏化触发 direct scanout / flip
-   （实测全屏 + 无合成时 `present` 变成 vblank 锁定的 9.9 ms/帧，即真 flip）。
-4. **仅记录**：present 协议本身的固定开销只有 0.11 ms，没有可压的余地。
+先前的推测"只把窗口 pixmap 平铺、屏幕 pixmap 保持线性"**不成立**。决定性测量
+（同一支程序，仅切换目标缓冲的布局）：
 
-## 5. 复现命令
+| 场景 | 平铺 | 线性 |
+|---|---|---|
+| clear + 不采样的三角形（纯写 1.9 MB） | **0.185 ms（10.4 GB/s）** | **0.582 ms（3.3 GB/s）** |
+| 采样 + 绘制（读 1.9 MB + 写 1.9 MB） | 0.184 ms | 0.576 ms |
+
+⇒ 3D 单元访问线性表面的**读写两端都是 3.3 GB/s 量级**，只有平铺表面能到 10–21 GB/s。
+glamor 的合成是"读窗口 pixmap + 写屏幕 pixmap"，两端都是 3D 访问：
+
+- 只平铺窗口 pixmap（屏幕仍线性）⇒ 写入端仍是 0.58 ms 级，present 几乎不改善；
+- 两端都平铺 ⇒ present 降到 ≈0.20 ms（≈2.7×）。
+
+## 5. 两种改法与厂商栈的距离
+
+| 方案 | 改动范围 | present（800×600） | `glmark2 build` 估算 | 与厂商（0.167 ms / 5982 FPS）的差距 |
+|---|---|---|---|---|
+| 现状 | — | 0.55 ms | 0.95 ms（1049 FPS） | 5.7× |
+| ①只平铺窗口 pixmap，屏幕保持线性 | 仅 UMD（`mwv207_can_tile`） | ≈0.5 ms（写入端未改善） | ≈0.9 ms | ≈5×（基本无收益） |
+| ②窗口 + 屏幕（扫描出）都平铺 | UMD + **KMD 编 DE supertile** | ≈0.20 ms | ≈0.30 ms（≈3300 FPS） | ≈1.8× |
+| ③全屏 direct scanout（真 flip） | 仅对全屏应用有效 | — | — | 视场景 |
+
+**结论：只有②能明显接近厂商栈**；①的收益被"写线性目标同样慢"抵消。
+②剩下的 1.8× 差距来自 3D 渲染效率本身（我方 offscreen `build` 0.185–0.277 ms
+vs 厂商 ≈0.05–0.09 ms），那是另一条线（着色器/光栅化开销），与 present 无关。
+
+②的落地前提：硬件有 DE supertile —— 厂商头文件里
+`MWV207REG_DE_GENERAL_CONFIG_SUPERTILE_VERSION`（`SUPER_TILE_V1/V2/V3`）与
+`JM_MINOR_FEATURES4_DE_SUPERTILE_AVAILABLE`；当前 `src/kernel-6.6/dc/` 完全不碰这个
+寄存器，而 UMD 的 4 KB 平铺布局必须与 DE 侧的版本/布局严格一致，否则显示花屏。
+需要：① 从厂商 DDX/DE 侧确认布局与版本号（本项目只有 KMD 源码，DDX 闭源，
+可用 `ref/vendor-1.8.0` 的 KMD 中 `DRM_JM_GEM_TILING_SUPERTILED` 路径反推）；
+② KMD 在 plane 更新时写 supertile 版本与 stride/高度对齐；③ UMD 允许
+`PIPE_BIND_SCANOUT` 走 `MWV207_SUPERTILED`。
+
+## 6. 复现命令
 
 ```sh
 export DISPLAY=:1 XAUTHORITY=/home/admin/.Xauthority

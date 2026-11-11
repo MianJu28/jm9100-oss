@@ -210,9 +210,11 @@ OpenCL/VA-API/VDPAU 全走我们的栈；自建 KMD 在跑（srcversion `D5EEF36
 - **`present` 性能根因（2026-11-11，仅定位未修）**：glamor 每帧用 3D 着色器把窗口
   pixmap 合成到屏幕 pixmap，而两者都被 `mwv207_can_tile()` 的
   `enable_scanout_tile = false` 强制成线性；本驱动对线性表面的采样只有
-  6.7 GB/s（平铺为 20.9 GB/s），于是 800×600 的 present 要 ≈0.55 ms
-  （纯 swap 0.65 ms，而 blit 只要 0.20 ms）。数据与两条可选改法见
-  `reports/PRESENT-PATH-20261111.md` 与 `docs/UNRESOLVED.md` 同名小节。
+  6.7 GB/s、且**写入线性目标同样只有 10.4→3.3 GB/s**，于是 800×600 的 present 要
+  ≈0.55 ms（纯 swap 0.65 ms，而 blit 只要 0.20 ms）。只平铺窗口 pixmap 无收益；
+  **唯一能接近厂商的改法是窗口+扫描出都平铺（需 KMD 编 DE supertile）**，
+  估算 present ≈0.20 ms、`build` ≈0.30 ms（≈3300 FPS，厂商 5982）。
+  数据见 `reports/PRESENT-PATH-20261111.md` 与 `docs/UNRESOLVED.md` 同名小节。
 
 ### 待办（按价值排序）
 1. **A5 已完成（2026-11-10，`82e7b02`）**：VP9 Profile 2（10bit 4:2:0）与软件解码逐位

@@ -1437,15 +1437,19 @@ initramfs 已刷并解包核对（`modinfo -F srcversion` 均为 `8DFC52…`）�
   凡带 `PIPE_BIND_SCANOUT` / `PIPE_BIND_LINEAR` 的资源一律 `MWV207_LINEAR`；
   GLX 窗口缓冲与 X 屏幕 pixmap 都带 `PIPE_BIND_SCANOUT` ⇒ glamor 每帧都用
   6.7 GB/s 的线性采样速率做一次全屏合成。
-- **可选改法（均未实施，代价递增）**：① 只让"被采样的窗口 pixmap"平铺、
-  屏幕 pixmap 保持线性（按 2.3 推算 present 0.55 → ≈0.25 ms，`build` 0.95 → ≈0.6 ms；
-  难点是 Mesa 里 `SCANOUT|RENDER_TARGET` 同时置位，bind 位区分不出"会真被 flip"的缓冲）；
-  ② 扫描出也走 supertile（`enable_scanout_tile = true`）——硬件有
-  `MWV207REG_DE_GENERAL_CONFIG_SUPERTILE_VERSION`（V1/V2/V3）与
-  `JM_MINOR_FEATURES4_DE_SUPERTILE_AVAILABLE`，但**我方 KMD 的 `dc/` 从不编程 DE
-  supertile**，直接开会花屏，需先做 KMD 侧对齐；③ 不改驱动改合成路径——开合成同样
-  要采样线性纹理（无收益），只有全屏 direct-scanout 才变真 flip（实测全屏 + 无合成时
-  被 vblank 锁到 9.9 ms/帧）。
+- **线性慢的是读写两端（2026-11-11 补测）**：同一程序只切换目标缓冲布局——
+  clear + 不采样的三角形写 1.9 MB，平铺目标 **0.185 ms（10.4 GB/s）**、
+  线性目标 **0.582 ms（3.3 GB/s）** ⇒ 3D 访问线性表面不论读还是写都只有平铺的 1/3。
+  因此"只平铺窗口 pixmap、屏幕保持线性"几乎无收益（写入端仍 0.58 ms 级）。
+- **可选改法**：① 只平铺窗口 pixmap —— 收益被写线性端抵消，基本无效；
+  ② **窗口与扫描出都平铺**（UMD 放开 `PIPE_BIND_SCANOUT` 走 `MWV207_SUPERTILED` +
+  KMD 编 DE supertile 版本/布局）——present 0.55 → ≈0.20 ms、`build` 0.95 → ≈0.30 ms
+  （≈3300 FPS），与厂商 5982 FPS 差 ≈1.8×；前提是硬件 DE supertile 可用
+  （`MWV207REG_DE_GENERAL_CONFIG_SUPERTILE_VERSION` V1/V2/V3、
+  `JM_MINOR_FEATURES4_DE_SUPERTILE_AVAILABLE`），但 `src/kernel-6.6/dc/` 当前完全不
+  编程它，布局不一致会花屏，属中等工程；③ 不改驱动改合成路径——开合成同样要采样
+  线性纹理（无收益），只有全屏 direct-scanout 才变真 flip（实测全屏 + 无合成时被
+  vblank 锁到 9.9 ms/帧）。
 - 详细数据与复现命令：`reports/PRESENT-PATH-20261111.md`。
 - 关联：`reports/GLMARK2-VENDOR-VS-OSS-20261111.md`（同条件总分与逐场景对照）。
 - 另注：`glxgears` 的 `vblank_mode=0` 我方 3462–5275 FPS vs 厂商 15134–17621，
