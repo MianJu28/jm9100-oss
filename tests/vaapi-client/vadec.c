@@ -83,12 +83,51 @@ static void write_plane(FILE *fp, unsigned char *base, unsigned pitch,
 }
 
 
+/* VP9 superframe（同一 packet 里打包多帧）索引格式（见 libvpx
+ * parse_superframe_index）：最后一个字节是 marker（高 3 位 0b110），
+ * 低 3 位是 (帧数-1)，第 3~4 位是 (每帧长度字段字节数-1)；
+ * 索引 = 1 字节 marker 副本 + 帧数×长度字段 + 1 字节 marker，
+ * 长度字段是小端、值为该子帧的字节数。ffmpeg 会在送驱动前拆包，
+ * 直连 VAAPI 的客户端必须自己拆，否则驱动会把整个超帧当一帧解。 */
+static int
+split_superframe(const uint8_t *data, size_t len,
+                 const uint8_t *sub[8], size_t sublen[8])
+{
+   unsigned marker, frames, mag, i, j;
+   size_t index_sz, off = 0;
+   const uint8_t *x;
+
+   if (len < 2)
+      return 0;
+   marker = data[len - 1];
+   if ((marker & 0xe0) != 0xc0)
+      return 0;
+   frames = (marker & 0x7) + 1;
+   mag = ((marker >> 3) & 0x3) + 1;
+   index_sz = 2 + (size_t)mag * frames;
+   if (index_sz > len || data[len - index_sz] != (uint8_t)marker)
+      return 0;
+   x = data + len - index_sz + 1;
+   for (i = 0; i < frames; i++) {
+      size_t sz = 0;
+      for (j = 0; j < mag; j++)
+         sz |= (size_t)x[i * mag + j] << (8 * j);
+      if (!sz || off + sz > len - index_sz)
+         return 0;
+      sub[i] = data + off;
+      sublen[i] = sz;
+      off += sz;
+   }
+   return (int)frames;
+}
+
 /* 从 VA surface 读回一帧，写出与 ffmpeg -pix_fmt nv12/p010 相同的平面顺序。
  *
  * 本驱动的 pipe_video_buffer 不支持多平面连续映射（Mesa 的 image.c 会因此让
  * vaDeriveImage 直接返回 OPERATION_FAILED），所以走 vaExportSurfaceHandle：
  * 每个平面导出成一个 DRM object，自己 mmap 再按 pitch 逐行拷贝。 */
-static int read_surface(VADisplay dpy, VASurfaceID surf, FILE *out,
+static int
+read_surface(VADisplay dpy, VASurfaceID surf, FILE *out,
                         unsigned width, unsigned height, int p010)
 {
    VADRMPRIMESurfaceDescriptor desc;
@@ -182,7 +221,7 @@ int main(int argc, char **argv)
    const char *in, *outp;
    int want_p010 = 0, max_frames = 0;
    struct ivf_frame *frames;
-   int nframes, i, s;
+   int nframes, i, s, total = 0;
    int fd;
    VADisplay dpy;
    VAStatus st;
@@ -269,9 +308,26 @@ int main(int argc, char **argv)
       VADecPictureParameterBufferVP9 pp;
       void *p;
 
-      if (max_frames && i >= max_frames)
+      if (max_frames && (int)total >= max_frames)
          break;
       if (!frames[i].len) continue;
+
+      {
+         const uint8_t *sub[8];
+         size_t sublen[8];
+         int nsub = split_superframe(frames[i].data, frames[i].len, sub, sublen);
+         int si;
+
+         if (nsub <= 0) {
+            sub[0] = frames[i].data;
+            sublen[0] = frames[i].len;
+            nsub = 1;
+         }
+         for (si = 0; si < nsub; si++) {
+         const uint8_t *cdata = sub[si];
+         size_t clen = sublen[si];
+         (void)cdata;
+         (void)clen;
 
       CHECK(vaBeginPicture(dpy, ctx, surf[surf_i]), "vaBeginPicture");
 
@@ -284,7 +340,7 @@ int main(int argc, char **argv)
          pp.reference_frames[s] = VA_INVALID_SURFACE;
       /* Mesa 前端会用这个长度去解析未压缩头，必须给一个非零上界 */
       pp.frame_header_length_in_bytes =
-         (uint8_t)(frames[i].len > 255 ? 255 : frames[i].len);
+         (uint8_t)(clen > 255 ? 255 : clen);
       pp.pic_fields.bits.show_frame = 1;
       pp.pic_fields.bits.frame_type = 0;
       pp.pic_fields.bits.intra_only = 1;
@@ -292,9 +348,9 @@ int main(int argc, char **argv)
                            sizeof(pp), 1, &pp, &ppbuf), "vaCreateBuffer(pp)");
 
       CHECK(vaCreateBuffer(dpy, ctx, VASliceDataBufferType,
-                           frames[i].len, 1, NULL, &buf), "vaCreateBuffer");
+                           clen, 1, NULL, &buf), "vaCreateBuffer");
       CHECK(vaMapBuffer(dpy, buf, &p), "vaMapBuffer");
-      memcpy(p, frames[i].data, frames[i].len);
+      memcpy(p, cdata, clen);
       CHECK(vaUnmapBuffer(dpy, buf), "vaUnmapBuffer");
       {
          VABufferID bufs[2] = { ppbuf, buf };
@@ -305,7 +361,7 @@ int main(int argc, char **argv)
       st = vaSyncSurface(dpy, surf[surf_i]);
       if (st != VA_STATUS_SUCCESS) {
          fprintf(stderr, "vadec: frame %d vaSyncSurface: %s（0x%x）\n",
-                 i, st2s(st), st);
+                 total, st2s(st), st);
          vaDestroyBuffer(dpy, buf);
          fclose(out);
          return 2;
@@ -321,10 +377,13 @@ int main(int argc, char **argv)
       CHECK(vaDestroyBuffer(dpy, buf), "vaDestroyBuffer");
       CHECK(vaDestroyBuffer(dpy, ppbuf), "vaDestroyBuffer(pp)");
       surf_i = (surf_i + 1) % nsurf;
+      total++;
+         }
+      }
    }
 
    fprintf(stderr, "vadec: 解码 %d 帧，宽高 %ux%u，%s\n",
-           i, width, height, want_p010 ? "P010" : "NV12");
+           total, width, height, want_p010 ? "P010" : "NV12");
    fclose(out);
    vaDestroyContext(dpy, ctx);
    vaDestroySurfaces(dpy, surf, nsurf);

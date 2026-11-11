@@ -514,6 +514,31 @@ HEVC 8bit、H.264 8bit 回归全部逐位一致。`tests/vp9-resize/run-vp9-resi
 与 `-c:v libvpx-vp9` 逐字节比对；向量在
 <https://storage.googleapis.com/downloads.webmproject.org/test_data/libvpx/>。
 
+**2026-11-11 用自写 VAAPI 客户端复核（`tests/vaapi-client/vadec.c`）**：为了排除
+ffmpeg 的帧对齐/拆包干扰，写了一个直连 libva 的最小客户端（`vaGetDisplayDRM` +
+`vaCreateConfig(VP9Profile0)` + 逐包 `vaRenderPicture`/`vaSyncSurface` +
+`vaExportSurfaceHandle` 读回）。它内置 VP9 superframe 拆分（官方首包 117963 B
+拆成 `30299/35391/40875/11384` 四个子帧），实验结论：
+
+- 单解官方 sub0（+尾部 `0x88` 重放）→ 第 0 帧与 libvpx **逐字节一致**；
+  `[本机关键帧, 官方 sub1, 0x89]` → 解码出的 sub1 也与软件一致。
+  ⇒ **intra-only 帧本身的解码路径是正确**，I-5 不是"intra-only 必错"。
+- 但 `[sub0, sub1, sub2, sub3]` 里 sub3（inter，三路参考同指 slot 0）与软件差
+  mean 19.5；把 4 个子帧外层再加 `0x8b`（重放 slot 3）得到的画面与 sub3 输出
+  逐字节相同、同样差 19.5 ⇒ 差异落在"**用 intra-only 写出的参考槽做帧间预测**"
+  这条路上，且发生在解码阶段（不是 PP/输出）。
+- `show_existing_frame` 重放目前是黑的（`va1 vs va0` mean 105.85，非零采样
+  522/1568）：整条"解码 + PPU"由 `JMDEC_DEC_E` 启动，重放帧不需要解码单元，
+  补上 `DEC_MODE`/`dec_set_common_config_regs`/`DEC_OUT_DIS=0`/
+  `DEC_OUT_EC_BYPASS=1`/`vp9_program_pp()` 之后仍黑 ⇒ 需要单独一条"只做格式
+  转换"的启动路径，未实现（见 `73ecbde` 的注释）。
+- 顺带确认一个接口限制：驱动**不拆 superframe**，直连 VAAPI 的客户端必须自己
+  按索引拆（整包送进去会按单帧解，输出与软件差 mean 17.37）；ffmpeg 侧无影响。
+
+复跑：`LIBVA_DRIVERS_PATH=<构建目录> LIBVA_DRIVER_NAME=mwv207 vadec <向量.ivf> out.yuv`
+与 `ffmpeg -c:v libvpx-vp9 -i <向量.webm> -pix_fmt nv12 -f rawvideo` 比对；注意
+ffmpeg 不输出隐藏帧，逐帧索引不能直接对位（要按 show_existing/可见帧对齐）。
+
 ---
 
 ## 2. KMD — 未修复缺陷
