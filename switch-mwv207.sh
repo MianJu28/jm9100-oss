@@ -337,6 +337,14 @@ umd_active_stack() { [ -f "$STATE_FILE" ] && cat "$STATE_FILE" | head -1 || echo
 
 # ----------------------------- check: 预检 ---------------------------------
 umd_check() {
+    # --allow-foreign-kmd: 整套栈切换(stack <target>)时用。
+    # 栈切换的流程是"先部署用户态文件 → 重启释放 KMD → 开机加载目标 KMD"，
+    # 因此调用时机器上跑的还是**上一个**内核驱动（例如从厂商栈切回时的 jmgpu）。
+    # 此时把这条判据当 FAIL 会让 stack oss 在阶段 1 直接中止(2026-11-11 14:01
+    # 实测: 只打印"用户态: 部署开源载荷"就 die 掉)，所以栈切换时降级为 WARN。
+    local allow_foreign=0
+    [ "${1:-}" = "--allow-foreign-kmd" ] && allow_foreign=1
+
     echo "== MWV207 开源栈切换 预检 =="
     local rc=0
 
@@ -344,6 +352,9 @@ umd_check() {
     drv=$(kernel_driver) || true
     if [ "$drv" = "mwv207" ]; then
         echo "  [OK] 内核驱动 = mwv207 (aliases 默认, 无需 KMD 操作)"
+    elif [ $allow_foreign = 1 ]; then
+        echo "  [WARN] 内核驱动 = '${drv:-未知}' —— 整套栈切换模式: 该驱动由重启释放,"
+        echo "         重启后应按目标加载(oss/builtin=mwv207, vendor=jmgpu)"
     else
         echo "  [FAIL] 内核驱动 = '${drv:-未知}' —— 本脚本只针对 mwv207 KMD"; rc=1
     fi
@@ -508,6 +519,9 @@ umd_deploy() {
 # 若各切一次则桌面被杀两遍、登录态丢两次。
 umd_deploy_files() {
     local force="${1:-0}"
+    local allow_foreign="${2:-0}"
+    local check_arg=""
+    [ "$allow_foreign" = 1 ] && check_arg="--allow-foreign-kmd"
 
     # --dry-run 保护: 本函数的部署动作是普通文件操作(不走 run()), 若不拦会真改系统。
     if [ "$DRY_RUN" = 1 ]; then
@@ -517,7 +531,7 @@ umd_deploy_files() {
         return 0
     fi
 
-    umd_check >/dev/null 2>&1 || { umd_check; die "预检未通过, 中止"; }
+    umd_check $check_arg >/dev/null 2>&1 || { umd_check $check_arg; die "预检未通过, 中止"; }
     local src; src=$(payload_src) || die "无载荷"
     local ver; ver=$(payload_version "$src")
 
@@ -1876,7 +1890,8 @@ stack_ensure_oss_umd() {
         return 0
     fi
     log "  用户态: 部署开源载荷"
-    umd_deploy_files 1 >/dev/null || return 1
+    # 第二个参数 = 允许"内核驱动还不是 mwv207"(整套栈切换时必然如此, KMD 由重启换)
+    umd_deploy_files 1 1 >/dev/null || return 1
     rm -f "$LDCONF.vendor-off" "$DRI_LINK.vendor-off" "$VA_LINK.vendor-off" \
           "$VDPAU_LINK.vendor-off" "$VDPAU_LINK.0.vendor-off" 2>/dev/null || true
     log "  用户态: 已切到 oss-${UMD_DEPLOYED_VER:-?}"
@@ -2005,6 +2020,13 @@ stack_prepare_to() {
     fi
     echo "$target $(date '+%F %T')" > "$STACK_PLAN" 2>/dev/null || true
     log "  阶段 1 完成: 文件层已就绪 ($target), 桌面未受影响"
+    # 用户态已按目标部署, 但内核还是老驱动: 从厂商栈切回时 EGL ICD/软链已指向
+    # 开源库, 在重启之前新启动的图形/视频应用会失败 —— 必须紧接着重启。
+    local kmd_now; kmd_now=$(stack_kmd_state 2>/dev/null)
+    if [ -n "$kmd_now" ] && [ "$kmd_now" != "$target" ]; then
+        log "  注意: 用户态已是 $target, 内核仍是 $kmd_now; 阶段 2 会重启释放,"
+        log "        重启前不要新开图形/视频应用(EGL ICD 与 DRI/VA 软链已切走)"
+    fi
     return 0
 }
 
