@@ -36,6 +36,41 @@
 | `refract` | 123 | 98~99 | **1.25×** |
 | `glxgears`（无 vsync） | 15134 | 1808 | **8.4×** |
 
+## 四点五、同条件复测（2026-11-11 14:2x，切回自研栈后同一条命令）
+
+厂商栈那组数字（Score 5209）与自研栈（Score 723–724）现在是**同命令、同机器、同窗口尺寸**
+（`glmark2 -b :duration=3`，800×600，Firefox 都在跑）。另外这次自研栈的 Xorg **已经启用
+glamor 硬件 2D**（`/var/log/Xorg.0.log`：`glamor X acceleration enabled on MWV207`、
+`glamor initialized`），所以此前"ShadowFB 软件合成每帧多 0.5 ms"的解释不再成立。
+
+| 项 | 厂商栈 | 自研栈（本次同条件） |
+|---|---|---|
+| glmark2 Score | 5209 | **723–724** |
+| glxgears（`vblank_mode=0`） | 15134 / 17621 | **3462 / 3591 / 4606 / 5275** |
+
+逐场景（自研 / 厂商，FPS）：`build` 956·1072 / 5982·14856；`texture` 934·936·960 / 5986·5788·6506；
+`shading` 878–884 / 6494–6917；`bump` 896·1047·1025 / 3701·11682·10286；`effect2d` 694·625 / 3551·1656；
+`pulsar` 703 / 8922；`desktop` 279·284 / 868·1213；`buffer` 416–516 / 1159–1463；`ideas` 644 / 1512；
+`jellyfish` 219 / 1175；`terrain` 105 / 155；`shadow` 587 / 1241；`refract` 96 / 123；
+`conditionals` 855–860 / 6126–7589；`function` 866 / 6882–6990；`loop` 865–867 / 6875–6962。
+
+**把差距拆开（自研栈，`build` 场景，同一命令只改收尾方式）**：
+
+| 收尾方式 | FPS | 单帧 | 说明 |
+|---|---|---|---|
+| `--off-screen` | 3607 | 0.277 ms | 只渲染，不出窗 |
+| `--frame-end=finish` | 2447 | 0.409 ms | 渲染 + `glFinish`（多 0.13 ms 的 GPU 同步往返） |
+| 默认（`glXSwapBuffers`） | 1036 | 0.966 ms | **再付 0.56 ms 的 present** |
+
+⇒ 我方 GPU 渲染本身只比厂商慢 1.3–2×（`terrain` 1.5×、`refract` 1.28× 两个重载场景最接近），
+而**每帧 present 固定要 ~0.56 ms**，这才是"便宜帧差 4–10×、重场景只差 1.3×"的成因。
+厂商侧没有这笔开销：它用自有 DDX + EXA 直接把窗口当硬件 surface 合成，完全绕开
+`Present`/glamor 这条客户端→X→合成器的链路。
+
+**下一步（若要继续压这块）**：`strace -c` 显示每帧 1 次 submit ioctl + 2 次 `ppoll`，
+怀疑是 present 完成后等的事件回环（`loader_dri3` 的 buffer 复用/`present_complete`），
+需要分别测"X 侧合成耗时"与"客户端等待耗时"，再看是否能让 buffer 复用不阻塞。
+
 ## 四、结论（可定量）
 
 1. **GPU 吞吐本身没有差到这个程度**：纯 GPU-bound 的 `terrain` / `refract` 只差
