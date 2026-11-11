@@ -817,7 +817,8 @@ mwv207_vp9_reset_probs(struct mwv207_vp9_slice_header *slice_header)
       }
    }
 
-   if (slice_header->key_frame || slice_header->error_resilient
+   if (slice_header->key_frame || slice_header->intra_only
+       || slice_header->error_resilient
        || slice_header->reset_frame_context == 3) {
 
       for (i = 0; i < NUM_FRAME_CONTEXTS; i++)
@@ -1105,6 +1106,11 @@ vp9_decode_uncompressed_header(struct mwv207_vp9_slice_header *slice_header,
 
    slice_header->frame_context_idx = tmp =
       mwv207_sw_get_bits(&rb, NUM_FRAME_CONTEXTS_LG2);
+   /* vp9_setup_past_independence() ends with cm->frame_context_idx = 0 for
+    * every intra-only / error resilient frame. */
+   if (slice_header->key_frame || slice_header->intra_only
+       || slice_header->error_resilient)
+      slice_header->frame_context_idx = 0;
    STREAM_TRACE("Frame context index", slice_header->frame_context_idx);
 
    if (slice_header->key_frame || slice_header->error_resilient
@@ -1603,6 +1609,15 @@ mwv207_vp9_parse_frame(struct mwv207_vp9_slice_header *sh,
    ret = vp9_decode_uncompressed_header(sh, rb, size);
    if (ret)
       return ret;
+
+   /* A show_existing_frame header ends here: libvpx returns from
+    * read_uncompressed_header() right after reading the frame index and never
+    * touches the probability contexts.  Falling through would "decode" a
+    * compressed header out of the padding and overwrite
+    * saved_ctx[frame_context_idx] with garbage, which then desynchronises the
+    * probabilities of the next real frame. */
+   if (sh->show_existing_frame)
+      return MWV207_OK;
 
    /* Inter frames may size themselves from the reference frames; the
     * reference bookkeeping lives in the decode session, so fall back to the

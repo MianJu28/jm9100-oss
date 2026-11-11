@@ -77,6 +77,9 @@ struct mwv207_vp9_state {
    struct mwv207_vp9_slice_header sh;
    /* VP9 carries four coefficient-probability contexts across frames. */
    struct mwv207_vp9_entropy_probs saved_ctx[NUM_FRAME_CONTEXTS];
+   /* Default tables; vp9_setup_past_independence() resets the frame
+    * context that the adaptation blends from to these values. */
+   struct mwv207_vp9_entropy_probs default_entropy;
    /* Copy of saved_ctx[] taken right before the header parser applies the
     * frame's probability updates; the adaptation blends the updated table
     * with this previous one. */
@@ -901,6 +904,13 @@ vp9_adapt_probs(struct mwv207_vp9_state *st, struct mwv207_vp9_slice_header *sh)
 
    if (!sh || sh->error_resilient || sh->frame_parallel_decoding)
       return;
+   /* A show_existing_frame packet carries no coded picture: libvpx returns
+    * from read_uncompressed_header() before any probability handling, so it
+    * must not adapt either.  Adapting here would blend the previous frame's
+    * stale coefficient counts into the saved context and change the tables
+    * the next real frame starts from. */
+   if (sh->show_existing_frame)
+      return;
    if (sh->frame_context_idx >= NUM_FRAME_CONTEXTS)
       return;
 
@@ -922,7 +932,14 @@ vp9_adapt_probs(struct mwv207_vp9_state *st, struct mwv207_vp9_slice_header *sh)
 
    {
       struct mwv207_vp9_entropy_probs fc = *ctx;
-      const struct mwv207_vp9_entropy_probs *pre = &st->pre_ctx[sh->frame_context_idx];
+      /* libvpx blends towards the context stored in
+       * cm->frame_contexts[frame_context_idx]; vp9_setup_past_independence()
+       * has just replaced it with the default tables for key / intra-only /
+       * error resilient frames, so those adapt from the defaults instead of
+       * from whatever the previous GOP left behind. */
+      const bool reset = sh->key_frame || sh->intra_only || sh->error_resilient;
+      const struct mwv207_vp9_entropy_probs *pre =
+         reset ? &st->default_entropy : &st->pre_ctx[sh->frame_context_idx];
 
       vp9_adapt_coef_probs(&fc.a, &pre->a, ct, count_sat, update_factor);
       if (!intra_only) {
@@ -1009,6 +1026,16 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
          sh->ref_frame_map[map_i] = (int32_t)map_i;
    }
 
+   /* vp9_setup_past_independence(): key / intra-only / error resilient frames
+    * clear the segmentation features and put the loop filter deltas back to
+    * their defaults, so a following inter frame must not inherit the previous
+    * GOP's values. */
+   if (sh->key_frame || sh->intra_only || sh->error_resilient) {
+      memset(st->lf_ref_delta, 0, sizeof(st->lf_ref_delta));
+      memset(st->lf_mode_delta, 0, sizeof(st->lf_mode_delta));
+      st->seg_feature_valid = false;
+   }
+
    sh->dec_mode = DEC_MODE_VP9;
    sh->width = width;
    sh->height = height;
@@ -1025,6 +1052,7 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
 
       memset(&defaults, 0, sizeof(defaults));
       mwv207_vp9_reset_probs(&defaults);
+      st->default_entropy = defaults.entropy;
       for (i = 0; i < NUM_FRAME_CONTEXTS; i++)
          st->saved_ctx[i] = defaults.entropy;
       st->ctx_ready = true;
@@ -1305,6 +1333,14 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
           * 关掉 DEC_E 后 PPU 也不会跑；想真正支持得给 PPU 单独找一条
           * "只做格式转换"的启动路径。B3 的判据不依赖这条路径（单帧
           * intra-only 已与 libvpx 逐字节一致），故先留作待办。 */
+         /* The coefficient counters sit in the scratch memory and are
+          * consumed by vp9_adapt_probs() of the *next* frame.  A replay
+          * frame runs no entropy decode at all, so clear them here the way
+          * a real frame would: otherwise the next inter frame adapts its
+          * probability tables from the previous frame's stale counts and
+          * decodes differently from libvpx. */
+         if (st->scratch_cpu)
+            memset(st->scratch_cpu + VP9_COUNTER_OFFSET, 0, VP9_COUNTER_SIZE);
          reg_buf->set_reg(reg_buf, JMDEC_DEC_E, 0);
          st->pending = NULL;
          return;
