@@ -457,6 +457,26 @@ Profile 0 的 intra-only 帧不携带 color config，缺了前面关键帧给它
 
 ### 1.8 B2 侦察：官方 resize 向量一批能解、一批跳过；I-6 已修（`bb5cd9e`）
 
+**2026-11-11 补充：把保护性跳过临时放开后的实测**（`MWV207_VP9_ALLOW_RESIZE`，代码已撤回）。
+`vp90-2-21-resize_inter_320x180_5_1-2.webm`（30 包，352×288 的 inter 帧引用 320×180 的
+槽）在放开后能一路走到 winsys 提交，但**提交失败**：
+
+```
+mwv207_drm_cmdbuf_commit: submit failed: -34 (Numerical result out of range)
+```
+
+`-34` 是 KMD `src/kernel-6.6/mwv207_submit.c` 里 `mwv207_submit_patch_entry()` 的
+`-ERANGE`（`reloc->cmd_offset + {2,4,8} > dat_size` 或 `reloc->bo_offset >= bo_size`），
+即"跨尺寸帧的寄存器流/地址表超出了为等尺寸帧准备的缓冲或槽几何"。同时 `vadec` 仍
+按第一阶段给的 352×288 建 surface，输出的 30 帧与软件（320×180、20 帧）不可比。
+⇒ B2 真正实现需要三件事，都不是一行改动：
+① 参考槽按"每槽自己的几何"记账（现在 `st->ref_stride` 是首帧 `frame_bytes` 固定值，
+`vp9_write_ref_regs()` 用 `vp9_frame_geometry(refw,refh)` 算步长但槽偏移仍用 `slot*ref_stride`）；
+② 输出/应用 surface 在帧尺寸变化时重建（VAAPI 前端在 `vaCreateContext` 之后不会自己换 surface 尺寸）；
+③ 寄存器流的容量要按最大帧而非首帧分配（上面的 `-ERANGE`）。
+在没做完这三件事之前，保留"尺寸不一致即跳过 + `vaSyncSurface()` 报错"的行为是对的。
+
+
 B2 要的是"跨尺寸参考"（参考帧尺寸与当前帧不同）。官方测试向量里有两族现成的：
 
 | 向量 | 说明 | 硬件 vs libvpx |
