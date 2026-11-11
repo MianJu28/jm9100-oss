@@ -419,10 +419,20 @@ ffmpeg 的包重组，直接走 libva 解码，把问题收窄到三个事实：
 跳过上报失败），并补上该分支的输出面地址/步长/位深编程。
 
 **仍未解决**：`show_existing` 的**重放画面**目前是全黑（`[关键帧, 0x88]` 时
-va1 与 va0 差 mean 105.85、非零采样 522/1568）。参考槽的写入本身有内容（
-`vp9_refresh_slots` 拷贝的源缓冲非零），所以问题在重放后 PPU 读的是哪块内存 —— 该分支
-在 `mwv207_pp_set_regs()` 之前就 `return`，PPU 源面仍沿用上一帧的编程。这条属于
-B3 的"参考槽重放"能力，与 I-5 分开记。
+va1 与 va0 差 mean 105.85、非零采样 522/1568）。原因已查清：整条解码+PPU 管线由
+`JMDEC_DEC_E` 启动，`show_existing` 不需要解码单元，把 `DEC_E` 关掉后 PPU 也不会
+执行（补上 `DEC_MODE`/公共配置/`mwv207_pp_set_regs()` 后画面仍是黑的，实测确认）。
+要真正支持得给 PPU 单独找一条"只做格式转换"的启动路径，属独立课题；B3 的判据不
+依赖它（单帧 intra-only 已与 libvpx 逐字节一致）。参考槽副本本身内容正常
+（`vp9_refresh_slots()` 的源缓冲非零）。
+
+**降低范围的一条反证**：本机自造的 "关键帧 / 改写后的 intra-only + inter" 对照
+（`io_fp0` 序列）里，硬件把 intra-only 帧当参考解出的 inter 帧与软件**逐位一致**
+（`hw A[0] == B[1]`、`sw A[0] == B[1]`），所以"intra-only 当参考"本身没有问题，
+官方向量里出错的应是该流特有的属性。另注意：把官方向量拆成 `[sub0, sub3]` 两帧后，
+**libvpx 自己也会拒绝**（`Referenced frame has incompatible color format`，因为
+Profile 0 的 intra-only 帧不携带 color config，缺了前面关键帧给它定调）——这类
+拆分样本不能用来判定驱动。
 
 **待查方向**：① ~~`fpar=0`~~、~~`refresh_frame_flags=0x01`~~、~~高 QP~~ —— 均已被自产
 样片实验排除；② **`transform_mode`**：官方样片 `txmode=3`（ALLOW_32X32），本机编码器

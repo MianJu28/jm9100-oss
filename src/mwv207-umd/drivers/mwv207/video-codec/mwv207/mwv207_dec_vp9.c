@@ -394,6 +394,45 @@ vp9_write_ref_regs(struct mwv207_vp9_state *st,
  * grows to the largest picture seen so far and the already stored pictures
  * are relocated when that happens. */
 static void
+vp9_program_pp(struct mwv207_video_reg_buf *reg_buf,
+               struct mwv207_video_decoder *decoder,
+               struct pipe_video_buffer *target)
+{
+   struct mwv207_video_dec *dec = decoder->decoder;
+
+   if (dec->dec_param.pp_enabled) {
+      mwv207_pp_unit_config ppu_ext_cfg[DEC_MAX_PPU_COUNT] = {0};
+      uint32_t in_width = align(decoder->base.width, 16);
+      uint32_t in_height = align(decoder->base.height, 16);
+
+      mwv207_dec_pp_params_init(dec, ppu_ext_cfg, dec->dec_param.bit_depth,
+                                target);
+      mwv207_pp_unit_set_int_config(dec->ppu_cfg, ppu_ext_cfg,
+                                    dec->dec_param.bit_depth, 0, 0);
+
+      for (uint32_t i = 0; i < DEC_MAX_PPU_COUNT; i++) {
+         if ((dec->hw_feature.pp_up_lanczos[i]
+              || dec->hw_feature.pp_down_lanczos[i])
+             && (dec->ppu_cfg[i].lanczos_table == NULL)) {
+            uint32_t size = LANCZOS_BUFFER_SIZE * sizeof(int32_t);
+
+            dec->ppu_cfg[i].lanczos_table = mwv207_video_buffer_create_2(
+               decoder->base.context, size, PIPE_USAGE_STAGING);
+         }
+      }
+
+      if (mwv207_check_pp_unit_config(&dec->hw_feature, in_width, in_height,
+                                      0, dec->ppu_cfg)) {
+         MWV207_LOG(MWV207_LEVEL_ERROR, "vp9: pp config check failed\n");
+      }
+      mwv207_calc_each_pp_buffer_size(dec->ppu_cfg, 0, 0);
+      mwv207_pp_set_regs(reg_buf, &dec->hw_feature, &dec->ppu_cfg[0], 0, 0);
+      reg_buf->set_reg(reg_buf, JMDEC_PP_IN_FORMAT_U, 1);
+   }
+
+}
+
+static void
 vp9_refresh_slots(struct mwv207_video_decoder *decoder,
                   struct mwv207_vp9_state *st, uint32_t refresh_flags,
                   struct mwv207_video_buffer *buf, uint32_t width,
@@ -1261,6 +1300,11 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
          reg_buf->set_reg(reg_buf, JMDEC_BIT_DEPTH_OUT_MINUS8, sh->bit_depth - 8);
          reg_buf->set_reg(reg_buf, JMDEC_PIC_WIDTH_IN_CBS, (width + 7) >> 3);
          reg_buf->set_reg(reg_buf, JMDEC_PIC_HEIGHT_IN_CBS, (height + 7) >> 3);
+         /* 已知限制：重放画面目前是全黑。PPU 的输入是解码单元的输出面，
+          * 整条管线由 DEC_E 启动，而 show_existing 不需要解码单元，
+          * 关掉 DEC_E 后 PPU 也不会跑；想真正支持得给 PPU 单独找一条
+          * "只做格式转换"的启动路径。B3 的判据不依赖这条路径（单帧
+          * intra-only 已与 libvpx 逐字节一致），故先留作待办。 */
          reg_buf->set_reg(reg_buf, JMDEC_DEC_E, 0);
          st->pending = NULL;
          return;
@@ -1430,35 +1474,7 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
    vp9_set_addr(reg_buf, JMDEC_DEC_BSD_CTRL_BASE_LSB, st->scratch->res->bo,
                 st->filter_offset + (VP9_FILTER_SIZE / 2));
 
-   if (dec->dec_param.pp_enabled) {
-      mwv207_pp_unit_config ppu_ext_cfg[DEC_MAX_PPU_COUNT] = {0};
-      uint32_t in_width = align(decoder->base.width, 16);
-      uint32_t in_height = align(decoder->base.height, 16);
-
-      mwv207_dec_pp_params_init(dec, ppu_ext_cfg, dec->dec_param.bit_depth,
-                                target);
-      mwv207_pp_unit_set_int_config(dec->ppu_cfg, ppu_ext_cfg,
-                                    dec->dec_param.bit_depth, 0, 0);
-
-      for (uint32_t i = 0; i < DEC_MAX_PPU_COUNT; i++) {
-         if ((dec->hw_feature.pp_up_lanczos[i]
-              || dec->hw_feature.pp_down_lanczos[i])
-             && (dec->ppu_cfg[i].lanczos_table == NULL)) {
-            uint32_t size = LANCZOS_BUFFER_SIZE * sizeof(int32_t);
-
-            dec->ppu_cfg[i].lanczos_table = mwv207_video_buffer_create_2(
-               decoder->base.context, size, PIPE_USAGE_STAGING);
-         }
-      }
-
-      if (mwv207_check_pp_unit_config(&dec->hw_feature, in_width, in_height,
-                                      0, dec->ppu_cfg)) {
-         MWV207_LOG(MWV207_LEVEL_ERROR, "vp9: pp config check failed\n");
-      }
-      mwv207_calc_each_pp_buffer_size(dec->ppu_cfg, 0, 0);
-      mwv207_pp_set_regs(reg_buf, &dec->hw_feature, &dec->ppu_cfg[0], 0, 0);
-      reg_buf->set_reg(reg_buf, JMDEC_PP_IN_FORMAT_U, 1);
-   }
+   vp9_program_pp(reg_buf, decoder, target);
 
    if (sh->log2_tile_columns || sh->log2_tile_rows) {
       reg_buf->set_reg(reg_buf, JMDEC_TILE_ENABLE, 1);
