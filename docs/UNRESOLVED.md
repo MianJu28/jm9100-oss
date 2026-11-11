@@ -766,7 +766,8 @@ ffmpeg 不输出隐藏帧，逐帧索引不能直接对位（要按 show_existin
 提交、H.264/HEVC/VP9 P2 解码逐位一致）；**官方 intra-only 样本走完整 ffmpeg 路径**
 （`ffmpeg -hwaccel vaapi -hwaccel_output_format vaapi -i vp90-2-16-intra-only.webm -vf
 hwdownload,format=nv12 -pix_fmt yuv420p`）与 `-c:v libvpx-vp9` 逐帧比对：
-**7 帧全部 IDENTICAL（0 差异帧）**；`tools/vp9-regression.sh` 18/18；
+**7 帧全部 IDENTICAL（0 差异帧）**；同批 `vp90-2-10-show-existing-frame.webm`（6 个 inter 隐藏帧
++ 6 个单字节重放）**整文件 2585088 B 全等**；`tools/vp9-regression.sh` 18/18；
 `tests/vp9-resize/run-vp9-resize.sh --local /tmp/vp9b2` → `vp90-2-14 … IDENTICAL 跳过帧=0`、
 `vp90-2-21 … SKIPPED-AS-ERROR 跳过帧=9`。
 
