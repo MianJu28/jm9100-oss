@@ -123,7 +123,49 @@ vs 厂商 ≈0.05–0.09 ms），那是另一条线（着色器/光栅化开销�
 ② KMD 在 plane 更新时写 supertile 版本与 stride/高度对齐；③ UMD 允许
 `PIPE_BIND_SCANOUT` 走 `MWV207_SUPERTILED`。
 
-## 6. 复现命令
+
+## 5. 进一步取证：厂商栈是不是真的用"平铺扫描出"？
+
+对厂商 KMD 做的对照（`/lib/modules/6.6.155-arm64-desktop-hwe/updates/dkms/jmgpu.ko`，
+stripped 但有函数名；源码 `ref/vendor-1.8.0` 的 75 个 `.c`）：
+
+- 厂商的主平面更新函数（`j9_handle__attribute_chalkstone`，即 plane atomic update）
+  **只写 5 个寄存器**，与我们的 `mwv207_primary_atomic_update()`
+  （`src/kernel-6.6/dc/mwv207_va.c:170-206`）完全一一对应：
+  `0x434 = pitch>>4`、`0x43C = ((h-1)<<16)|(w-1)|0x3`、`0x4F8 = (w-1)<<16`、
+  `0x438 = addr>>6`、`0x430` 按 fourcc 置格式位（`XR30`/`AR30` → `|1`，
+  `AR24`/`XR24` → `&= ~3`，`RG16`/`RGB565` → `|2`）。
+  **没有任何平铺相关位**。
+- 厂商 KMD 确实有 `DRM_IOCTL_JM_GEM_SET_TILING`（`DRM_JM_GEM_TILING_SUPERTILED`），
+  但发布源码里 `tilingMode` 只在 set/get ioctl 里出现，**没有消费者**；
+  厂商 DDX `mwv207_drv.so` 也没有 import `drm_jmgpu_bo_set_tiling`。
+- 结论：**没有证据表明厂商用平铺缓冲扫描出**。厂商的 `present` 更快，更可能是
+  它的 DDX 用 2D 引擎（EXA）做合成拷贝，而不是 glamor 的 3D 着色器采样。
+
+## 6. 关键补充测量：blit 写线性目标远快于 3D 写线性目标
+
+同一对 FBO（800×600），只改驱动布局（`MWV207_FORCE_LINEAR=1` 的临时构建）：
+
+| 操作 | 平铺 | 线性 |
+|---|---|---|
+| `glBlitFramebuffer`（FBO→FBO） | **0.100 ms（38.3 GB/s）** | **0.222 ms（17.3 GB/s）** |
+| 着色器采样拷贝（纹理→FBO） | 0.184 ms（20.9 GB/s） | 0.576 ms（6.7 GB/s） |
+
+⇒ 线性目标上，**blit 比着色器快 2.6×**（0.222 vs 0.576）。这解释了厂商的快：
+2D/EXA 路径是 blit 级别，glamor 是着色器级别。
+
+## 7. 由此得出的三个可实施项（按性价比）
+
+| 方案 | 改动 | present（800×600） | `glmark2 build` | 备注 |
+|---|---|---|---|---|
+| A. 让 glamor 用 blit 而不是着色器 | **X server 补丁**（glamor 21.1 只有着色器路径，已查 `glamor_copy.c`） | 0.65 → ≈0.30 ms | ≈0.65 ms（≈1500 FPS） | 不动驱动与 KMD，风险最低；需自编 xorg-server |
+| B. 扫描出平铺（UMD+KMD） | UMD 放开 SCANOUT 平铺 + KMD 新增平铺显示支持 | ≈0.10–0.15 ms | ≈0.45 ms（≈2200 FPS） | 但见第 5 节：厂商也没这么做，KMD 侧寄存器序列无公开证据，风险高 |
+| C. 只查我们的 3D "写线性"慢在哪 | 仅 UMD（PE 寄存器/缓存策略） | 若是 PE 写策略问题，可直接降到 blit 级 | — | 最省事，但尚无证据链 |
+
+建议顺序：**C（先查 3D 写线性为何只有 3.3 GB/s）→ A（glamor blit 补丁）→ B（最后做）**。
+其中 B 的证据基础比原先设想的弱：厂商 plane 更新与我们完全相同，看不出平铺扫描出。
+
+## 8. 复现命令
 
 ```sh
 export DISPLAY=:1 XAUTHORITY=/home/admin/.Xauthority
@@ -134,4 +176,5 @@ qdbus org.kde.KWin /Compositor suspend && vblank_mode=0 glmark2 -b build:duratio
 ```
 
 `/tmp/sw.c`（只 swap）、`/tmp/fill2.c`（采样带宽，含 stride 扫描）、
-`/tmp/blit.c`（blit 带宽）为本次临时工具，未入库；需要时可按第 2 节表格重写。
+`/tmp/blit.c`（blit 带宽）、`/tmp/blittest.c`（FBO→FBO blit）为本次临时工具，未入库；
+需要时可按第 2/6 节表格重写。

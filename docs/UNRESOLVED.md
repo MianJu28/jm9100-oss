@@ -1441,15 +1441,42 @@ initramfs 已刷并解包核对（`modinfo -F srcversion` 均为 `8DFC52…`）�
   clear + 不采样的三角形写 1.9 MB，平铺目标 **0.185 ms（10.4 GB/s）**、
   线性目标 **0.582 ms（3.3 GB/s）** ⇒ 3D 访问线性表面不论读还是写都只有平铺的 1/3。
   因此"只平铺窗口 pixmap、屏幕保持线性"几乎无收益（写入端仍 0.58 ms 级）。
-- **可选改法**：① 只平铺窗口 pixmap —— 收益被写线性端抵消，基本无效；
-  ② **窗口与扫描出都平铺**（UMD 放开 `PIPE_BIND_SCANOUT` 走 `MWV207_SUPERTILED` +
-  KMD 编 DE supertile 版本/布局）——present 0.55 → ≈0.20 ms、`build` 0.95 → ≈0.30 ms
-  （≈3300 FPS），与厂商 5982 FPS 差 ≈1.8×；前提是硬件 DE supertile 可用
-  （`MWV207REG_DE_GENERAL_CONFIG_SUPERTILE_VERSION` V1/V2/V3、
-  `JM_MINOR_FEATURES4_DE_SUPERTILE_AVAILABLE`），但 `src/kernel-6.6/dc/` 当前完全不
-  编程它，布局不一致会花屏，属中等工程；③ 不改驱动改合成路径——开合成同样要采样
-  线性纹理（无收益），只有全屏 direct-scanout 才变真 flip（实测全屏 + 无合成时被
-  vblank 锁到 9.9 ms/帧）。
+- **2026-11-11 追加取证（推翻"厂商用平铺扫描出"的假设）**：
+  - 反汇编厂商 KMD（`jmgpu.ko` 的 `j9_handle__attribute_chalkstone`，即 plane atomic update）
+    显示它**只写 5 个寄存器**，与我们 `mwv207_primary_atomic_update()`
+    （`src/kernel-6.6/dc/mwv207_va.c:170-206`）完全相同：`0x434 = pitch>>4`、
+    `0x43C = ((h-1)<<16)|(w-1)|0x3`、`0x4F8 = (w-1)<<16`、`0x438 = addr>>6`、
+    `0x430` 按 fourcc 置格式位。**没有任何平铺相关位**。
+  - 厂商 KMD 有 `DRM_IOCTL_JM_GEM_SET_TILING`（`DRM_JM_GEM_TILING_SUPERTILED`），
+    但发布源码里 `tilingMode` 只被 set/get ioctl 存取、无消费者；厂商 DDX
+    `mwv207_drv.so` 也没 import `drm_jmgpu_bo_set_tiling`。
+  - ⇒ **厂商的扫描出并不是平铺的**，它快是因为 DDX 用 2D 引擎（EXA）做合成拷贝，
+    而 glamor 用 3D 着色器采样。
+- **2026-11-11 追加测量（blit 比着色器快 2.6×）**：同一对 800×600 FBO，只切换驱动布局：
+
+  | 操作 | 平铺目标 | 线性目标 |
+  |---|---|---|
+  | `glBlitFramebuffer`（FBO→FBO） | **0.100 ms（38.3 GB/s）** | **0.222 ms（17.3 GB/s）** |
+  | 着色器采样拷贝 | 0.184 ms（20.9 GB/s） | 0.576 ms（6.7 GB/s） |
+
+  ⇒ 线性目标上 blit 0.222 ms 明显快过着色器 0.576 ms；差别在"谁来做这次拷贝"
+  （2D/blit 引擎 vs PE 着色器）。
+- **X server 侧核实**：glamor 21.1.12 的 `glamor/glamor_copy.c` 里 `glamor_copy_gl()`
+  只有 `needs_temp`/`fbo_fbo_temp`/`fbo_fbo_draw`/`cpu_fbo`/`fbo_cpu` 五条路径，
+  **没有 blit 路径**（`glamor.c:770` 的 `has_fbo_blit` 置位后全树再无使用）⇒
+  glamor 的合成拷贝必然走着色器；我方 GL 是广播 `GL_EXT_framebuffer_blit` 的，
+  属 glamor 缺路径而非驱动缺能力。
+- **可选改法（按性价比重排）**：
+  ① **A. 让 glamor 用 blit**：打 X server 补丁（在 `glamor_copy_gl()` 里对
+     同格式、无变换的拷贝走 `glBlitFramebuffer`）——present 0.65 → ≈0.30 ms、
+     `build` ≈0.65 ms（≈1500 FPS）；不动驱动与 KMD，风险最低，但要把 xorg-server
+     纳入我们的构建/打包流程。
+  ② **C. 先查我方 3D"写线性"为何只有 3.3 GB/s**：若只是 PE 写策略/寄存器问题，
+     修好后可直接接近 blit 速率（0.22 ms），收益最大且只动 UMD；目前尚无证据链。
+  ③ **B. 扫描出平铺（原方案②）**：证据基础已被上面的反汇编削弱（厂商自己也没这么做），
+     需 KMD 编 DE supertile 且布局不一致会花屏，风险最高、收益 ≈2200 FPS（仍差厂商 2.7×）。
+  ④ 只平铺窗口 pixmap —— 收益被写线性端抵消，基本无效；开合成同样要采样线性纹理
+     （无收益），只有全屏 direct-scanout 才变真 flip。
 - 详细数据与复现命令：`reports/PRESENT-PATH-20261111.md`。
 - 关联：`reports/GLMARK2-VENDOR-VS-OSS-20261111.md`（同条件总分与逐场景对照）。
 - 另注：`glxgears` 的 `vblank_mode=0` 我方 3462–5275 FPS vs 厂商 15134–17621，

@@ -211,9 +211,17 @@ OpenCL/VA-API/VDPAU 全走我们的栈；自建 KMD 在跑（srcversion `D5EEF36
   pixmap 合成到屏幕 pixmap，而两者都被 `mwv207_can_tile()` 的
   `enable_scanout_tile = false` 强制成线性；本驱动对线性表面的采样只有
   6.7 GB/s、且**写入线性目标同样只有 10.4→3.3 GB/s**，于是 800×600 的 present 要
-  ≈0.55 ms（纯 swap 0.65 ms，而 blit 只要 0.20 ms）。只平铺窗口 pixmap 无收益；
-  **唯一能接近厂商的改法是窗口+扫描出都平铺（需 KMD 编 DE supertile）**，
-  估算 present ≈0.20 ms、`build` ≈0.30 ms（≈3300 FPS，厂商 5982）。
+  ≈0.55 ms（纯 swap 0.65 ms）。
+  **2026-11-11 追加取证推翻了"厂商用平铺扫描出"**：反汇编厂商 `jmgpu.ko` 的
+  plane atomic update（`j9_handle__attribute_chalkstone`）只写与我们完全相同的
+  5 个寄存器（`0x434/0x43C/0x4F8/0x438/0x430`），无任何平铺位；其 DDX 也不 import
+  `drm_jmgpu_bo_set_tiling`。厂商快在**用 2D 引擎（EXA）做合成拷贝**，而 glamor
+  21.1 的 `glamor_copy.c` 根本没有 blit 路径（只有着色器）。
+  实测同一对 FBO：`glBlitFramebuffer` 线性目标 **0.222 ms（17.3 GB/s）**、
+  着色器 0.576 ms ⇒ **blit 快 2.6×**。
+  因此改法按性价比重排：**A. 给 glamor 加 blit 快路径（X server 补丁，不动驱动，
+  ≈0.30 ms/≈1500 FPS）→ C. 查我方 3D 写线性为何只有 3.3 GB/s（只动 UMD，潜力最大）
+  → B. 扫描出平铺（证据基础被削弱、风险最高）**。
   数据见 `reports/PRESENT-PATH-20261111.md` 与 `docs/UNRESOLVED.md` 同名小节。
 
 ### 待办（按价值排序）
