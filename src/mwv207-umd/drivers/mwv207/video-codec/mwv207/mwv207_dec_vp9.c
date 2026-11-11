@@ -1120,16 +1120,14 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
             reg_buf->set_reg(reg_buf, JMDEC_DEC_E, 0); decoder->frame_skipped = true;
             return;
          }
-         if (st->ref_slot_w[slot] != sh->width ||
-             st->ref_slot_h[slot] != sh->height) {
-            MWV207_LOG(MWV207_LEVEL_ERROR,
-                       "vp9: reference %u is %ux%u but frame is %ux%u,"
-                       " unsupported; frame skipped\n",
-                       k, st->ref_slot_w[slot], st->ref_slot_h[slot],
-                       sh->width, sh->height);
-            reg_buf->set_reg(reg_buf, JMDEC_DEC_E, 0); decoder->frame_skipped = true;
-            return;
-         }
+         /* Cross-size references are legal (VP9 6.2 frame_size semantics)
+          * and the ASIC scales them: every reference bank has its own
+          * width/height/stride registers plus the 14-bit HOR/VER_SCALE
+          * factors programmed from the slot's own geometry in
+          * vp9_write_ref_regs().  A differing size therefore needs no
+          * special-casing here; previously such frames were skipped, which
+          * broke streams that switch resolution at a keyframe followed by
+          * inter frames referencing the old size (B2). */
       }
    }
    if (sh->vp_profile != 0 || sh->bit_depth != 8) {
@@ -1288,6 +1286,14 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
       uint32_t buff_size = NEXT_MULTIPLE(frame_bytes, 16);
 
       buf->mwv207_offset_info.luma_size = luma_size;
+      /* B2：分辨率可变（resize_inter）的流里，后面一帧可能比首帧大。
+       * 这块 res 是我们自己的 staging（PP 的输出目标是 buf->resources[]，
+       * 与应用 surface 无关），所以尺寸不够时可以安全地释放重建；
+       * 不重建就会按更大的 frame_bytes 写越界。 */
+      if (buf->res && buf->res->size < buff_size) {
+         buf->virtual_addr = NULL;
+         pipe_resource_reference((struct pipe_resource **)&buf->res, NULL);
+      }
       if (!buf->res)
          mwv207_video_buffer_alloc_buffer(decoder->base.context, buf,
                                           buff_size, PIPE_USAGE_STAGING);
