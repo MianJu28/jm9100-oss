@@ -1325,6 +1325,51 @@ initramfs 已刷并解包核对（`modinfo -F srcversion` 均为 `8DFC52…`）�
   NV12/P010 输出，读回走 `vaExportSurfaceHandle` + 逐 plane `mmap`；I-5/B2 取证用，
   `cc -O2 -o /tmp/vadec tests/vaapi-client/vadec.c -lva -lva-drm`）、`tests/run-all.sh`
 
+## `umd install` 后屏幕卡死、必须手动重启 lightdm —— 已修（2026-11-11）
+
+**现象**：14:43:02 执行 `sudo ./switch-mwv207.sh umd install`（载荷 r25），桌面直接卡在
+最后一帧不动；用户手动 `systemctl restart lightdm` 之后恢复正常。
+
+**日志证据**：
+
+```
+14:43:02.988  dde-session: X connection closed, logging out
+14:43:13.201  systemd[1]: lightdm.service: State 'stop-sigterm' timed out. Killing.
+14:43:13.203  systemd[1]: lightdm.service: Failed to kill control group ..., ignoring: Invalid argument
+14:43:19.572  systemd[1]: lightdm.service: Failed with result 'timeout'.
+14:44:39.770  lightdm[227894]: not first run gen_upgrade_check_config.sh   ← 用户手动拉起
+```
+
+**根因（两条，第二条是主因）**：
+
+1. **顺序错**：`umd_install` 是"先 `umd_deploy`（会 `rm -rf` 安装目录再拷 11 个文件、
+   82 MB 的 `libmwv207_dri.so` 在内）→ 再重启 lightdm"。已经加载的进程靠旧 inode 继续跑，
+   但**拷贝窗口里的任何 lazy `dlopen` 都会撞上缺失/半拷贝的 .so**（Xorg 的 glamor、
+   Qt/Chromium 的 EGL 都是按需加载），切换正好落在这个窗口里。
+2. **`systemctl restart lightdm` 在本机不可靠**：`/usr/lib/systemd/system/lightdm.service`
+   带 `TimeoutStopUSec=10s`，而 DDE 会话拆解（dde-session/kwin/dde-shell 一串 unit）要十几秒：
+   systemd 在 10 s 时 SIGKILL 主进程 → `Failed to kill control group (EINVAL)` →
+   `Failed with result 'timeout'`。此时 **`restart` 的 start 半边不会执行**，没有 greeter，
+   屏幕就停在旧帧上。原来的 `|| die` 也救不了（die 之后照样没桌面）。
+   （同一个 10 s 超时也解释了 2026-11-10 16:30 那次"整屏卡住、Xorg 不响应 SIGTERM"。）
+
+**修法（`switch-mwv207.sh`，2026-11-11）**：
+
+- 新增 `lightdm_ensure_stop_timeout()`：写 `/etc/systemd/system/lightdm.service.d/20-mwv207-switch.conf`
+  （`[Service] TimeoutStopSec=40`）并 `daemon-reload`，让优雅停止有时间跑完（幂等，已在本机生效，
+  `systemctl show lightdm -p TimeoutStopUSec` 现为 `40s`）。
+- 新增 `lightdm_stop_wait()`：`stop --no-block` + 轮询最多 40 s，仍活着才 `kill -s SIGKILL`，
+  最后 `reset-failed`（否则 failed 状态会挡住下一次 start）。
+- 新增 `lightdm_start_wait()`：`start --no-block` + 轮询 60 s，起不来就 `reset-failed` 再拉一次。
+- 新增 `lightdm_restart_recover()` = stop_wait + start_wait，替换脚本里三处裸
+  `systemctl restart lightdm`（`umd_activate`、回滚路径、`umd_do_rollback`）。
+- `umd_install` 改为**先停 lightdm 再部署**（停不下来也继续，只是退回"边跑边换"并记日志）。
+- `stop_display()`/`start_display()`（`stack`/`kmd` 路径用的）也换成上面两个 helper，
+  避免 `kmd install` 撞同一个 10 s 超时。
+
+**未验证**：修复后的 `umd install` 需要用户下次装载荷时实测（会停一次 lightdm，
+本会话跟着中断，属预期）。
+
 ## 火狐浏览器自身 UI 的文字错位（r8 起可见）—— 已修（2026-11-07）
 
 - 现象：页面内容正常，但浏览器 chrome（标签标题、地址栏、导航按钮、会话恢复条、

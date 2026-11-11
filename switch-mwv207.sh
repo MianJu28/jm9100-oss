@@ -635,6 +635,85 @@ EOF
 }
 
 # 起看门狗 + 重启 lightdm + 自检（部署之后单独调用）
+# ---------------------------------------------------------------------------
+# lightdm 生命周期 (2026-11-11 修复)
+#
+# 两个实测缺陷，合起来会把桌面弄成"卡住的旧画面"：
+#   1) umd install 原来是"先删库里目录 + 重新拷贝，再重启 lightdm"。已经加载的
+#      进程靠旧 inode 继续跑（unlink 安全），但**拷贝窗口里任何 lazy dlopen 都会
+#      撞上缺失/半拷贝的 .so**（Xorg 的 glamor、Qt/Chromium 的 EGL 都是按需加载）。
+#      ⇒ 换库前先停 lightdm，把风险窗口关掉（14:43 那次切换正好落在这个窗口里）。
+#   2) 本机 lightdm.service 是 `TimeoutStopUSec=10s`，而 DDE 会话拆解要十几秒，
+#      于是 systemd 在 10s 时 SIGKILL 主进程、`Failed to kill control group /
+#      Invalid argument`、`Failed with result 'timeout'`，`systemctl restart`
+#      的 start 半边根本不执行 ⇒ 没有 greeter、屏幕停在旧帧。
+#      ⇒ 停要给它更长的优雅时间 (drop-in)，起要能容错重试。
+# ---------------------------------------------------------------------------
+LIGHTDM_DROPIN=/etc/systemd/system/lightdm.service.d/20-mwv207-switch.conf
+
+# 给 lightdm 一个够长的优雅停止时间。幂等。
+lightdm_ensure_stop_timeout() {
+    [ "$DRY_RUN" = 1 ] && return 0
+    [ -f "$LIGHTDM_DROPIN" ] && grep -q '^TimeoutStopSec=' "$LIGHTDM_DROPIN" && return 0
+    mkdir -p "${LIGHTDM_DROPIN%/*}" || return 1
+    cat > "$LIGHTDM_DROPIN" <<'EOD'
+[Service]
+# mwv207-oss switch: DDE 会话拆解常超过默认 10s，超时会让 restart 的 start 半边
+# 直接不执行，桌面停在旧画面。40s 足够正常退出，异常时也不会拖太久。
+TimeoutStopSec=40
+EOD
+    systemctl daemon-reload 2>/dev/null || true
+    log "已安装 lightdm 停止超时 drop-in: $LIGHTDM_DROPIN (TimeoutStopSec=40)"
+    return 0
+}
+
+# 停 lightdm：先优雅停，最多等 $1 秒，仍活着就 SIGKILL；最后 reset-failed 免得
+# 下一次 start 被 failed 状态挡住。
+lightdm_stop_wait() {
+    local timeout="${1:-40}" i
+    [ "$DRY_RUN" = 1 ] && { log "[dry-run] 将停止 lightdm (最多等 ${timeout}s)"; return 0; }
+    systemctl is-active --quiet lightdm || { systemctl reset-failed lightdm 2>/dev/null || true; return 0; }
+    lightdm_ensure_stop_timeout
+    systemctl stop --no-block lightdm 2>/dev/null || true
+    for i in $(seq 1 "$timeout"); do
+        systemctl is-active --quiet lightdm || break
+        sleep 1
+    done
+    if systemctl is-active --quiet lightdm; then
+        log "[警告] lightdm ${timeout}s 内未退出，发送 SIGKILL (会带走图形会话)"
+        systemctl kill -s SIGKILL lightdm.service 2>/dev/null || true
+        sleep 2
+    fi
+    systemctl reset-failed lightdm 2>/dev/null || true
+    return 0
+}
+
+# 起 lightdm：--no-block + 轮询 is-active；没起来就 reset-failed 再拉一次。
+lightdm_start_wait() {
+    local timeout="${1:-60}" i
+    if [ "$DRY_RUN" = 1 ]; then log "[dry-run] 将启动 lightdm"; return 0; fi
+    systemctl reset-failed lightdm 2>/dev/null || true
+    systemctl start --no-block lightdm 2>/dev/null || true
+    for i in $(seq 1 "$timeout"); do
+        if systemctl is-active --quiet lightdm; then return 0; fi
+        sleep 1
+    done
+    log "[警告] lightdm ${timeout}s 内未 active，重试一次 (reset-failed + start)"
+    systemctl reset-failed lightdm 2>/dev/null || true
+    systemctl start lightdm 2>/dev/null || true
+    for i in $(seq 1 30); do
+        if systemctl is-active --quiet lightdm; then return 0; fi
+        sleep 1
+    done
+    return 1
+}
+
+# 停 + 起（替换原来的 systemctl restart，restart 在 stop 超时时不会执行 start 半边）
+lightdm_restart_recover() {
+    lightdm_stop_wait 40
+    lightdm_start_wait 60
+}
+
 umd_activate() {
     # --dry-run 保护: 这里会重启 lightdm(杀图形会话), 演练模式绝不能真跑。
     if [ "$DRY_RUN" = 1 ]; then
@@ -649,7 +728,9 @@ umd_activate() {
         --description="mwv207-oss switch watchdog" \
         "$SELF_INSTALLED" watchdog "$STAMP" >/dev/null 2>&1 || log "[警告] 看门狗启动失败, 依赖脚本自检"
     log "重启 lightdm (图形会话将终止, 请稍后重新登录)..."
-    systemctl restart lightdm || die "lightdm 重启失败 (图形会话可能已中断)"
+    # 用 stop+start 而不是 systemctl restart: 本机 lightdm 的停止经常超过
+    # TimeoutStopUSec，restart 在 stop 失败时不会执行 start 半边 → 无 greeter。
+    lightdm_restart_recover || die "lightdm 未能在 100s 内恢复 (图形会话可能已中断)"
 
     sleep 8
     if umd_wait_xorg; then
@@ -664,7 +745,7 @@ umd_activate() {
         log "install 后 X 仍为软件渲染 → 自动回滚"
         systemctl stop mwv207-oss-watchdog 2>/dev/null || true
         umd_do_rollback "watchdog-script" ""   # 不再重启: 下一步会重启
-        systemctl restart lightdm
+        lightdm_restart_recover || true
         die "切换失败已回滚, 详见 $LOG_FILE / $XORG_LOG"
     fi
 }
@@ -673,6 +754,13 @@ umd_install() {
     need_root "umd install"
     local force=0
     [ "${1:-}" = "--force" ] && force=1
+    # 先停桌面再换库：umd_deploy 会 rm -rf 目标目录再拷贝，已加载的库靠旧 inode
+    # 存活，但拷贝窗口内的 lazy dlopen 会撞上缺失/半拷贝的文件。
+    # 停不下来也继续 —— 只是重新变成"边跑边换"。
+    if [ "$DRY_RUN" != 1 ] && systemctl is-active --quiet lightdm; then
+        log "先停 lightdm 再覆盖库 (避免替换正在映射的 .so)"
+        lightdm_stop_wait 40 || true
+    fi
     umd_deploy_files "$force"
     umd_activate
 }
@@ -738,7 +826,7 @@ umd_do_rollback() {
     systemctl stop mwv207-oss-watchdog 2>/dev/null || true
     if [ "$no_restart" != "--no-restart" ]; then
         log "重启 lightdm 恢复系统软件栈..."
-        systemctl restart lightdm
+        lightdm_restart_recover || log "[警告] lightdm 未恢复, 请手动 systemctl start lightdm"
     fi
     log "rollback 完成 (系统已还原为软件渲染栈; 载荷缓存保留于 $CACHE_DIR/payload-cache)"
 }
@@ -1071,7 +1159,9 @@ kmd_do_backup() {
 stop_display() {
     if systemctl list-unit-files 2>/dev/null | grep -q '^lightdm\.service'; then
         log "  停止 lightdm（释放 /dev/dri）"
-        run systemctl stop lightdm
+        # 不用裸 `systemctl stop`：本机 lightdm 的停止经常超过 TimeoutStopUSec，
+        # 超时会让 unit 进 failed 且不带 ResetFailed 就起不来 (2026-11-11 14:43)。
+        lightdm_stop_wait 40
         sleep 2
     else
         warn "  没有 lightdm，需自行确保 X/合成器已退出"
@@ -1080,7 +1170,7 @@ stop_display() {
 
 start_display() {
     if systemctl list-unit-files 2>/dev/null | grep -q '^lightdm\.service'; then
-        run systemctl start lightdm
+        lightdm_start_wait 60 || warn "  lightdm 未在 60s 内 active，请手动检查 systemctl status lightdm"
     fi
     # 换模块时把 VT 控制台解绑过, 这里绑回新模块的 framebuffer
     fbcon_bind 1
