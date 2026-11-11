@@ -27,7 +27,7 @@ OpenCL/VA-API/VDPAU 全走我们的栈；自建 KMD 在跑（srcversion `D5EEF36
 | 仓库 | `/home/admin/jm9100-oss`（git，远端 `git@github.com:MianJu28/jm9100-oss.git`，已推送同步） |
 | 源码 | `src/mwv207-umd/`（UMD，唯一可改处；上游树 `ref/oh-mesa/.../src/gallium/{drivers,winsys}/mwv207` 是指向它的符号链接）、`src/kernel-6.6/`（KMD，已并入本仓库） |
 | 已装栈 | `/usr/local/lib/mwv207-oss/`（运行中 **r20**：DRI md5 `39f38c6f5fd2f5ec64d0b90459f31e89`、VA md5 `fa63148dfb01b97461897106a4591346`、EGL_mwv207 `d038036a…`、vdpau `f10fcec15f26…`、OpenCL `a3fb2f47559b…`；`payload-41`=r16/`payload-42`=r20 可回滚），`/lib/modules/…/updates/dkms/mwv207.ko`（自建 KMD，运行中 `8DFC520FB8FCDECFBC911AA`；2026-11-10 17:55 重启后已验证） |
-| 载荷 | 运行中 `payload-42`（`24.1.2-fullstack-r21`，含 I-1…I-6；2026-11-11 09:09 安装）；**`payload-42` 已重新组装为 `24.1.2-fullstack-r22`**（追加 N18：VP9 `show_existing_frame` 单字节包投递修复，以及 `vp9_program_pp()` 抽取），`umd check` 通过、`/tmp/p42` 预验证（glxinfo MWV207/GL 4.0、query 4·4），MD5：DRI `2b62dd7a752e73c8c474efd9ece696c8`、VA `7424586ec2b6edb53c82d283d24632a6`；**安装需用户在自己终端跑 `sudo ./switch-mwv207.sh umd install`（会重启 lightdm）**；`payload-41`（r16）为上一份可回滚点，历史快照在 `/var/lib/mwv207-oss/switch-history` |
+| 载荷 | 运行中 `payload-42`（`24.1.2-fullstack-r22`，含 I-1…I-6 + N18；2026-11-11 09:09 安装，DRI `2b62dd7a752e73c8c474efd9ece696c8`、VA `7424586ec2b6edb53c82d283d24632a6`）；**I-5 修复（`8f6e964`）需重新组装 r23 才能在安装栈生效**；**安装需用户在自己终端跑 `sudo ./switch-mwv207.sh umd install`（会重启 lightdm）**；`payload-41`（r16）为上一份可回滚点，历史快照在 `/var/lib/mwv207-oss/switch-history` |
 | 快速回归副本 | `/tmp/gd3/`（测试用；`/tmp` 是 7.8G tmpfs，重启即空，记得清理大文件）。实验构建流程：改 `src/mwv207-umd` → `ninja -C ref/oh-mesa/User_source_code/mesa-24.1.2/build-full src/gallium/targets/dri/libmwv207_dri.so` → `cp` 到 `/tmp/gd3/` → 用 `LIBGL_DRIVERS_PATH=/tmp/gd3 MESA_LOADER_DRIVER_OVERRIDE=mwv207` 测 |
 | 出包安装 | `./tools/make-payload.sh -v 24.1.2-fullstack-rN` → `printf '666\n' \| sudo -S ./switch-mwv207.sh umd install --force`（**install 调用常显示 interrupted，实装已完成——必须用 `status` + md5 比对确认，勿盲目重跑**） |
 | 构建陷阱 | 性能实验必须用 `build-full`（`build-glvnd` 是旧二进制）；`meson setup --wipe` 会把 glvnd 从 auto 变 enabled → 必须显式 `-Dglvnd=false -Dgles1/2=enabled` |
@@ -165,6 +165,18 @@ OpenCL/VA-API/VDPAU 全走我们的栈；自建 KMD 在跑（srcversion `D5EEF36
   返回 0，Mesa 的 va 前端据此让 `vaSyncSurface()` 回 `VA_STATUS_ERROR_TIMEDOUT`
   （ffmpeg 侧 `Failed to sync surface`）。回归：VP9 P2 10bit / show_existing /
   res14 / HEVC 8 / H.264 8 全部逐位一致。
+- **I-5：VP9 intra-only 之后的 inter 帧解码错（2026-11-11，`8f6e964`）**：官方
+  `vp90-2-16-intra-only.webm` 上 4 个真实解码帧与 libvpx 差 15–22 阶（64×64 块级
+  损坏）。三处根因：① `vp9_setup_past_independence()` 只对 key/error-resilient 生效，
+  漏了 intra-only（libvpx 对 `frame_is_intra_only` 同样重置概率表、lf delta、段特征
+  并把 `frame_context_idx` 归零）；② 自适应基准应取"刚重置成默认表的
+  `frame_contexts[fci]`"，我们固定用帧头更新前的保存表；③ `show_existing_frame` 的
+  1 字节包被解析器早返回后，调用方又把它当压缩头"解"了一遍，函数尾的
+  `saved_ctx[fci] = sh->entropy` 把垃圾写进保存的概率表（重放帧也不清系数计数）。
+  修后官方向量 **7 个真实解码帧全部与 libvpx 逐字节一致**，本机 20 帧 `-g 5`、
+  `-frame-parallel 0` 样本 20/20 一致；只剩 3 个 `show_existing` 重放帧仍是黑图
+  （独立限制：整条解码+PPU 由 `JMDEC_DEC_E` 启动，重放不启动 PPU）。
+  定位工具：`tests/vaapi-client/vadec.c`（直连 libva）+ `tests/vp9-intraonly/`。
 - **一键验收脚本（2026-11-10，`tests/verify-installed.sh`）**：把 KMD 版本/来源、
   glxinfo/query/引擎计数、VAAPI profile 归位、H.264-High/HEVC 8/10bit 逐位一致、
   High10 回退与 DEC 零超时、TDR 探针、dmesg 新增告警（带基线，只查本次运行新增行）
@@ -176,10 +188,10 @@ OpenCL/VA-API/VDPAU 全走我们的栈；自建 KMD 在跑（srcversion `D5EEF36
    一致（64x64~1080p，含 inter 帧，零 TDR），默认声明；`MWV207_VP9_10BIT_DISABLE=1`
    可关。4:2:2/4:4:4 定案不可实现（解码器无色度采样格式选择字段）。12bit 未验证。
    这一步**只需装 r20 载荷**，不需要改内核。
-2. **B3 / I-5：VP9 intra-only** —— 样片已到手（WebM 官方向量 `vp90-2-16-intra-only.webm`，
-   本机编码器产不出该帧类型），但比对照出**新缺陷 I-5**：硬件解码 4 个解码帧与 libvpx
-   不一致（3 个 `show_existing` 帧一致），参考槽重建正确、输出面可疑。诊断脚本
-   `tests/vp9-intraonly/run-vp9-intraonly.sh`，细节见 `docs/UNRESOLVED.md` §1.7。
+2. **B3 / I-5 已完成（2026-11-11，`8f6e964`）** —— 官方 intra-only 向量上 7 个真实
+   解码帧全部与 libvpx 逐字节一致，诊断脚本 `tests/vp9-intraonly/run-vp9-intraonly.sh`，
+   细节见 `docs/UNRESOLVED.md` §1.7。剩下的只是 `show_existing` 重放帧的黑图问题
+   （PPU 不经 `JMDEC_DEC_E` 就无法启动），属独立课题，不在 B3 判据内。
 3. **B2：真正的跨尺寸参考** —— 已有"缺参考/尺寸不同即拒绝"保护（`72f9523`），且
    I-6 已修（`bb5cd9e`）：被跳过的帧现在会显式失败（`vaSyncSurface` 报错、ffmpeg 停止
    输出），不再静默出脏图。要真正**支持**跨尺寸参考，还需要自写 VAAPI 客户端验证

@@ -1,11 +1,12 @@
 # 未修复缺陷与未实现功能 · 总清单
 
-> 汇总截至 **2026-11-10 16:25**（运行中的 UMD 已是 **r20**（`payload-42/VERSION =
-> 24.1.2-fullstack-r20`，2026-11-10 16:17 安装，`vainfo` 已列出 `VAProfileVP9Profile2`；
-> DRI md5 `39f38c6f5fd2f5ec64d0b90459f31e89`、VA md5 `fa63148dfb01b97461897106a4591346`）；
-> 内核 `6.6.155-arm64-desktop-hwe` 侧运行中的 `5A5B401802B79D560151210`（20 处 `BUG_ON`
-> 收敛 + N16，2026-11-10 16:21 重启后 `tests/verify-installed.sh … --bad-submit` 全过
-> `PASS=25 FAIL=0 SKIP=1`）），
+> 汇总截至 **2026-11-11 11:40**（运行中的 UMD 是 **r22**（`payload-42/VERSION =
+> 24.1.2-fullstack-r22`，2026-11-11 09:09 安装，含 N18；r22 之前的 `payload-42` 是 r21；
+> 内核 `6.6.155-arm64-desktop-hwe` 侧运行中的是 `8DFC520FB8FCDECFBC911AA`（20 处 `BUG_ON`
+> 收敛 + N16 + N4 异步 DMA/K11 + N17 引用计数，2026-11-10 17:55 重启后
+> `tests/verify-installed.sh 8DFC520FB8FCDECFBC911AA --bad-submit` 全过
+> `PASS=25 FAIL=0 SKIP=1`；N17 的引用计数对账 2052/2052），仓库 HEAD 已含 I-5 修复
+> `8f6e964`），
 > 对应外层仓库工作树（含 `src/mwv207-umd/` 分层）。
 > 取代散落在 `api/06-KNOWN-ISSUES.md`、`api/11-FIX-FEASIBILITY.md` 里的分散记录：
 > 本文件是**唯一索引**，那两个文件保留历史细节与推导过程。
@@ -69,7 +70,7 @@ modinfo /lib/modules/…/updates/dkms/…    -> srcversion 0EFB7F4433EA5311B08E8
 | # | 领域 | 未解决项 | 影响 | 位置 |
 |---|---|---|---|---|
 | 1 | VAAPI/VP9 | **A5：Profile 2（10bit 4:2:0）已支持；4:2:2/4:4:4 定案不可实现** | 2026-11-10 `82e7b02`：Profile 2 与软件解码**逐位一致**（64x64/640x360/720p60/1080p30，含 inter 帧，零 TDR），默认声明，`MWV207_VP9_10BIT_DISABLE=1` 可关。Profile 1/3 与 H.264 422/444 同理不可实现：解码器没有色度采样格式选择字段（§1.5）。**残余**：12bit VP9 未验证（代码只放行 10bit） | 本文 §1.6 |
-| 2 | VAAPI/VP9 | **B3 样片到手，但暴露 I-5：官方 intra-only 向量硬件解码与 libvpx 不一致**（4 个解码帧 DIFF、3 个 `show_existing` 帧一致；已排除比对方法/尺寸/解析层） | 本机编码器产不出 intra-only 帧，已改用 WebM 官方向量并做成 `tests/vp9-intraonly/` 诊断脚本；**I-5 未定位**，暂不能宣告 B3 通过 | 本文 §1.7 |
+| 2 | VAAPI/VP9 | **B3 完成**：官方 intra-only 向量上 7 个真实解码帧全部与 libvpx 逐字节一致（`8f6e964` 修掉 I-5） | 样片与诊断脚本在 `tests/vp9-intraonly/`；只剩 `show_existing` 重放帧仍是黑图（独立限制，不影响 B3 判据） | 本文 §1.7 |
 | 3 | VAAPI/VP9 | **B2 侦察完成；I-6 已修（`bb5cd9e`）——被跳过的帧不再静默出脏图** | `vp90-2-14-resize-10frames-fp-tiles-1-2.webm` 硬件与 libvpx **IDENTICAL**；`vp90-2-21-resize_inter_320x180_5_1-2.webm` 仍按设计跳过（跨尺寸参考不支持），但现在 `vaSyncSurface()` 会返回 `VA_STATUS_ERROR_TIMEDOUT`，ffmpeg 报 `Failed to sync surface` 并停止输出，而不是吐出 2592000 字节脏数据 | 本文 §1.8 |
 | 4 | KMD | **N14 已修，重启后已验证生效** | 修复见 §2.1（`22145e9`）；运行中 srcversion 已是 `039F972EFE3279A155EE225`，GL/query/VP9 回归全过；reset 通路已用 `tests/n14-reset/` 探针实测（6 轮 TDR、force_complete 6/6） | 本文 §2.1 |
 | 4b | KMD | **N1/N2/K12/K9-②/N9 已修，重启后已验证生效** | 修复见 §2.2（`6502f19`）；2026-11-10 13:29 重启后 srcversion = `D5EEF36617A4D3FBF4AFD1D`，GL/query 4·4/VP9 18·18/H.264 8bit 逐位一致/N14 探针 6·6 全过，dmesg 无 WARN/BUG；引擎计数用 `tests/engines/` 核对（lite 机型 3d=1 dec=1 enc=0 2d=1 dma=1） | 本文 §2.2 |
@@ -78,7 +79,7 @@ modinfo /lib/modules/…/updates/dkms/…    -> srcversion 0EFB7F4433EA5311B08E8
 | 4e | KMD | **20 处 `BUG_ON` 已收敛为可恢复错误，重启后已验证生效** | `53b3229`：用户提交路径仍可能触发的那几处（`mem_type` 非 VRAM/TT、`reloc->idx` 越界、DMA `cmd_size` 不符、3D 事件槽耗尽）现在返回 `-EINVAL`/`-EIO`/`-EBUSY`；寄存器/ring 描述符类改 `WARN_ON_ONCE` + 跳过，由 TDR 回收 | 本文 §2.4 |
 | 4f | KMD | **N16 已修，重启后已验证生效**（新发现）：畸形 submit（`nr_cmd_dat>0` 而 `cmd_dats==NULL`）会让 `mwv207_job_fini()` 空指针解引用 → 内核 oops，任何本地进程可触发 | `c01af40`：清理条件加 `&& mjob->cmd_dats`；配套 `tests/bad-submit/` 9 个用例（默认不跑，老模块会 oops）。两内核已装 `5A5B4018…` | 本文 §2.5 |
 | 4g | KMD | **N17 已修，重启后已验证生效**（新发现）：N4 的异步 DMA 在 `queue_work()` 之后才 `dma_fence_get()`，worker 抢跑时对已释放 fence 做 refcount_inc（`refcount_t: addition on 0; use-after-free`，PC 在 `mwv207_pipe_dma_submit`），等待者可能永远收不到 signal —— 与 16:30 整屏卡死（Xorg 收 SIGTERM 不退、只能 SIGKILL）症状一致 | `1fc9b21`：给调度器的引用在 `queue_work` 之前取；运行中已是 `8DFC520FB8FCDECFBC911AA`，17:55 重启后 `verify-installed.sh --bad-submit` PASS=25，kprobe 压测 submit/complete 2052·2052 平衡、refcount 告警 0、X 最大延迟 5 ms | 本文 §2.6 |
-| 4h | UMD 视频 | **I-5：VP9 intra-only 样片解码不一致（已收窄）** | 收窄到"用 intra-only 帧当参考的 inter 帧"：单个 intra-only 子帧单独解码逐字节正确；同批修掉 `show_existing` 三处投递缺陷（N18，`6225e97`）；`show_existing` 重放仍黑待修 | 本文 §1.7 |
+| 4h | UMD 视频 | **I-5 已修（`8f6e964`，待随载荷发布）** | 三处根因：`vp9_setup_past_independence()` 漏 intra-only、自适应基准该用默认表、`show_existing` 污染 `saved_ctx`；官方向量 7 个真实解码帧与 libvpx 逐字节一致。N18（`6225e97`）为同批复用缺陷 | 本文 §1.7 |
 | 4i | UMD 视频 | **I-6 已修（`bb5cd9e`）**：跳过帧（参考缺失/尺寸不符/参数不支持/分配失败）以前只清 `JMDEC_DEC_E` 就返回，PPU 输出面没编程、`vaSyncSurface()` 照样成功，应用拿到旧内容 | 现在 `end_frame()` 置 `frame_failed` + 桩 fence，`get_decoder_fence()` 返回 0 → `vaSyncSurface()` 报错；回归（VP9 P2 10bit / show_existing / res14 / HEVC8 / H264 8）全部逐位一致 | 本文 §1.8 |
 | 5 | KMD | 只剩 N10（决定只文档化） | K9-① 已核实为与厂商一致（非缺陷）；N10 改为只记录 | 本文 §2.3 |
 | 6 | 切换脚本 | **vendor 态端到端未实跑** | `stack vendor` 会重启，需人工确认；热切换已证不可行（refcnt 恒 2） | `switch-mwv207.sh` / §5 |
@@ -247,7 +248,7 @@ Profile 1/3（4:2:2 / 4:4:4）与 H.264 422/444 同理**不可实现**——解�
 | dmesg | 无新增 `timed out`（仅 `tests/n14-reset` 探针的 6 条 3D 超时），无 WARN/BUG |
 | 其余 | H.264 High 420 / HEVC 8bit / HEVC Main10 逐位一致；query 4/4；VP9 回归 18/18；N14 探针 PASS |
 
-### 1.7 B3：intra-only 非关键帧样片到手，硬件解码与 libvpx 不一致（I-5，待定位）
+### 1.7 B3：intra-only 非关键帧样片（I-5 已修，提交 `8f6e964`）
 
 B3 要的是 **intra-only 非关键帧**（`show_frame = 0` 且 `intra_only = 1`；Profile 0 时
 未压缩头不带 color config，按规范默认 BT.601/studio/4:2:0/8bit）。本机 libvpx 产不出
@@ -700,6 +701,47 @@ sub0 的流上却报 `reference 1 (slot 1) has no decoded picture` ⇒ sub3 的�
 与 `ffmpeg -c:v libvpx-vp9 -i <向量.webm> -pix_fmt nv12 -f rawvideo` 比对；注意
 ffmpeg 不输出隐藏帧，逐帧索引不能直接对位（要按 show_existing/可见帧对齐）。
 
+**I-5 已修（2026-11-11，提交 `8f6e964`）**。最终定位到三处与 libvpx 语义不符：
+
+1. **`vp9_setup_past_independence()` 漏了 intra-only**。libvpx 的调用条件是
+   `frame_is_intra_only(frame_type) || error_resilient_mode`，它对**非关键帧的 I 帧**
+   同样把段特征、`lf_ref_delta`/`lf_mode_delta` 清回默认，把 coef/mode/mv 概率表恢复
+   成默认值并按 `reset_frame_context` 广播到各 frame context，**最后强制
+   `frame_context_idx = 0`**。我们原来只在 `key_frame || error_resilient ||
+   reset_frame_context == 3` 时做，intra-only 漏掉，紧随其后的 inter 帧于是从上一
+   GOP 的概率表和 lf delta 继承，重建结果逐 64×64 块偏掉（与观测到的 0/396 块完全
+   一致、均差约 19 的形态吻合）。
+2. **自适应基准取错**。libvpx 的 `adapt_coef_probs()` 以
+   `cm->frame_contexts[frame_context_idx]` 为基准做 `merge_probs()`，而该槽在上面那
+   步刚被重置成默认表；我们固定用 `pre_ctx`（帧头更新前的保存表）。现在
+   key/intra-only/error-resilient 帧改用 `default_entropy` 作基准。
+3. **`show_existing_frame` 污染概率上下文**。解析器在未压缩头里遇到 `show_existing`
+   就返回 `MWV207_OK`，但 `mwv207_vp9_parse_frame()` 见 `ret == 0` 后继续把补零缓冲
+   当压缩头解码，函数末尾执行 `saved_ctx[frame_context_idx] = sh->entropy`，用垃圾覆盖
+   保存的概率表；同时重放帧不解码却不清系数计数器，下一帧的 `merge_probs()` 会把上一
+   帧的旧统计当成自己的。libvpx 遇到 `show_existing` 直接返回，既不动
+   `frame_contexts` 也不上传统计。现在解析器在 `show_existing` 处立即返回、
+   `vp9_adapt_probs()` 跳过重放帧、重放分支清零 `VP9_COUNTER_OFFSET`。
+
+定位手段（可复跑）：`tests/vaapi-client/vadec.c` 直连 libva 消除 ffmpeg 变量；先找
+"最小可复现"——`/tmp/v5/r1.ivf`（在正确解码的 `r0.ivf` 中间插入**一个** 1 字节重放包）
+就足以让下一帧变错；再用三组临时 dump 逐层排除：寄存器（`mwv207_debug=video` 的两份
+`mwv207_video_reg.dump` **6 个块逐块 0 差**）、上传的概率表（同帧差 300/1872 个 u16）、
+`saved_ctx`（重放前后差 397 字节），最后落到解析器多走了一段。
+
+验证（dev 驱动，与 libvpx 逐字节比对）：
+
+| 样本 | 修前 | 修后 |
+|---|---|---|
+| 官方 `vp90-2-16-intra-only.webm`（10 帧输出） | 真实解码帧 4/4 DIFF（15.43 / 15.46 / 22.34 / 14.79） | **7 个真实解码帧全部 EXACT** |
+| 本机 352×288 20 帧、每 5 帧一个关键帧、`-frame-parallel 0` | 12 帧 DIFF（第 2 个 GOP 起） | **20/20 EXACT** |
+| `tools/vp9-regression.sh` | 18/18 | 18/18 |
+| H.264 High 420 / HEVC 8bit / Main10 / VP9 Profile 2 10bit / query | — | 全 IDENTICAL / 4·0 |
+
+**仍然存在的独立限制**：官方流里 3 个 `show_existing` 重放帧（`va5/6/7`）仍是黑图，
+原因见上文"整条解码+PPU 由 `JMDEC_DEC_E` 启动"，与解码正确性无关；`tests/vp9-intraonly/`
+的判据据此分两段（解码帧必须 EXACT、重放帧单列）。
+
 ---
 
 ## 2. KMD — 未修复缺陷
@@ -1139,6 +1181,7 @@ initramfs 已刷并解包核对（`modinfo -F srcversion` 均为 `8DFC52…`）�
 | 2026-11-10 | UMD：HEVC `tile_buffer_size` 用位深当帧高（I-1），tile 缓冲按错误高度分配 | `385ed81`（`src/mwv207-umd`） |
 | 2026-11-10 | UMD：收回 H.264 High422/High444 声明（不可实现，见 §1.5）＋ word7 bit30 复用导致的单色标志被清零（I-2/I-3） | `a5a938b`（`src/mwv207-umd`） |
 | 2026-11-10 | UMD：收回 H.264 High10 声明（I-4：10bit 提交会挂死 DEC 管线，缺 high10p 位流预转换）＋ `end_frame` 拒绝高位深码流 | `4ecca0d`（`src/mwv207-umd`）；载荷 `payload-42`（r19）已重新生成并通过 `umd check`/预验证，**安装需 `sudo ./switch-mwv207.sh umd install`（会重启 lightdm）** |
+| 2026-11-11 | UMD：VP9 intra-only 参考帧之后 inter 帧解码错（**I-5 已修**）—— `vp9_setup_past_independence()` 漏 intra-only（概率上下文/lf delta 未重置、`frame_context_idx` 未归零）、自适应基准改用默认表、`show_existing` 不再拿补零缓冲当压缩头解析（污染 `saved_ctx`）并清零系数计数；官方 intra-only 向量的 7 个真实解码帧与 libvpx 逐字节一致 | `8f6e964`（`src/mwv207-umd`） |
 | 2026-11-11 | UMD：VP9 `show_existing_frame` 能真正送到解码器（N18）—— 1 字节包不再被 `decode_bitstream()` 丢弃、解析器放宽到 `size >= 1` 并补零到 16 字节、`show_existing` 不再误标记为"跳过"；新增 `tests/vaapi-client/vadec.c` | `6225e97`（`src/mwv207-umd` ＋ `tests/vaapi-client`） |
 | 2026-11-10 | UMD：被跳过的帧不再静默返回脏图（I-6）—— 跳过点置 `frame_skipped`，`end_frame()` 不提交并给桩 fence，新增 `get_decoder_fence()` 让 `vaSyncSurface()` 报错（跨尺寸参考一族现在显式失败） | `bb5cd9e`（`src/mwv207-umd`）＋ `tests/vp9-resize/run-vp9-resize.sh` 判据升级 |
 | 2026-11-10 | UMD：VP9 Profile 2（10bit 4:2:0）硬解落地（A5）——放行 `profile==2 && bit_depth==10`、声明 `VP9Profile2` + P010 面、`mwv207_vp9_10bit_enabled()` 开关；4 组样片（64x64/640x360/720p60/1080p30，含 inter 帧）与软件解码逐位一致、零 TDR，VP9 回归 18/18 | `82e7b02`（`src/mwv207-umd`）；载荷 `payload-42` 升为 r20（DRI `39f38c6f…`、VA `fa63148d…`） |
