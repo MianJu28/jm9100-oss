@@ -72,7 +72,7 @@ modinfo /lib/modules/…/updates/dkms/…    -> srcversion 0EFB7F4433EA5311B08E8
 |---|---|---|---|---|
 | 1 | VAAPI/VP9 | **A5：Profile 2（10bit 4:2:0）已支持；4:2:2/4:4:4 定案不可实现** | 2026-11-10 `82e7b02`：Profile 2 与软件解码**逐位一致**（64x64/640x360/720p60/1080p30，含 inter 帧，零 TDR），默认声明，`MWV207_VP9_10BIT_DISABLE=1` 可关。Profile 1/3 与 H.264 422/444 同理不可实现：解码器没有色度采样格式选择字段（§1.5）。**残余**：12bit VP9 未验证（代码只放行 10bit） | 本文 §1.6 |
 | 2 | VAAPI/VP9 | **B3 完成**：官方 intra-only 向量上 7 个真实解码帧全部与 libvpx 逐字节一致（`8f6e964` 修掉 I-5） | 样片与诊断脚本在 `tests/vp9-intraonly/`；只剩 `show_existing` 重放帧仍是黑图（独立限制，不影响 B3 判据） | 本文 §1.7 |
-| 3 | VAAPI/VP9 | **I-6 已修（`bb5cd9e`）；B2 第一版已实现（`351e6ed`），待实测** | `vp90-2-14-resize-10frames-fp-tiles-1-2.webm` 硬件与 libvpx **IDENTICAL**；`vp90-2-21-resize_inter_320x180_5_1-2.webm` 此前按设计跳过（跨尺寸参考不支持），I-6 生效后 `vaSyncSurface()` 返回 `VA_STATUS_ERROR_TIMEDOUT`、ffmpeg 报 `Failed to sync surface` 停输出。2026-11-11 `351e6ed` 删掉"参考尺寸必须等于当前帧"的跳过分支并把 staging 缓冲改成可增长；厂商驱动同一向量逐位正确。**尚未实测**（本机处于 vendor 栈），需切回自研栈后跑 `tests/vp9-resize/run-vp9-resize.sh` 确认 `跳过帧=0` 且 IDENTICAL | 本文 §1.8 |
+| 3 | VAAPI/VP9 | **I-6 已修（`bb5cd9e`）；B2 已完成并实测通过（`21a15db`）** | `vp90-2-14-resize-10frames-fp-tiles-1-2.webm` 硬件与 libvpx **IDENTICAL**；`vp90-2-21-resize_inter_320x180_5_1-2.webm` 此前按设计跳过（跨尺寸参考不支持），I-6 生效后 `vaSyncSurface()` 返回 `VA_STATUS_ERROR_TIMEDOUT`、ffmpeg 报 `Failed to sync surface` 停输出。2026-11-11 `351e6ed` 删掉"参考尺寸必须等于当前帧"的跳过分支并把 staging 缓冲改成可增长；厂商驱动同一向量逐位正确。**尚未实测**（本机处于 vendor 栈），需切回自研栈后跑 `tests/vp9-resize/run-vp9-resize.sh` 确认 `跳过帧=0` 且 IDENTICAL | 本文 §1.8 |
 | 4 | KMD | **N14 已修，重启后已验证生效** | 修复见 §2.1（`22145e9`）；运行中 srcversion 已是 `039F972EFE3279A155EE225`，GL/query/VP9 回归全过；reset 通路已用 `tests/n14-reset/` 探针实测（6 轮 TDR、force_complete 6/6） | 本文 §2.1 |
 | 4b | KMD | **N1/N2/K12/K9-②/N9 已修，重启后已验证生效** | 修复见 §2.2（`6502f19`）；2026-11-10 13:29 重启后 srcversion = `D5EEF36617A4D3FBF4AFD1D`，GL/query 4·4/VP9 18·18/H.264 8bit 逐位一致/N14 探针 6·6 全过，dmesg 无 WARN/BUG；引擎计数用 `tests/engines/` 核对（lite 机型 3d=1 dec=1 enc=0 2d=1 dma=1） | 本文 §2.2 |
 | 4c | UMD 视频 | **I-4：H.264 High10 已定案（2026-11-10 收回声明）** —— 按当前寄存器配置提交 10bit H.264 会让 DEC 管线挂死（6 次 TDR、输出全 0）；缺 Hantro 的 high10p 位流预转换 | 客户端现在对该类流直接回退（`hwaccel initialisation returned error`），DEC 零超时；原厂闭源驱动同样不声明 High10 | 本文 §1.2 / `api/05-VIDEO-CODEC.md` §6.7 |
@@ -488,6 +488,38 @@ mwv207_drm_cmdbuf_commit: submit failed: -34 (Numerical result out of range)
    （§1.7 记忆：旧布局下跨尺寸会让单元空转，N14 之后有 TDR 兜底）。保留"槽从未解码过就跳过"。
 2. staging 缓冲（`buf->res`，只是本地暂存，PP 的输出目标是 `buf->resources[]`＝应用 surface）
    在 `frame_bytes` 变大时先释放再按新 `buff_size` 重建，避免越界写。
+
+**2026-11-11 `21a15db`：B2 完成（参考槽跨解码器实例移交）——已实测通过**
+
+切回自研栈后用 dev 驱动实测 `351e6ed` 版本仍跳过 9 帧，日志为
+`vp9: reference 0 (slot 0) has no decoded picture; frame skipped`。加临时打印后
+真相清楚了：分辨率从 320×180 变到 160×90 的那一帧，**解码器状态指针整个换了**
+（`st=…1eb0` → `st=…0f00`）——客户端（ffmpeg vaapi）在分辨率变化时重建了 VA
+context，Mesa 随之销毁并重建 `pipe_video_codec`，我们私有的 `ref_store`
+（参考槽副本，存的是 ASIC 内部布局的像素）跟着新实例一起归零。
+
+修法（`21a15db`，`src/mwv207-umd/.../mwv207/mwv207_dec_vp9.c`）：
+- 新增进程级 `vp9_ref_carry`：`vp9_destroy_state()` 把 `ref_store` 连同 16 个槽的
+  `w/h/luma/bytes` 与 `stride/ref_frame_bytes` 移交到缓存（所有权一并交出，避免重复释放），
+  新建状态时 `vp9_ref_carry_adopt()` 直接接手。
+- 合法 VP9 流总以关键帧开头（`refresh_frame_flags=0xff` 覆盖全部 8 槽），所以不会把
+  上一个流的旧内容当成新流的参考；分辨率变化的流（本向量）正好接上 320×180 的槽。
+- 参考槽内容无法从客户端 surface 反推（那是线性/PP 布局，不是 ASIC 内部布局），
+  所以只能"移交"而不是"按客户端 surface 重算"。
+
+实测（KMD `8DFC520FB8FCDECFBC911AA`，dev 驱动）：
+
+| 向量 | 修前 | 修后 |
+|---|---|---|
+| `vp90-2-21-resize_inter_320x180_5_1-2.webm` | hw=864000 `SKIPPED-AS-ERROR` 跳过 9 | **hw=2592000 `IDENTICAL` 跳过 0** |
+| `vp90-2-14-resize-10frames-fp-tiles-1-2.webm` | IDENTICAL 4665600 | IDENTICAL 4665600 |
+| `vp90-2-16-intra-only.webm` | IDENTICAL 1064448 | IDENTICAL 1064448 |
+| `vp90-2-10-show-existing-frame.webm` | IDENTICAL 2585088 | IDENTICAL 2585088 |
+| `fp0g5.ivf`（I-5 复现样本） | 20/20 | 20/20 |
+
+`tools/vp9-regression.sh` 18/18、query 4/4，`dmesg` 无 `timed out`/WARN/BUG —
+跨尺寸参考并没有让 ASIC 自旋（之前 §1.8 里"旧布局下会挂死"的担心在当前寄存器
+配置下不成立，TDR 也只是兜底）。
 
 **已知未解（若实测仍跳过，按此顺序查）**：
 - 跳过计数 9 的另一种解释：客户端在分辨率变化时重建了 VA context（ffmpeg 对 `vaCreateContext`
@@ -1243,6 +1275,7 @@ initramfs 已刷并解包核对（`modinfo -F srcversion` 均为 `8DFC52…`）�
 | 2026-11-10 | UMD：收回 H.264 High422/High444 声明（不可实现，见 §1.5）＋ word7 bit30 复用导致的单色标志被清零（I-2/I-3） | `a5a938b`（`src/mwv207-umd`） |
 | 2026-11-10 | UMD：收回 H.264 High10 声明（I-4：10bit 提交会挂死 DEC 管线，缺 high10p 位流预转换）＋ `end_frame` 拒绝高位深码流 | `4ecca0d`（`src/mwv207-umd`）；载荷 `payload-42`（r19）已重新生成并通过 `umd check`/预验证，**安装需 `sudo ./switch-mwv207.sh umd install`（会重启 lightdm）** |
 | 2026-11-11 | UMD：VP9 跨尺寸参考第一版（B2）—— 删掉"参考尺寸必须等于当前帧"的跳过分支（硬件按每槽自己的几何 + 14 位 hscale/vscale 编程），保留"槽从未解码过就跳过"；staging 缓冲帧变大时释放重建。厂商 `jmgpu` 同向量逐字节正确；我方**待实测** | `351e6ed`（`src/mwv207-umd`）；判据 `tests/vp9-resize/run-vp9-resize.sh` |
+| 2026-11-11 | UMD：VP9 跨尺寸参考真正生效（B2 完成）—— 参考槽副本在解码器重建时移交（`vp9_ref_carry`），跨尺寸 inter 帧不再被"槽空"挡住；`vp90-2-21` 由 `SKIPPED-AS-ERROR` 变为 **IDENTICAL 2592000 B、跳过 0**，其余 VP9 向量与 `fp0g5`/18 项回归全过 | `21a15db`（`src/mwv207-umd`）；判据 `tests/vp9-resize/run-vp9-resize.sh --local /home/admin/vvp` |
 | 2026-11-11 | UMD：VP9 intra-only 参考帧之后 inter 帧解码错（**I-5 已修**）—— `vp9_setup_past_independence()` 漏 intra-only（概率上下文/lf delta 未重置、`frame_context_idx` 未归零）、自适应基准改用默认表、`show_existing` 不再拿补零缓冲当压缩头解析（污染 `saved_ctx`）并清零系数计数；官方 intra-only 向量的 7 个真实解码帧与 libvpx 逐字节一致 | `8f6e964`（`src/mwv207-umd`） |
 | 2026-11-11 | UMD：VP9 `show_existing_frame` 能真正送到解码器（N18）—— 1 字节包不再被 `decode_bitstream()` 丢弃、解析器放宽到 `size >= 1` 并补零到 16 字节、`show_existing` 不再误标记为"跳过"；新增 `tests/vaapi-client/vadec.c` | `6225e97`（`src/mwv207-umd` ＋ `tests/vaapi-client`） |
 | 2026-11-10 | UMD：被跳过的帧不再静默返回脏图（I-6）—— 跳过点置 `frame_skipped`，`end_frame()` 不提交并给桩 fence，新增 `get_decoder_fence()` 让 `vaSyncSurface()` 报错（跨尺寸参考一族现在显式失败） | `bb5cd9e`（`src/mwv207-umd`）＋ `tests/vp9-resize/run-vp9-resize.sh` 判据升级 |

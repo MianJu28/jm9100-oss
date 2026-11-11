@@ -27,7 +27,7 @@ OpenCL/VA-API/VDPAU 全走我们的栈；自建 KMD 在跑（srcversion `D5EEF36
 | 仓库 | `/home/admin/jm9100-oss`（git，远端 `git@github.com:MianJu28/jm9100-oss.git`，已推送同步） |
 | 源码 | `src/mwv207-umd/`（UMD，唯一可改处；上游树 `ref/oh-mesa/.../src/gallium/{drivers,winsys}/mwv207` 是指向它的符号链接）、`src/kernel-6.6/`（KMD，已并入本仓库） |
 | 已装栈 | `/usr/local/lib/mwv207-oss/`（运行中 **r20**：DRI md5 `39f38c6f5fd2f5ec64d0b90459f31e89`、VA md5 `fa63148dfb01b97461897106a4591346`、EGL_mwv207 `d038036a…`、vdpau `f10fcec15f26…`、OpenCL `a3fb2f47559b…`；`payload-41`=r16/`payload-42`=r20 可回滚），`/lib/modules/…/updates/dkms/mwv207.ko`（自建 KMD，运行中 `8DFC520FB8FCDECFBC911AA`；2026-11-10 17:55 重启后已验证） |
-| 载荷 | 运行中 `payload-42`（`24.1.2-fullstack-r23`，含 I-1…I-6 + N18 + I-5；2026-11-11 12:07 安装，DRI `8f52e9972ffb78f9949f0a92c07b6c61`、VA `e2ddc5bb769a7bd7d54d73e78a90ae69`）；安装后 `tests/verify-installed.sh … --bad-submit` → `PASS=25 FAIL=0 SKIP=1`，官方 VP9 intra-only 向量 7 帧与 libvpx 逐字节一致；`payload-41`（r16）为上一份可回滚点，前一版是 r22（DRI `2b62dd7a…`），历史快照在 `/var/lib/mwv207-oss/switch-history` |
+| 载荷 | 运行中 `payload-42`（`24.1.2-fullstack-r24`，含 I-1…I-6 + N18 + I-5 + B2 第一版；2026-11-11 14:11 由 `stack oss` 安装，DRI `bdfdb78a8e14…`、VA `f38501b6f8af…`）；B2 的**完整**修复（`21a15db`，参考槽跨解码器实例移交）尚未进载荷，需重打 r25 才进安装栈；安装后 `tests/verify-installed.sh … --bad-submit` → `PASS=25 FAIL=0 SKIP=1`，官方 VP9 intra-only 向量 7 帧与 libvpx 逐字节一致；`payload-41`（r16）为上一份可回滚点，前一版是 r22（DRI `2b62dd7a…`），历史快照在 `/var/lib/mwv207-oss/switch-history` |
 | 快速回归副本 | `/tmp/gd3/`（测试用；`/tmp` 是 7.8G tmpfs，重启即空，记得清理大文件）。实验构建流程：改 `src/mwv207-umd` → `ninja -C ref/oh-mesa/User_source_code/mesa-24.1.2/build-full src/gallium/targets/dri/libmwv207_dri.so` → `cp` 到 `/tmp/gd3/` → 用 `LIBGL_DRIVERS_PATH=/tmp/gd3 MESA_LOADER_DRIVER_OVERRIDE=mwv207` 测 |
 | 出包安装 | `./tools/make-payload.sh -v 24.1.2-fullstack-rN` → `printf '666\n' \| sudo -S ./switch-mwv207.sh umd install --force`（**install 调用常显示 interrupted，实装已完成——必须用 `status` + md5 比对确认，勿盲目重跑**） |
 | 构建陷阱 | 性能实验必须用 `build-full`（`build-glvnd` 是旧二进制）；`meson setup --wipe` 会把 glvnd 从 auto 变 enabled → 必须显式 `-Dglvnd=false -Dgles1/2=enabled` |
@@ -181,7 +181,17 @@ OpenCL/VA-API/VDPAU 全走我们的栈；自建 KMD 在跑（srcversion `D5EEF36
   （`-hwaccel vaapi -hwaccel_output_format vaapi … -vf hwdownload,format=nv12`）解官方
   intra-only 向量 7 帧全部与 `-c:v libvpx-vp9` **逐字节一致（0 差异帧）**，
   `tests/verify-installed.sh` PASS=25、`tools/vp9-regression.sh` 18/18。
-- **B2：VP9 跨尺寸参考第一版（2026-11-11，`351e6ed`，待实测）**：厂商栈 `jmgpu` 能解
+- **B2：VP9 跨尺寸参考已完成（2026-11-11，`351e6ed` → `21a15db`）**：
+  第一版只删掉"参考尺寸必须等于当前帧"的跳过判据，实测仍跳过 9 帧，日志
+  `reference 0 (slot 0) has no decoded picture` —— 真相是客户端在分辨率变化时重建
+  VA context，Mesa 随之重建解码器实例，我们私有的参考槽副本（ASIC 内部布局，
+  无法从客户端 surface 反推）跟着归零。`21a15db` 新增进程级 `vp9_ref_carry`：
+  `vp9_destroy_state()` 把 `ref_store` 与 16 个槽的几何/长度移交出去，新实例
+  `vp9_ref_carry_adopt()` 接手。实测 `vp90-2-21-resize_inter_320x180_5_1-2.webm`
+  由 `SKIPPED-AS-ERROR`（hw=864000）变为 **IDENTICAL 2592000 B、跳过帧 0**；
+  `vp90-2-14`/`vp90-2-16-intra-only`/`vp90-2-10-show-existing-frame`/`fp0g5` 全一致，
+  `vp9-regression` 18/18、query 4/4，`dmesg` 无 TDR —— 跨尺寸参考并不会让 ASIC 自旋。
+- **B2 第一版（2026-11-11，`351e6ed`，已被 `21a15db` 取代）**：厂商栈 `jmgpu` 能解
   官方 `vp90-2-21-resize_inter_320x180_5_1-2.webm`（逐字节正确），我方此前因"参考尺寸
   必须等于当前帧"整帧跳过。改动：删掉该跳过分支（硬件本来就按每个参考槽自己的
   `ref_w_reg`/`ref_h_reg`/`ref_y_stride_reg` 与 14 位定点 `HOR/VER_SCALE` 编程），保留
@@ -206,7 +216,7 @@ OpenCL/VA-API/VDPAU 全走我们的栈；自建 KMD 在跑（srcversion `D5EEF36
    解码帧全部与 libvpx 逐字节一致，诊断脚本 `tests/vp9-intraonly/run-vp9-intraonly.sh`，
    细节见 `docs/UNRESOLVED.md` §1.7。剩下的只是 `show_existing` 重放帧的黑图问题
    （PPU 不经 `JMDEC_DEC_E` 就无法启动），属独立课题，不在 B3 判据内。
-3. **B2：跨尺寸参考 —— 第一版已实现（`351e6ed`），待实测** —— 删掉了"参考尺寸必须
+3. **B2：跨尺寸参考 —— 已完成（`21a15db`，实测 IDENTICAL 跳过 0）；待重打 r25 载荷** —— 删掉了"参考尺寸必须
    等于当前帧"的跳过分支（硬件本来按每槽自己的几何 + 14 位 hscale/vscale 编程），
    staging 缓冲改成可增长。厂商栈 `jmgpu` 在 `vp90-2-21-resize_inter_320x180` 上逐字节
    正确，说明硬件能力没问题。**未验证**：本机现处 vendor 栈，需切回自研栈后跑
