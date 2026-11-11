@@ -549,6 +549,32 @@ ffmpeg 的帧对齐/拆包干扰，写了一个直连 libva 的最小客户端�
   `out_w = NEXT_MULTIPLE(4*ceil8(w)*bit_depth, align*8)/8` 这一层）。两条都
   不在 B3 的判据路径上（单帧 intra-only 已逐字节一致），故留作待办。
 
+**用参考槽重放做"交叉对齐"后 I-5 的定位（2026-11-11，关键）**：ffmpeg 不输出
+隐藏帧，逐帧索引对不上；但 `vadec` 会输出每一帧，于是可以用"官方流里的
+`show_existing` 包"充当 libvpx 的槽内容探针：官方 7 个包的重放分别吐出
+slot0/1/2 的画面，把它们与我们的解码帧做成矩阵比较：
+
+| 我们的输出 | == libvpx 的哪一帧 | 均值差 |
+|---|---|---|
+| va0（sub0 intra-only） | sw4（重放 slot 0） | **0.0** |
+| va1（sub1 intra-only） | sw3（重放 slot 1） | **0.0** |
+| va2（sub2 intra-only） | sw2（重放 slot 2） | **0.0** |
+| va3（sub3 inter） | 最近的 sw 帧也差 15.4+ | **≈19.5** |
+
+⇒ **三个 intra-only 帧的解码结果与 libvpx 写进参考槽的像素逐字节相同**，
+参考内容没有错；差的是 inter 帧本身的解码（sub3 与任何 sw 帧都对不上，而
+不是"某处偏移"）。同一份客户端解本机 libvpx 造的 30 帧关键帧+inter 流
+（`own.ivf`）**30/30 逐帧一致**，说明 inter 解码整体没问题，只有这份官方
+向量上的 inter 帧不同。
+
+已经排除/试过而不成立的解释：superframe 截断、txmode（intra 与 inter 两侧都
+单独验证过）、refresh 位映射、槽拷贝、帧序、概率自适应的有无（临时关掉
+`vp9_adapt_probs()` 后 va3 的差从 15.4 变 16.3，只是量变，不改变结论）、
+PP/输出布局（intra 帧逐字节一致已证明这条路正常）。
+
+尚未做的：把 sub3 的熵解码结果（模式/MV/残差）与 libvpx 逐块比对；或用
+"同内容重编"造出参数一致但编码器不同的 inter 帧做对照。
+
 复跑：`LIBVA_DRIVERS_PATH=<构建目录> LIBVA_DRIVER_NAME=mwv207 vadec <向量.ivf> out.yuv`
 与 `ffmpeg -c:v libvpx-vp9 -i <向量.webm> -pix_fmt nv12 -f rawvideo` 比对；注意
 ffmpeg 不输出隐藏帧，逐帧索引不能直接对位（要按 show_existing/可见帧对齐）。
