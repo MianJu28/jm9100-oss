@@ -78,7 +78,7 @@ modinfo /lib/modules/…/updates/dkms/…    -> srcversion 0EFB7F4433EA5311B08E8
 | 4e | KMD | **20 处 `BUG_ON` 已收敛为可恢复错误，重启后已验证生效** | `53b3229`：用户提交路径仍可能触发的那几处（`mem_type` 非 VRAM/TT、`reloc->idx` 越界、DMA `cmd_size` 不符、3D 事件槽耗尽）现在返回 `-EINVAL`/`-EIO`/`-EBUSY`；寄存器/ring 描述符类改 `WARN_ON_ONCE` + 跳过，由 TDR 回收 | 本文 §2.4 |
 | 4f | KMD | **N16 已修，重启后已验证生效**（新发现）：畸形 submit（`nr_cmd_dat>0` 而 `cmd_dats==NULL`）会让 `mwv207_job_fini()` 空指针解引用 → 内核 oops，任何本地进程可触发 | `c01af40`：清理条件加 `&& mjob->cmd_dats`；配套 `tests/bad-submit/` 9 个用例（默认不跑，老模块会 oops）。两内核已装 `5A5B4018…` | 本文 §2.5 |
 | 4g | KMD | **N17 已修，重启后已验证生效**（新发现）：N4 的异步 DMA 在 `queue_work()` 之后才 `dma_fence_get()`，worker 抢跑时对已释放 fence 做 refcount_inc（`refcount_t: addition on 0; use-after-free`，PC 在 `mwv207_pipe_dma_submit`），等待者可能永远收不到 signal —— 与 16:30 整屏卡死（Xorg 收 SIGTERM 不退、只能 SIGKILL）症状一致 | `1fc9b21`：给调度器的引用在 `queue_work` 之前取；运行中已是 `8DFC520FB8FCDECFBC911AA`，17:55 重启后 `verify-installed.sh --bad-submit` PASS=25，kprobe 压测 submit/complete 2052·2052 平衡、refcount 告警 0、X 最大延迟 5 ms | 本文 §2.6 |
-| 4h | UMD 视频 | **I-5：VP9 intra-only 样片解码不一致（新发现，待定位）** | 官方向量 `vp90-2-16-intra-only.webm`：硬件 7 帧与 libvpx 软件解码比，4 个解码帧全 DIFF、3 个 `show_existing` 一致；参考槽重建正确、输出面可疑 | 本文 §1.7 |
+| 4h | UMD 视频 | **I-5：VP9 intra-only 样片解码不一致（已收窄）** | 收窄到"用 intra-only 帧当参考的 inter 帧"：单个 intra-only 子帧单独解码逐字节正确；同批修掉 `show_existing` 三处投递缺陷（N18，`6225e97`）；`show_existing` 重放仍黑待修 | 本文 §1.7 |
 | 4i | UMD 视频 | **I-6 已修（`bb5cd9e`）**：跳过帧（参考缺失/尺寸不符/参数不支持/分配失败）以前只清 `JMDEC_DEC_E` 就返回，PPU 输出面没编程、`vaSyncSurface()` 照样成功，应用拿到旧内容 | 现在 `end_frame()` 置 `frame_failed` + 桩 fence，`get_decoder_fence()` 返回 0 → `vaSyncSurface()` 报错；回归（VP9 P2 10bit / show_existing / res14 / HEVC8 / H264 8）全部逐位一致 | 本文 §1.8 |
 | 5 | KMD | 只剩 N10（决定只文档化） | K9-① 已核实为与厂商一致（非缺陷）；N10 改为只记录 | 本文 §2.3 |
 | 6 | 切换脚本 | **vendor 态端到端未实跑** | `stack vendor` 会重启，需人工确认；热切换已证不可行（refcnt 恒 2） | `switch-mwv207.sh` / §5 |
@@ -396,6 +396,33 @@ tx_mode=3 的关键帧改写成 intra-only（`refresh=0x01`、352×288、101 KB 
 乱"也非"局部几个块"。这条形态与"部分超级块没解对、其余正确"更接近，下一步应拿
 逐块（64×64 超级块）的误差图与码流里的 partition/tx 决策对照，或恢复寄存器 dump
 逐帧比对 A 的 CTU 级参数（`JMDEC_*_PARM`/`JMDEC_*_ILF` 系列）。
+
+**2026-11-11 取证（自写 VAAPI 客户端，`tests/vaapi-client/vadec.c`）**：为绕开
+ffmpeg 的包重组，直接走 libva 解码，把问题收窄到三个事实：
+
+- 官方 `vp90-2-16-intra-only.webm` 的**包 0 是 superframe**，内含 4 个子帧
+  `30299/35391/40875/11384` 字节（和 117949 + 14 B 索引 = 117963）；ffmpeg 会把它拆成
+  4 次送驱动，之前"`JMDEC_STREAM_LEN` 只有 30306、包被截断"的猜测即由此作废 —— 那是
+  第一个子帧的长度。
+- **单个 intra-only 子帧单独解码是逐字节正确的**（`sub0` + 尾部单字节 `0x88`
+  `show_existing`，与 libvpx 比 IDENTICAL）。所以 I-5 不是"intra-only 帧解不对"，
+  差异只在"用 intra-only 帧当参考的 inter 帧"上。
+- 用 `[sub0..sub3]` 顺序解码，第 4 帧（inter 的 `sub3`）与软件差 mean 19.61，与 ffmpeg
+  路径同量级 ⇒ 可稳定复现，且与容器/客户端无关。
+
+**同批修掉的三处实现缺陷（N18，`6225e97`）**：直连 VAAPI 的客户端送单字节
+`show_existing_frame` 包时它会被丢掉 —— ① `mwv207_video_decoder.c` 的
+`decode_bitstream()` 在 `num_buffers == 1` 分支里 `if (sizes[i] != 1)` 把它静默丢弃；
+② `mwv207_vp9_parse_frame()` 入口按 `size < 4` 拒绝；③ 即使放行，位读取器按 32 位字
+推进，1 字节会读越界（`mwv207_sw_turn_around` 断言）。三处都已改。另把
+`show_existing_frame` 分支里误加的 `frame_skipped` 去掉（它有正常输出画面，不该按
+跳过上报失败），并补上该分支的输出面地址/步长/位深编程。
+
+**仍未解决**：`show_existing` 的**重放画面**目前是全黑（`[关键帧, 0x88]` 时
+va1 与 va0 差 mean 105.85、非零采样 522/1568）。参考槽的写入本身有内容（
+`vp9_refresh_slots` 拷贝的源缓冲非零），所以问题在重放后 PPU 读的是哪块内存 —— 该分支
+在 `mwv207_pp_set_regs()` 之前就 `return`，PPU 源面仍沿用上一帧的编程。这条属于
+B3 的"参考槽重放"能力，与 I-5 分开记。
 
 **待查方向**：① ~~`fpar=0`~~、~~`refresh_frame_flags=0x01`~~、~~高 QP~~ —— 均已被自产
 样片实验排除；② **`transform_mode`**：官方样片 `txmode=3`（ALLOW_32X32），本机编码器
@@ -910,6 +937,7 @@ initramfs 已刷并解包核对（`modinfo -F srcversion` 均为 `8DFC52…`）�
 | 2026-11-10 | UMD：HEVC `tile_buffer_size` 用位深当帧高（I-1），tile 缓冲按错误高度分配 | `385ed81`（`src/mwv207-umd`） |
 | 2026-11-10 | UMD：收回 H.264 High422/High444 声明（不可实现，见 §1.5）＋ word7 bit30 复用导致的单色标志被清零（I-2/I-3） | `a5a938b`（`src/mwv207-umd`） |
 | 2026-11-10 | UMD：收回 H.264 High10 声明（I-4：10bit 提交会挂死 DEC 管线，缺 high10p 位流预转换）＋ `end_frame` 拒绝高位深码流 | `4ecca0d`（`src/mwv207-umd`）；载荷 `payload-42`（r19）已重新生成并通过 `umd check`/预验证，**安装需 `sudo ./switch-mwv207.sh umd install`（会重启 lightdm）** |
+| 2026-11-11 | UMD：VP9 `show_existing_frame` 能真正送到解码器（N18）—— 1 字节包不再被 `decode_bitstream()` 丢弃、解析器放宽到 `size >= 1` 并补零到 16 字节、`show_existing` 不再误标记为"跳过"；新增 `tests/vaapi-client/vadec.c` | `6225e97`（`src/mwv207-umd` ＋ `tests/vaapi-client`） |
 | 2026-11-10 | UMD：被跳过的帧不再静默返回脏图（I-6）—— 跳过点置 `frame_skipped`，`end_frame()` 不提交并给桩 fence，新增 `get_decoder_fence()` 让 `vaSyncSurface()` 报错（跨尺寸参考一族现在显式失败） | `bb5cd9e`（`src/mwv207-umd`）＋ `tests/vp9-resize/run-vp9-resize.sh` 判据升级 |
 | 2026-11-10 | UMD：VP9 Profile 2（10bit 4:2:0）硬解落地（A5）——放行 `profile==2 && bit_depth==10`、声明 `VP9Profile2` + P010 面、`mwv207_vp9_10bit_enabled()` 开关；4 组样片（64x64/640x360/720p60/1080p30，含 inter 帧）与软件解码逐位一致、零 TDR，VP9 回归 18/18 | `82e7b02`（`src/mwv207-umd`）；载荷 `payload-42` 升为 r20（DRI `39f38c6f…`、VA `fa63148d…`） |
 | 2026-11-10 | Firefox 标签栏"微缩 chrome"：buffer 写入前等待 GPU（`mwv207_resource.c`） | `6ec1e17`（`src/mwv207-umd`） |
@@ -952,7 +980,10 @@ initramfs 已刷并解包核对（`modinfo -F srcversion` 均为 `8DFC52…`）�
   逐帧比对，见 §1.7）、
   `tests/bad-submit/run-badsubmit.sh`（畸形提交防御，N16；**老模块上跑会让内核
   oops**，故默认不跑，只在确认模块含 `c01af40` 后用
-  `tests/verify-installed.sh --bad-submit` 带上）、`tests/run-all.sh`
+  `tests/verify-installed.sh --bad-submit` 带上）、
+  `tests/vaapi-client/vadec.c`（**不经 ffmpeg 的最小 VAAPI 解码客户端**：IVF 输入、
+  NV12/P010 输出，读回走 `vaExportSurfaceHandle` + 逐 plane `mmap`；I-5/B2 取证用，
+  `cc -O2 -o /tmp/vadec tests/vaapi-client/vadec.c -lva -lva-drm`）、`tests/run-all.sh`
 
 ## 火狐浏览器自身 UI 的文字错位（r8 起可见）—— 已修（2026-11-07）
 
