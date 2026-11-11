@@ -78,7 +78,7 @@ echo "== 构建"
 if [ ! -f "$SRC/build/build.ninja" ]; then
     meson setup "$SRC/build" "$SRC" --prefix=/usr --libdir=lib/aarch64-linux-gnu \
         --buildtype=release -Dglamor=true -Dxorg=true -Dglx=false \
-        -Ddri1=false -Ddri2=false -Ddri3=false -Dxnest=false -Dxvfb=false \
+        -Ddri1=false -Ddri2=true -Ddri3=true -Dxnest=false -Dxvfb=false \
         -Dxephyr=false -Dxdmcp=false -Dsystemd_logind=false -Dudev=true \
         -Dxkb_dir=/usr/share/X11/xkb -Dxkb_output_dir=/var/lib/xkb \
         -Dsha1=libnettle

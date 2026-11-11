@@ -209,9 +209,15 @@ stripped 但有函数名；源码 `ref/vendor-1.8.0` 的 75 个 `.c`）：
   为 0）；未定义符号里除 libc/libepoxy/pixman/libdrm 外全部由 `/usr/lib/xorg/Xorg`
   导出。glamor 的结构体布局只受 `GLAMOR_HAS_GBM` 影响，本构建已启用。
 - 当前状态：模块已装（`md5 cbf0e4af…`，原文件 `03fe0a6e…`），**需重启图形会话生效**。
-- 待验证（重启后）：`tests/present-bench/run-present-bench.sh 800 600 300`
-  ——基线（旧模块，`vblank_mode=0`）为 swap-only **0.643 ms**、clear+swap **0.927 ms**；
-  期望降到 ≈0.25–0.35 ms。再跑 `glmark2 -b :duration=3` 看总分（基线 723）。
+- 第一轮实测（2026-11-11 16:50，重启后加载第一版补丁模块；`vblank_mode=0`，
+  800×600）：swap-only **0.065 ms**（修前 0.643）、clear+swap **0.642 ms**（修前 0.927）。
+  ⇒ 纯 present 已经是零拷贝；但"画了一帧再 present"仍要 0.577 ms，说明还有一次整帧拷贝。
+- 原因已查明：第一版构建漏了 `-Ddri3=true`，`glamor_enable_dri3()` 没编进去
+  （Xorg 日志 `modeset(0): DRI2: glamor lacks support for pixmap import/export`），
+  Present 因此退回拷贝路径。已重新按发行版配置（`-Ddri2=true -Ddri3=true`）构建并安装，
+  `build/include/dix-config.h` 里 `#define DRI3 1`，导出符号仍为系统版超集（无缺失）。
+- 待验证（再次重启图形会话后）：`tests/present-bench/run-present-bench.sh 800 600 300`
+  期望 clear+swap 降到 ≈0.25–0.35 ms；再跑 `glmark2 -b :duration=3`（基线 723）。
   若异常：`sudo /usr/local/sbin/xglamor-rollback` 后重启会话即可回到旧模块。
 
 ## 11. 复现命令
