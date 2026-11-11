@@ -535,6 +535,20 @@ ffmpeg 的帧对齐/拆包干扰，写了一个直连 libva 的最小客户端�
 - 顺带确认一个接口限制：驱动**不拆 superframe**，直连 VAAPI 的客户端必须自己
   按索引拆（整包送进去会按单帧解，输出与软件差 mean 17.37）；ffmpeg 侧无影响。
 
+**重放帧（show_existing_frame）出黑图的尝试与否定结论（2026-11-11）**：
+- 只开 `JMDEC_PP_E`/`JMDEC_PP_PIPELINE_E`（关 `DEC_E`）、并把 PP 输入地址指到
+  参考槽，输出仍是黑（mean 106，非零采样 522/1568）⇒ **PPU 不是靠这两个位
+  自启动的**，整块视频解码器仍以 `DEC_E` 为启动条件。
+- 反向验证"目标 buffer 是不是显示用的那块"：把重放帧写入的 `buf->res->bo`
+  直接 memset 成 0x80，导出后该帧有 1/3 采样变成 128 ⇒ **写对了 buffer，但
+  布局不对**（内部是 ASIC 的 tiled 布局，应用 surface 期望线性 NV12；正常帧
+  由 PPU 做这一步转换，重放帧没有 PPU 参与就被直接读了）。
+- 结论：要支持重放必须二选一 —— ① 找到 PPU 单独的启动方式（寄存器语义没
+  文档，厂商 VAAPI 驱动是闭源的）；② 在 CPU 侧实现 tiled→线性转换（当前
+  驱动里没有这样的 helper，tiling 公式还只从 `vp9_frame_geometry()` 反推得到
+  `out_w = NEXT_MULTIPLE(4*ceil8(w)*bit_depth, align*8)/8` 这一层）。两条都
+  不在 B3 的判据路径上（单帧 intra-only 已逐字节一致），故留作待办。
+
 复跑：`LIBVA_DRIVERS_PATH=<构建目录> LIBVA_DRIVER_NAME=mwv207 vadec <向量.ivf> out.yuv`
 与 `ffmpeg -c:v libvpx-vp9 -i <向量.webm> -pix_fmt nv12 -f rawvideo` 比对；注意
 ffmpeg 不输出隐藏帧，逐帧索引不能直接对位（要按 show_existing/可见帧对齐）。
