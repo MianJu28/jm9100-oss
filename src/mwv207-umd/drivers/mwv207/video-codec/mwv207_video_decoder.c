@@ -486,7 +486,10 @@ mwv207_video_decoder_decode_bitstream(struct pipe_video_codec *decoder,
             dec->bs_size += sizes[i];
             dec->bs_ptr += sizes[i];
          } else {
-            if (sizes[i] != 1) {
+            /* 1 字节的包不是垃圾：VP9 的 show_existing_frame 整包就是一字节
+             * （marker+version+profile+show_existing+3 位槽索引）。早先这里
+             * 把 size==1 直接丢弃，导致直连 VAAPI 的客户端无法用 show_existing。 */
+            if (1) {
                
                
                memcpy(dec->streams[0] + dec->streams_len[0],

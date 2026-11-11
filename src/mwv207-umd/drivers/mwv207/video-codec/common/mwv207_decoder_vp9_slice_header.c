@@ -1564,7 +1564,10 @@ mwv207_vp9_parse_frame(struct mwv207_vp9_slice_header *sh,
    struct mwv207_vp_bool_coder bc = {0};
    uint32_t ret, hdr, part;
 
-   if (!sh || !data || size < 4)
+   /* show_existing_frame 包整包只有 1 字节（marker+version+profile+
+    * show_existing+3 位槽索引），而普通帧至少 4 字节；早先这里统一按
+    * size < 4 拒绝，导致 direct 送 show_existing 包时解析失败。 */
+   if (!sh || !data || size < 1)
       return MWV207_NOK;
 
    rb.strm_buff_start = data;

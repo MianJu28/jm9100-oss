@@ -991,10 +991,25 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
       st->ctx_ready = true;
    }
    memcpy(st->pre_ctx, st->saved_ctx, sizeof(st->saved_ctx));
-   ret = mwv207_vp9_parse_frame(
-      sh, stream, stream_len, width, height, st->saved_ctx,
-      pic_param->picture_parameter.frame_header_length_in_bytes,
-      pic_param->picture_parameter.first_partition_size);
+   /* show_existing_frame 包整包只有 1 字节，而位读取器按 32 位字推进，
+    * 直接喂进去会读越界（mwv207_sw_turn_around 断言失败）。补零到 4 字节
+    * 再解析；解析器在 show_existing 分支会立即返回，补的位不会被用到。 */
+   {
+      if (stream_len && stream_len < 16) {
+         uint8_t pad[16] = { 0 };
+         memcpy(pad, stream, stream_len);
+         stream = pad;
+         ret = mwv207_vp9_parse_frame(
+            sh, stream, 16, width, height, st->saved_ctx,
+            pic_param->picture_parameter.frame_header_length_in_bytes,
+            pic_param->picture_parameter.first_partition_size);
+      } else {
+         ret = mwv207_vp9_parse_frame(
+            sh, stream, stream_len, width, height, st->saved_ctx,
+            pic_param->picture_parameter.frame_header_length_in_bytes,
+            pic_param->picture_parameter.first_partition_size);
+      }
+   }
    if (!ret) {
       memcpy(st->lf_ref_delta, sh->mb_ref_lf_delta, sizeof(st->lf_ref_delta));
       memcpy(st->lf_mode_delta, sh->mb_mode_lf_delta, sizeof(st->lf_mode_delta));
@@ -1235,7 +1250,18 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
                        "vp9: show_existing_frame slot %u unavailable\n",
                        slot);
          }
-         reg_buf->set_reg(reg_buf, JMDEC_DEC_E, 0); decoder->frame_skipped = true;
+         /* show_existing_frame 不占用解码单元，但它有正常的输出画面，
+          * 不能按"跳过"处理（I-6 的失败上报要留给真正解不出来的帧）。
+          * 输出面地址与步长必须照常编程，否则 PPU 会从旧地址取数据，
+          * 输出就是一整块黑（这就是 B3/I-5 调查里 show_existing 出黑图的原因）。 */
+         vp9_set_addr(reg_buf, JMDEC_DEC_OUT_YBASE_LSB, buf->res->bo, 0);
+         vp9_set_addr(reg_buf, JMDEC_DEC_OUT_CBASE_LSB, buf->res->bo, luma_size);
+         reg_buf->set_reg(reg_buf, JMDEC_DEC_OUT_Y_STRIDE, out_w_y);
+         reg_buf->set_reg(reg_buf, JMDEC_DEC_OUT_C_STRIDE, out_w_y);
+         reg_buf->set_reg(reg_buf, JMDEC_BIT_DEPTH_OUT_MINUS8, sh->bit_depth - 8);
+         reg_buf->set_reg(reg_buf, JMDEC_PIC_WIDTH_IN_CBS, (width + 7) >> 3);
+         reg_buf->set_reg(reg_buf, JMDEC_PIC_HEIGHT_IN_CBS, (height + 7) >> 3);
+         reg_buf->set_reg(reg_buf, JMDEC_DEC_E, 0);
          st->pending = NULL;
          return;
       }
