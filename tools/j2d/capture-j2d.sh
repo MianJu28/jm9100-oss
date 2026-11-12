@@ -36,6 +36,8 @@ DIR="${1:-$HOME/j2d-captures/$(date +%Y%m%d-%H%M%S)}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
 SO="$DIR/j2dcap.so"
+SEM="$DIR/j2dsem.so"
+J2D_SEM="${J2D_SEM:-1}"
 BIN="$DIR/xcopy"
 OUT="$DIR"
 
@@ -49,6 +51,12 @@ mkdir -p "$OUT"
 rm -f "$OUT"/*.bin "$OUT/log.txt" "$OUT/decode.txt"
 
 gcc -O2 -Wall -shared -fPIC -o "$SO" "$HERE/j2dcap.c" -ldl || exit 1
+if [ "$J2D_SEM" = 1 ]; then
+	gcc -O2 -Wall -shared -fPIC -o "$SEM" "$HERE/j2dsem.c" -ldl || exit 1
+	PRELOAD="$SO $SEM"
+else
+	PRELOAD="$SO"
+fi
 gcc -O2 -Wall -o "$BIN" "$HERE/xcopy.c" -lX11 || exit 1
 
 echo "== 停 lightdm（腾出 X 与 DRM master） =="
@@ -62,7 +70,7 @@ sleep 1
 
 echo "== 用厂商 DDX 起一个 X（带 LD_PRELOAD） =="
 rm -f /tmp/.X11-unix/X0
-J2D_CAPTURE_DIR="$OUT" LD_PRELOAD="$SO" \
+J2D_SEM_LOG="$OUT/sem.log" J2D_CAPTURE_DIR="$OUT" LD_PRELOAD="$PRELOAD" \
 	/usr/lib/xorg/Xorg :0 -noreset -nolisten tcp -novtswitch >"$OUT/xorg.log" 2>&1 &
 XPID=$!
 for i in $(seq 1 50); do
