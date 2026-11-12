@@ -1272,6 +1272,34 @@ initramfs 已刷并解包核对（`modinfo -F srcversion` 均为 `8DFC52…`）�
 效率边界；`jellyfish`/`buffer` 这类"重叠绘制 + 中等着色器"的场景已通过
 平铺扫描出（§19–§21）拿到 1.5–2.9×。
 
+### 性能差距盘点（2026-11-12 晚）：真正的瓶颈在"CPU 读映射 BO"与 VP9 参考槽拷贝
+
+这一轮把 present/重场景之外的地方按"单项微基准 + 栈内实测"扫了一遍，结论按优先级：
+
+| # | 项 | 实测 | 判断 |
+|---|---|---|---|
+| 1 | **VP9 硬件解码 1080p** | **7.1–8.5 fps**（同文件软件解码 **427–545 fps**） | **真缺陷级**：比软件慢 50–60× |
+| 2 | 映射 BO 的 **CPU 读**带宽 | **0.28 GB/s**（写 4.4 GB/s） | 根因所在：GEM mmap 是 write-combined，读极慢 |
+| 3 | VP9 参考槽拷贝 | 每帧 `vp9_refresh_slots()` **8–112 ms**（360p/1080p），其中单个 345 KB 槽的 `memcpy` 就 **1.0 ms ≈ 0.34 GB/s** | 直接后果：从 WC 映射的 BO 读 |
+| 4 | 纹理上传 `glTexSubImage2D` | 1024² 4 MB **8.2 ms（0.51 GB/s）** + 约 1 ms 固定开销 | 视频/浏览器上传帧是慢路径 |
+| 5 | 回读 `glReadPixels` | 64×64 **2.8 ms** | 固定同步开销为主 |
+| 6 | 缓冲上传 `glBufferSubData` | 4 MB **0.99 ms（4.2 GB/s）**、`Map+write` 4.4 GB/s | 尚可（写路径本身是 WC 友好的） |
+| 7 | 硬件解码 HEVC/H.264 1080p | **254 fps**（软件 545） | 可用，但同样被 CPU 侧拖累 |
+| 8 | 小窗口 present 固定开销 | `glxgears` **4.9k FPS**（厂商 15.1–17.6k） | 每帧约 0.14 ms 固定开销 |
+| 9 | `u_threaded_context` | 我方 UMD **未启用**（全树零引用） | 可选项，收益未知 |
+
+关键链条（已用插桩证实，`MWV207_DECTIME` 临时开关，测完已回退）：
+- `mwv207_dec_vp9_submit_done()` 里 `vp9_adapt_probs()` = **0.00 ms**、`vp9_refresh_slots()` = **8.0 ms/帧**（360p，`flags=0x1`、345600 B）。
+- 拆到槽级：`map=0.00 ms`、`memcpy=1.02 ms`/345 KB ⇒ **0.34 GB/s**，正是 WC 映射读的典型值。
+- 1080p 每帧 8 槽 × 3.1 MB ≈ 25 MB ⇒ 约 **70–90 ms**，与 7–8 fps 完全对得上。
+- 独立微基准：`glMapBufferRange(READ)+memcpy` 4 MB = **15.1 ms（0.28 GB/s）**，而写同样的量是 0.95 ms（4.4 GB/s）。
+
+可能的两条修法（未做）：
+1. **CPU 侧不读 BO**：`vp9_refresh_slots()` 改成用 GPU 引擎把槽内容拷进 `ref_store`（同一个 3D/2D 管道，按序提交，CPU 完全不碰像素），风险是引入一次额外的提交与同步；
+2. **KMD 侧让系统内存 BO 走 cached 映射**：`mwv207_gem_fault()` 现在对所有 BO 都用 `vmf->vma->vm_page_prot`（DRM 已按 WC 设好），若对 `TTM_PL_SYSTEM/TT` 改用 cached prot，读带宽能上到几 GB/s，但要处理 CPU cache 与 ASIC 写入的一致性（这正是当初选 WC 的原因），风险更高。
+
+纹理上传的 0.51 GB/s 与 `glReadPixels` 的 2.8 ms 也都在同一条"映射 BO 慢"的链上，修 1 或 2 会一并改善。
+
 ## 5. 建议的推进顺序
 
 | 批次 | 内容 | 前置 | 代价 |
