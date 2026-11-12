@@ -216,8 +216,21 @@ stripped 但有函数名；源码 `ref/vendor-1.8.0` 的 75 个 `.c`）：
   （Xorg 日志 `modeset(0): DRI2: glamor lacks support for pixmap import/export`），
   Present 因此退回拷贝路径。已重新按发行版配置（`-Ddri2=true -Ddri3=true`）构建并安装，
   `build/include/dix-config.h` 里 `#define DRI3 1`，导出符号仍为系统版超集（无缺失）。
-- 待验证（再次重启图形会话后）：`tests/present-bench/run-present-bench.sh 800 600 300`
-  期望 clear+swap 降到 ≈0.25–0.35 ms；再跑 `glmark2 -b :duration=3`（基线 723）。
+- 第二轮实测（2026-11-12 09:18，加载了带诊断计数的构建）：swap-only 0.016 ms、
+  clear+swap 0.705 ms —— 比第一版没有改善。原因由诊断日志直接给出：
+  ```
+  MWV207DBG: blit rejected: nbox (nbox=4)
+  MWV207DBG: shader copy #5 nbox=4 gc=0x… alu=3 pm=0xffffffff
+  ```
+  即 present 的 `present_copy_region()` 走 `miCopyArea` 后交给 glamor 的是 **4 个 box**
+  （GC 是 scratch GC：alu=GXcopy、planemask 全 1，都满足条件），而第一版要求 `nbox == 1`，
+  于是全部回退到着色器路径。**结论：瓶颈不在"用不用 blit"，而在"只支持单 box"。**
+- 第三版（最终）：去掉 `nbox == 1` 限制，改为**逐 box 各做一次 `glBlitFramebuffer`**
+  （上限 64 个 box），其余判定不变。已重新构建安装（md5 `73b9622834…`，
+  备份 `.mwv207-orig` 不动，导出符号仍为系统版超集）。
+- 待验证（重启图形会话后）：`tests/present-bench/run-present-bench.sh 800 600 300`
+  期望 clear+swap 从 0.705 降到 **≈0.30–0.35 ms**（一次 900×600 面积分摊到 4 个 blit，
+  每个 blit 引擎约 17 GB/s），`glmark2 -b :duration=3` 期望从 723 升到 ≈1300–1600。
   若异常：`sudo /usr/local/sbin/xglamor-rollback` 后重启会话即可回到旧模块。
 
 ## 11. 复现命令
