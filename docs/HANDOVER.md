@@ -65,6 +65,16 @@ OpenCL/VA-API/VDPAU 全走我们的栈；自建 KMD 在跑（srcversion `D5EEF36
   `TX_EXT_CONFIG.FORMAT` 码 0x32–0x36（详见 UNRESOLVED C1），10bit 帧在 GL 里
   采样/缩放仍不正确。
 
+- **present 快路径（2026-11-12，`4bb9755`/`1cc0ba4`/`6fa3ad4`）**：X 的 glamor 21.1
+  拷贝只有着色器路径，在本机（线性目标 6.7 GB/s）每帧吃 0.65 ms。补丁给
+  `glamor_copy_gl()` 加了 `glBlitFramebuffer` 快路径（逐 box，`GLAMOR_NO_BLIT=1` 可关），
+  并配 `tools/build-xglamor.sh`（下载/补丁/构建/备份/安装/回滚，模块 ABI 与发行版一致）。
+  实测：present 800×600 0.485–0.567 ms（关掉 blit 1.040 ms，**1.9–2.1×**）；`glmark2 build`
+  1031 → 1504 FPS，全套 723 → 933（厂商 5209）。剩余差距的定量结论：一次 800×600 blit
+  的下限 0.210 ms，厂商 0.167 ms/帧说明它几乎不整帧拷贝 ⇒ 继续提升只能走
+  "扫描出平铺+TS"或"overlay 零拷贝"，详见 `reports/PRESENT-PATH-20261111.md` §12。
+  回滚：`sudo /usr/local/sbin/xglamor-rollback` 或 `sudo ./tools/build-xglamor.sh --rollback`。
+
 ## 4. 关键方法学（重复踩过的坑，务必遵守）
 
 1. **探针必须先在 llvmpipe 上跑出"符合预期"**才能用来判定我们的驱动；判据始终是

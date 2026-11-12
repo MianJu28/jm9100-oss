@@ -27,6 +27,7 @@ REPO=$(cd "$(dirname "$0")/.." && pwd)
 XORG_VER=${XORG_VER:-21.1.16}
 SRC=${XORG_SRC:-/tmp/xorg-server-$XORG_VER}
 PATCH="$REPO/patches/xserver/0001-glamor-blit-fast-path.patch"
+DBG_PATCH="$REPO/patches/xserver/0002-glamor-debug-probe.patch"
 MODULE=/usr/lib/xorg/modules/libglamoregl.so
 BACKUP=$MODULE.mwv207-orig
 
@@ -72,6 +73,12 @@ fi
 if ! grep -q "glamor_copy_fbo_fbo_blit" "$SRC/glamor/glamor_copy.c"; then
     echo "== 应用补丁"
     ( cd "$SRC" && patch -p1 < "$PATCH" )
+fi
+
+# 可选：诊断插桩（文件旗标开关，发布构建时应关掉）
+if [ "${XGLAMOR_DEBUG:-0}" = 1 ] && ! grep -q "mwv207_xg_note" "$SRC/glamor/glamor_copy.c"; then
+    echo "== 应用诊断插桩补丁"
+    ( cd "$SRC" && patch -p1 < "$DBG_PATCH" )
 fi
 
 echo "== 构建"

@@ -1413,7 +1413,7 @@ initramfs 已刷并解包核对（`modinfo -F srcversion` 均为 `8DFC52…`）�
 - 验证：三个玲珑应用均可启动；`eglinfo -B` 只枚举 1 个 platform device；
   火狐 WebRender 页面渲染不受影响（直方图与修复后一致）。
 
-## `present` 每帧多花 ~0.55 ms：根因是线性表面的采样带宽（性能，未修）
+## `present` 每帧多花 ~0.55 ms：根因是线性表面的采样带宽（性能，方案 A 已修，余 B/D）
 
 - 现象（2026-11-11，r25，`:1`）：`glmark2 -b build:duration=3` 我方 **1049 FPS（0.953 ms）**，
   厂商同条件 5982–14856 FPS（0.067–0.167 ms）。逐场景差距集中在"便宜帧"
@@ -1495,6 +1495,20 @@ initramfs 已刷并解包核对（`modinfo -F srcversion` 均为 `8DFC52…`）�
      （只写 4 个寄存器），我方 KMD 完全没有 overlay 面；同条件厂商 `build` 0.167 ms
      **已经快于我们一次 800×600 线性 blit 的 0.222 ms**，说明它很可能压根不做整帧拷贝。
      工程量最大（KMD 新增 plane + Present 对接），但上限最高。
+- **2026-11-12 进展：方案 A 已实现并实测（提交 `4bb9755`/`1cc0ba4`/`6fa3ad4`）**：
+  `patches/xserver/0001-glamor-blit-fast-path.patch` 给 glamor 21.1.16 的 `glamor_copy_gl()`
+  加了一条 `glBlitFramebuffer` 快路径（逐 box、上限 64；`GLAMOR_NO_BLIT=1` 可整体关闭）；
+  `tools/build-xglamor.sh` 负责下载/打补丁/构建/备份/安装/回滚，模块 ABI 与发行版一致
+  （导出符号是系统版超集）。实测（同一 X 会话、文件旗标 A/B，800×600，`vblank_mode=0`）：
+  swap-only 0.036 ms；clear+swap **blit 0.485–0.567 ms**、**关掉 blit 1.040 ms** ⇒ **1.9–2.1×**；
+  Xorg 日志 `blit=… shader=0` 证明 present 的拷贝全部命中快路径（`nbox=1`）。
+  端到端：`glmark2 -b build` **1031 → 1504 FPS**，全套 **723 → 933**；廉价场景
+  （`conditionals`/`function`/`loop`）升到 1025–1038 FPS，重场景不变。
+- **剩余差距已定量**：单次 800×600 blit 进 1920×1080 FBO 的硬件下限是 **0.210 ms**
+  （9.1 GB/s，客户端实测）。即使把 present 压缩到"一次拷贝"，800×600 也只能到 ≈0.5 ms/帧
+  （≈2000 FPS），与厂商 0.167 ms 仍差 3×；厂商那 0.167 ms 说明它**几乎不整帧拷贝**
+  （或走 TS 平铺 38 GB/s）。故再往下只有 **B（扫描出平铺+TS）** 与 **D（overlay 零拷贝）**
+  两条路，A 已到位。
 - 详细数据与复现命令：`reports/PRESENT-PATH-20261111.md`。
 - 关联：`reports/GLMARK2-VENDOR-VS-OSS-20261111.md`（同条件总分与逐场景对照）。
 - 另注：`glxgears` 的 `vblank_mode=0` 我方 3462–5275 FPS vs 厂商 15134–17621，

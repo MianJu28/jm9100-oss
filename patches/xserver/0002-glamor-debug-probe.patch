@@ -1,0 +1,68 @@
+--- a/glamor/glamor_copy.c
++++ b/glamor/glamor_copy.c
+@@ -354,6 +354,33 @@
+  * Each box becomes one blit; the clip is already applied by the caller.
+  * Define GLAMOR_NO_BLIT=1 in the environment to disable it (A/B testing).
+  */
++/* --- mwv207 diagnostic (dev only): runtime toggles via /tmp flags --- */
++#include <unistd.h>
++static int
++mwv207_xg_flag(const char *path)
++{
++    return access(path, F_OK) == 0;
++}
++static unsigned long mwv207_xg_blit_n, mwv207_xg_shader_n;
++static void
++mwv207_xg_note(int blit, int nbox, int sw, int sh, int dw, int dh)
++{
++    if (blit) mwv207_xg_blit_n++; else mwv207_xg_shader_n++;
++    if (!mwv207_xg_flag("/tmp/mwv207-xg-dbg"))
++        return;
++    if (((mwv207_xg_blit_n + mwv207_xg_shader_n) % 50) == 0)
++        ErrorF("MWV207DBG: blit=%lu shader=%lu | last: %s %dx%d -> %dx%d nbox=%d\n",
++               mwv207_xg_blit_n, mwv207_xg_shader_n,
++               blit ? "BLIT" : "SHADER", sw, sh, dw, dh, nbox);
++}
++
++static Bool
++mwv207_xg_noblit(void)
++{
++    return mwv207_xg_flag("/tmp/mwv207-xg-noblit");
++}
++/* --- end mwv207 diagnostic --- */
++
+ static Bool
+ glamor_copy_fbo_fbo_blit(DrawablePtr src,
+                          DrawablePtr dst,
+@@ -377,7 +404,7 @@
+     int src_off_x, src_off_y, dst_off_x, dst_off_y;
+     int i;
+ 
+-    if (!glamor_priv->has_fbo_blit || getenv("GLAMOR_NO_BLIT"))
++    if (!glamor_priv->has_fbo_blit || getenv("GLAMOR_NO_BLIT") || mwv207_xg_noblit())
+         return FALSE;
+ 
+     if (nbox <= 0 || nbox > 64 || reverse || upsidedown || bitplane != 0)
+@@ -809,8 +836,21 @@
+                 return glamor_copy_fbo_fbo_temp(src, dst, gc, box, nbox, dx, dy,
+                                                 reverse, upsidedown, bitplane, closure);
+             if (glamor_copy_fbo_fbo_blit(src, dst, gc, box, nbox, dx, dy,
+-                                         reverse, upsidedown, bitplane))
++                                         reverse, upsidedown, bitplane)) {
++                mwv207_xg_note(1, nbox, src_pixmap->drawable.width,
++                               src_pixmap->drawable.height,
++                               dst_pixmap->drawable.width,
++                               dst_pixmap->drawable.height);
+                 return TRUE;
++            }
++            if (mwv207_xg_flag("/tmp/mwv207-xg-dbg") &&
++                ((mwv207_xg_blit_n + mwv207_xg_shader_n) % 50) == 0)
++                ErrorF("MWV207DBG: blit refused for %dx%d -> %dx%d nbox=%d\n",
++                       src_pixmap->drawable.width, src_pixmap->drawable.height,
++                       dst_pixmap->drawable.width, dst_pixmap->drawable.height, nbox);
++            mwv207_xg_note(0, nbox, src_pixmap->drawable.width,
++                           src_pixmap->drawable.height,
++                           dst_pixmap->drawable.width, dst_pixmap->drawable.height);
+             return glamor_copy_fbo_fbo_draw(src, dst, gc, box, nbox, dx, dy,
+                                             reverse, upsidedown, bitplane, closure);
+         }

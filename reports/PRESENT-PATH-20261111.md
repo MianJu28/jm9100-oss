@@ -233,6 +233,62 @@ stripped 但有函数名；源码 `ref/vendor-1.8.0` 的 75 个 `.c`）：
   每个 blit 引擎约 17 GB/s），`glmark2 -b :duration=3` 期望从 723 升到 ≈1300–1600。
   若异常：`sudo /usr/local/sbin/xglamor-rollback` 后重启会话即可回到旧模块。
 
+## 12. 第四轮：多 box 快路径实测（2026-11-12 09:52，X 在 :0）
+
+重启图形会话后，加载的是"逐 box blit"版本（md5 `c7fdcb66…`，含文件旗标诊断：
+`/tmp/mwv207-xg-dbg` 打印计数、`/tmp/mwv207-xg-noblit` 运行时关掉快路径）。
+
+### 12.1 快路径确实命中，且是 present 的主拷贝
+
+`/var/log/Xorg.0.log` 每 50 次拷贝一行，示例：
+
+```
+MWV207DBG: blit=3250 shader=0 | last: BLIT 800x600 -> 1920x1080 nbox=1
+```
+
+`shader=0` ⇒ present 的每次拷贝都走了 `glBlitFramebuffer`；`nbox=1`（每次
+`present_copy_region()` 只带一个 box），所以"逐 box"实现已经把画布全覆盖。
+
+### 12.2 同一 X 会话内的 A/B（800×600，`vblank_mode=0`）
+
+| 设置 | swap-only | clear+swap |
+|---|---|---|
+| blit 快路径开 | 0.036 ms | **0.485–0.567 ms** |
+| blit 快路径关（`/tmp/mwv207-xg-noblit`） | — | **1.040 ms** |
+
+⇒ 快路径把 present 拷贝成本砍掉 **1.9–2.1×**。
+
+### 12.3 glmark2 端到端
+
+| 指标 | 无 blit | 有 blit | 厂商栈 |
+|---|---|---|---|
+| `build` 场景 | 1031 FPS（0.970 ms） | **1504 FPS（0.665 ms）** | 5982 FPS |
+| 全套 Score（duration=1） | 723（旧模块） | **933** | 5209 |
+
+廉价场景（`conditionals`/`function`/`loop`）全部升到 **1025–1038 FPS（≈0.97 ms/帧）**；
+重场景不变（`terrain` 115、`refract` 93、`jellyfish` 240）—— 说明提升全部来自 present。
+
+### 12.4 剩余差距的定量分解
+
+- 单次 800×600 blit 进 1920×1080 FBO（客户端实测）：**0.210 ms（9.1 GB/s）**，
+  进 800×600 FBO 0.225 ms ⇒ **一次拷贝的硬件下限 ≈0.21 ms**。
+- 现在每帧 present ≈0.5 ms，≈2.4 倍于一次 blit 的下限；`strace`/计数不足以判定
+  是否两次 GPU 拷贝，但天花板已由上面这条决定：**即使把拷贝压到 1 次、0.21 ms，
+  800×600 也只能到 ≈0.5 ms/帧（≈2000 FPS），仍与厂商 0.167 ms 差 3×**。
+- 厂商能到 0.167 ms 说明它**几乎不拷贝**（或拷贝走 TS 压缩的平铺缓冲，带宽 38 GB/s
+  ⇒ 1.9 MB 只需 0.05 ms）。我方线性目标只有 9–17 GB/s，且 TS 只分配给平铺资源。
+
+### 12.5 结论与下一步
+
+1. **blit 快路径应当保留**（1.9–2.1× 拷贝提速、全套 +29%），补丁与构建脚本已入库。
+2. 想再接近厂商，只有两条路：
+   - **扫描出平铺 + TS**：让屏幕 pixmap 也成为 supertile + TS 资源，拷贝带宽 9→约 38 GB/s；
+     难点在 KMS 侧（DE 平面寄存器里没有任何平铺位，厂商 KMD 也没用），需要硬件文档或试验。
+   - **overlay 平面零拷贝 present**：窗口内容走 overlay 平面直接上屏；厂商 KMD 有
+     overlay 支持而我们没有，属于 DC/KMS 扩展，工作量最大但上限最高（present→0）。
+3. 廉价场景现在的 0.97 ms/帧里，拷贝 ≈0.5、3D ≈0.28、其余为同步开销；即使 present 归零
+   （0.167 ms 级），`build` 也只能到 ≈3000 FPS，与厂商 5982 仍差 2×，那部分属于 3D 管线效率。
+
 ## 11. 复现命令
 
 ```sh
