@@ -441,11 +441,24 @@ mwv207_pipe_2d_submit(struct mwv207_pipe *mpipe, struct mwv207_job *mjob)
 			}
 		}
 
-		pipe_2d_wtol(pipe, start, wait);
+		if (diag >= 2) {
+			/* 单缓冲模式：CMDADDR 直接指本描述符、MODE=RINGBUFFER，
+			 * 不经过 wait-link 链，用来区分"链坏了"与"引擎没启动"。 */
+			pipe_2d_barrier(pipe);
+			pipe_2d_write(pipe, 0x4200,
+				      pipe_2d_gpu_addr(pipe, start) >> 4);
+			pipe_2d_write(pipe, 0x4C00, 1);
+		} else {
+			pipe_2d_wtol(pipe, start, wait);
+		}
 
 		if (diag)
-			pr_info("mwv207: %s diag armed: seqno=%08x",
-				mpipe->fname, pipe_2d_read(pipe, 0x6000));
+			pr_info("mwv207: %s diag armed: seqno=%08x cmdaddr=%08x trig=%08x stat=%08x noc=%08x/%08x",
+				mpipe->fname, pipe_2d_read(pipe, 0x6000),
+				pipe_2d_read(pipe, 0x4200), pipe_2d_read(pipe, 0x4C00),
+				pipe_2d_read(pipe, 0x4800),
+				jdev_read(mpipe->jdev, 0x9B0194),
+				jdev_read(mpipe->jdev, 0x9B0198));
 	}
 
 	return fence;
