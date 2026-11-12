@@ -317,6 +317,14 @@ resource_create(struct pipe_screen *pscreen,
    if (res->base.usage & PIPE_USAGE_STAGING)
       domain = MWV207_DOMAIN_GTT;
 
+   /* 顶点/索引/常量等 buffer 放在 VRAM 时, CPU 侧走 write-combined 映射:
+    * 实测 4 MB 写 2.0 GB/s、读 0.18 GB/s, 而 GTT(系统内存)是 cached 映射,
+    * 同一台机器上写 11.7 GB/s、读 13.0 GB/s。glBufferSubData/glMapBufferRange
+    * 频繁的 buffer 因此改放 GTT。MWV207_BUFFER_VRAM=1 可退回旧行为做 A/B。*/
+   if (res->base.target == PIPE_BUFFER &&
+       !debug_get_bool_option("MWV207_BUFFER_VRAM", false))
+      domain = MWV207_DOMAIN_GTT;
+
    if (whandle)
       res->bo = screen->ws->bo_from_handle(screen->ws, whandle, res->size);
    else

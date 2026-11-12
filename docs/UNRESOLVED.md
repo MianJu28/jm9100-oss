@@ -1381,6 +1381,45 @@ STAGING+LINEAR 影子**，把数据 blit 进平铺纹理后再延迟释放。内
 参考，导致 `p1080.webm` 一度判 FAIL —— 硬件解码与**当场重新软件解码**逐字节一致，
 测试资产必须与源样片同批生成。
 
+### 修法 4 已落地（2026-11-13 凌晨）：buffer 从 VRAM 改放 GTT，CPU 侧读写 6–80 倍
+
+现象：`glBufferSubData` 4 MB **1.12–1.52 ms（2.6–3.5 GB/s）**、`glMapBufferRange(READ)` 4 MB
+**约 15 ms（0.28 GB/s）** —— 写还行、读极慢，典型的 write-combined 特征。
+
+定位：新写 `tests/bo-mmap/bo-mmap-bench.c`（直接用 `DRM_IOCTL_MWV207_GEM_CREATE/MMAP` 建 BO、
+mmap 后测 memcpy 读/写与稀疏读），三个 domain 在同一台机器、同一个进程里对比：
+
+| 放置 | 4 MB mmap 读 | 4 MB mmap 写 | 稀疏读（每 512 B 取一个 8 B） |
+|---|---|---|---|
+| `system(0x1)` | 12.06 GB/s | 11.23 GB/s | 0.04 ms |
+| **`GTT(0x4)`** | **13.02 GB/s** | **11.73 GB/s** | 0.04 ms |
+| `VRAM(0x2)` | **0.18 GB/s** | 1.97 GB/s | 5.58 ms |
+
+⇒ 系统内存 / GTT 的 mmap 是 **cached**（`mwv207_ttm_io_mem_reserve()` 的 SYSTEM/TT 分支
+不设 `bus.caching`，TTM 走非 iomem 的默认页属性），而 VRAM 显式设了
+`ttm_write_combined` + `is_iomem`。buffer 全部建在 VRAM（`resource_create()` 默认
+`MWV207_DOMAIN_VRAM`），于是 CPU 侧的每一次 SubData/map 都在和 WC 映射打交道。
+
+改法（`src/mwv207-umd/drivers/mwv207/mwv207_resource.c`，8 行）：`target == PIPE_BUFFER`
+且未设 `MWV207_BUFFER_VRAM=1` 时，domain 用 `MWV207_DOMAIN_GTT`。
+
+实测（同一份代码、同一进程，仅切环境变量；`tests/tex-upload/buffer-bench.c`，ES3 pbuffer，4 MB buffer）：
+
+| 操作 | VRAM（旧） | GTT（新） | 倍率 |
+|---|---|---|---|
+| `glBufferSubData` 4 MB | 2.10 ms（1.86 GB/s） | **0.34 ms（11.64 GB/s）** | 6.2× |
+| `glMapBufferRange(READ)` + memcpy 4 MB | 24.78 ms（0.16 GB/s） | **0.31 ms（12.44 GB/s）** | **80×** |
+| `glMapBufferRange(WRITE)` + memcpy 4 MB | 2.21 ms（1.77 GB/s） | **0.34 ms（11.55 GB/s）** | 6.5× |
+
+GPU 侧没有回归（同一驱动 A/B，`:0`，`-b <scene>:duration=2`）：`buffer` 655 / 655、
+`build` 1522 / 1526、`jellyfish` 686 / 666、全套 `glmark2 -b :duration=2` **1031**
+（安装栈 r29 为 1041，噪声内）。正确性：`tests/query` 4/4、`tests/fbo-test` PASS、
+`tests/tex-upload/texcheck.c` PASS、`tools/vp9-regression.sh` 19/19。
+
+遗留：① 顶点数据远超 LLC 的重几何场景，从系统内存取顶点可能比 VRAM 慢，本轮 glmark2
+未见差异，若后续有场景退化再用 `MWV207_BUFFER_VRAM=1` 定点关；② 导出成 dmabuf 的
+buffer 现在 memory type 是 TT，跨进程共享仍走 dma-buf，未见异常。
+
 ## 5. 建议的推进顺序
 
 | 批次 | 内容 | 前置 | 代价 |
