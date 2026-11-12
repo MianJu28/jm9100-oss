@@ -249,6 +249,10 @@ OpenCL/VA-API/VDPAU 全走我们的栈；自建 KMD 在跑（srcversion `D5EEF36
   证据与限制见 `docs/UNRESOLVED.md` 的 present 小节末两条。诊断参数 `mwv207.diag`
   （默认 0）已随代码保留，供以后复查。
 
+- **UMD 每 draw CPU 开销（2026-11-12）**：`mwv207_update_shader()` 每次绘制都重算
+  三组着色器指纹（≈200 次哈希），实测占 config 阶段 70%。改成 `fp_dirty` 脏标记后
+  端到端提交 **0.86 → 0.17 µs/draw**；`/tmp/swapsh` 交替纹理/FBO 格式的读回哈希
+  新旧驱动一致，`tests/query` 4/4。`glmark2` 不受影响（GPU-bound）。
 ### 待办（按价值排序）
 1. **A5 已完成（2026-11-10，`82e7b02`）**：VP9 Profile 2（10bit 4:2:0）与软件解码逐位
    一致（64x64~1080p，含 inter 帧，零 TDR），默认声明；`MWV207_VP9_10BIT_DISABLE=1`

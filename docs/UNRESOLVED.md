@@ -1648,3 +1648,24 @@ initramfs 已刷并解包核对（`modinfo -F srcversion` 均为 `8DFC52…`）�
   `switch-mwv207.sh umd verify` 全通过（载荷 `payload-41` / `24.1.2-fullstack-r16`）。
 - 相关：mesa 侧 `loader_dri3_query_buffer_age()` 恒 0 的改动（`ref/oh-mesa` 树，
   见 r15 payload）用于避免 WebRender 依赖我们并不保证的"交换后缓冲保留"。
+
+## 每 draw 的 CPU 开销 0.86 µs：着色器指纹每帧重算 —— 已修（2026-11-12）
+
+- 现象：`/tmp/drawcpu` 连续 2000 次相同 `glDrawArrays`（无 clear/swap）的提交侧
+  耗时 **0.86–1.04 µs/draw**，`glFinish` 尾部仅 ~0.005 ms ⇒ 纯用户态 DRM 开销；
+  这解释了"多小 draw 场景（浏览器/UI/桌面合成）"与厂商的差距，而 `glmark2`
+  这类重场景基准看不出（GPU-bound）。
+- 定位（`mwv207_draw.c` 临时 `clock_gettime` 插桩，环境变量门控、已删除）：
+  `cfg=1.09 us/draw`、`sub=0.09 us/draw`，其中 **`mwv207_update_shader()` 占 0.76 µs**：
+  每次绘制都按 `PIPE_MAX_SHADER_SAMPLER_VIEWS × PIPE_SHADER_TYPES`（≈200 次哈希）
+  重算 `fp_tex_128bit[]`/`fp_z32_shadow[]`/`fp_pixel_128bit`，再拿指纹查五份
+  着色器缓存。
+- 修法：`mwv207_context.fp_dirty` 脏标记——`set_sampler_views()`/`bind_sampler_states()`/
+  `set_framebuffer_state()` 置脏，`update_shader()` 只在脏时重算；`split_128bit()`
+  之后也置脏（视图被换成新纹理，指纹必须失效）。
+- 结果：驱动内 `update_shader` 0.76 → **0.08 µs**、`cfg` 1.09 → 0.41 µs，
+  端到端提交 **0.86 → 0.17 µs/draw（5×）**。
+- 正确性：`/tmp/swapsh`（同一帧内交替绑 RGBA8/RGBA32F 纹理 + 切换 RGBA8/RGBA32F
+  FBO 附件，读回 24 次绘制结果哈希）新旧驱动输出**完全一致**；`tests/query` 4/4；
+  `glmark2 -b :duration=1` 939 → 943（±0.5%，符合"GPU-bound 场景不吃每 draw 开销"）。
+- 详见 `reports/PRESENT-PATH-20261111.md` §16。

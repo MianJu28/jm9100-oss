@@ -428,3 +428,53 @@ glamor 只能退回 llvmpipe → `Refusing to try glamor on llvmpipe` →
   不再是 present 的固定开销。
 - 这条修复不需要改代码，只要保证安装流程建好 `AIGLX_LINK`（脚本已覆盖），
   以及**装完载荷后重启 X**（glamor 在启动时选 EGL provider）。
+
+## 16. 每 draw 的 CPU 开销：着色器指纹缓存（2026-11-12）
+
+### 16.1 测量
+
+`/tmp/drawcpu`（2000 次相同 `glDrawArrays`，无 clear / 无 swap，`vblank_mode=0`）
+的提交侧耗时：**0.86–1.04 µs/draw**，而 `glFinish` 尾部只有 ~0.005 ms ⇒ 瓶颈在
+用户态驱动。`strace -f -c -e trace=ioctl` 显示 2000 次 draw 只有 1165 次 ioctl
+（合计 1.5 ms），所以不是"每 draw 一次内核往返"。
+
+在 `mwv207_draw_vbo()` 与 `mwv207_config_render_piepline()` 里临时插入
+`clock_gettime`（环境变量门控，测完已删除）得到：
+
+```
+[DRAWTIME] cfg=1.09 us/draw, sub=0.09 us/draw
+[CFG] dualblend=0.04 shader=0.76 vertex=0.08 other=0.06 draw+rest=0.06 us/draw
+```
+
+⇒ `mwv207_update_shader()` 独占 **0.76 µs / 1.09 µs（70%）**：它每次绘制都要
+
+1. 按 `PIPE_MAX_SHADER_SAMPLER_VIEWS` × `PIPE_SHADER_TYPES` 重算 FNV 指纹
+   `fp_tex_128bit[st]`（单次 ≈200 次哈希），
+2. 重算 `fp_z32_shadow[st]` 与 `fp_pixel_128bit`，
+3. 再用这些指纹去 `shader_list` 里查 VS/FS/GS/TCS/TES 五份缓存。
+
+### 16.2 修法
+
+给这三组指纹加"脏"标记（`struct mwv207_context::fp_dirty`）：
+
+- `mwv207_set_sampler_views()`、`mwv207_bind_sampler_states()`、
+  `mwv207_set_framebuffer_state()` 置脏；
+- `mwv207_update_shader()` 只在脏时重算，算完清脏；
+- `mwv207_split_128bit()` 之后也置脏（拆分把视图换成新纹理，指纹必须失效）。
+
+### 16.3 结果
+
+| 指标 | 修前 | 修后 |
+|---|---|---|
+| 驱动内 config 阶段 | 1.09 µs/draw | 0.41 µs/draw |
+| 其中 `update_shader` | 0.76 µs/draw | 0.08 µs/draw |
+| 端到端提交（`/tmp/drawcpu`，去掉插桩后） | 0.86–1.04 µs/draw | **0.17 µs/draw** |
+
+正确性对照：`/tmp/swapsh`（同一帧内交替绑定 RGBA8/RGBA32F 纹理、切换
+RGBA8/RGBA32F FBO 附件，读回 24 次绘制结果做哈希）在旧/新驱动下输出
+**完全相同**（`md5like=0b12ed05`）；`tests/query/run-query-tests.sh` 4/4 PASS；
+`glmark2 -b :duration=1` 939 → 943（±0.5%，因为这些场景是 GPU-bound，不吃
+每 draw 开销）。
+
+结论：这条改的是**多小 draw 场景（浏览器/UI/桌面合成）**的 CPU 上限，
+`glmark2` 这种以重场景为主的基准看不出收益。
