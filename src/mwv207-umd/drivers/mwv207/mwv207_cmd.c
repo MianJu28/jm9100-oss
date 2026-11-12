@@ -369,4 +369,15 @@ mwv207_submit(struct mwv207_context *ctx, int *out_fence_fd, bool force)
    mwv207_start_cmd(ctx);
 
    ctx->dirty = MWV207_DIRTY_ALL;
+
+   /* 平铺资源带线性影子（scanout）时，标记"内容已变，需要在 flush 时同步"。 */
+   for (unsigned i = 0; i < ctx->fb_state.nr_cbufs; i++) {
+      struct pipe_surface *surf = ctx->fb_state.cbufs[i];
+
+      if (!surf)
+         continue;
+      struct mwv207_resource *res = mwv207_resource(surf->texture);
+      if (res->linear)
+         res->sync_needed = true;
+   }
 }

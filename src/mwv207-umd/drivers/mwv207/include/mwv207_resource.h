@@ -111,6 +111,8 @@ struct mwv207_resource {
    struct mwv207_bo *bo;
    bool need_decompress;
    bool linear_output;
+   /* 平铺资源带线性影子（scanout）：本次内容是否已经同步到影子 */
+   bool sync_needed;
 
    struct pipe_resource *linear;
 

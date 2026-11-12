@@ -70,7 +70,7 @@ static enum pipe_error
 mwv207_can_tile(struct mwv207_resource *res)
 {
 
-   const bool enable_scanout_tile = false;
+   const bool enable_scanout_tile = true;
 
    if (!mwv207_tile_supported_format(res->base.format))
       return PIPE_ERROR_BAD_INPUT;
@@ -230,6 +230,8 @@ mwv207_set_miptree(struct mwv207_screen *screen,
       templ.usage |= PIPE_USAGE_STAGING;
       templ.bind |= PIPE_BIND_LINEAR;
       res->linear = screen->base.resource_create(&screen->base, &templ);
+      /* 新影子内容是未定义的，先标记为脏，第一帧就会同步一次。 */
+      res->sync_needed = true;
    }
 }
 
@@ -362,7 +364,7 @@ mwv207_flush_resource(struct pipe_context *pctx,
    if (res->ts.enable && !res->linear)
       mwv207_disable_tile(ctx , res);
 
-   if (res->linear && res->need_decompress) {
+   if (res->linear && (res->need_decompress || res->sync_needed)) {
       struct mwv207_level_info pLevel = res->level_infos[0];
       struct mwv207_resource *linear = mwv207_resource(res->linear);
       struct mwv207_region_info info;
@@ -392,6 +394,8 @@ mwv207_flush_resource(struct pipe_context *pctx,
       mwv207_copy_image(ctx, info);
 
       res->need_decompress = false;
+      if (res->linear)
+         res->sync_needed = false;
    }
 }
 
