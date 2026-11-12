@@ -343,3 +343,39 @@ qdbus org.kde.KWin /Compositor suspend && vblank_mode=0 glmark2 -b build:duratio
 `/tmp/sw.c`（只 swap）、`/tmp/fill2.c`（采样带宽，含 stride 扫描）、
 `/tmp/blit.c`（blit 带宽）、`/tmp/blittest.c`（FBO→FBO blit）为本次临时工具，未入库；
 需要时可按第 2/6 节表格重写。
+
+## 14 2D 引擎（方案 A2）现状：opcode 编码在闭源库，尚未复刻
+
+### 14.1 我方 KMD 的 2D 通路是完整的
+
+- `mwv207_pipe_2d_create(jdev, 0, 0x968000, "mwv207_2d0")`，基址与厂商
+  `J9MATHS_BANDCUTTER (0x968000)` 一致；环形缓冲、`0x89000000` 链接、
+  `write(0x4C00, 1)` 触发、`0x80000000` NOP 都与厂商
+  `j9_gelatinizable()` 一一对应。
+- 段头布局经厂商源码 `jmgpu_accessible.c:46-52` 的
+  `struct tag_jms_wl_header { u32 dont_care0; u32 byte16_cnt; … }` 证实：
+  计数在**第二个**字，与我们的 `pipe_2d_submit()` 相同。此前"厂商把
+  计数写在第一个字"的猜测被证伪（把计数前移还会破坏 16 字节对齐，
+  KMD 直接返回 `-EIO`），实验已回退（`807fe4b`）。
+
+### 14.2 缺的是 draw opcode
+
+- 抓包（166 个命令流，厂商 DDX + `libdrm_jmgpu.so`）得到两种绘制命令：
+  - `0x82000054` + 4 字：填充 `[?, dst_addr, dst_desc, (w<<16|h)]`
+  - `0x8200001c` + 7 字：拷贝 `[0x000200f0, dst, dst_desc, wh, src, src_desc, wh]`
+- 但把这两种命令原样送进我们的 2D 环：提交成功、fence 正常置位，
+  **目标缓冲全 0**。描述字取遍 `0 / pitch / pitch/8 / pitch/64 /
+  0x00010080 / 0x00040600 / 0x00050680` 等候选仍无输出
+  （`tests/j2d-copy/j2dtest.c`，候选已入档 `d43628e`）。
+- 原因：这些 opcode 由闭源 `libdrm_jmgpu.so`（1.5 MB、符号未 strip，
+  导出 `jmo_2D_Clear/Blit/Construct/Commit` 整套 API）生成，DDX 只是
+  调用者（二进制里查不到这两个立即数，`.text` 里也没有 `0x82000000`）。
+
+### 14.3 结论
+
+方案 A2（用 2D 引擎做 present 拷贝）要真正落地，需要先反汇编
+`libdrm_jmgpu.so` 解出 opcode 组合规则（或伪造其 device/surface 结构、
+直接调 API 生成样本做差分）。这是独立的一块逆向工作，不属于"再调几个
+参数"的范围。当前 present 收益仍以 14.1 之外的 glamor blit 快路径为准
+（1.9–2.1×，见 §12）。
+
