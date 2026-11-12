@@ -478,3 +478,39 @@ RGBA8/RGBA32F FBO 附件，读回 24 次绘制结果做哈希）在旧/新驱动
 
 结论：这条改的是**多小 draw 场景（浏览器/UI/桌面合成）**的 CPU 上限，
 `glmark2` 这种以重场景为主的基准看不出收益。
+
+## 17. 修后整体测量与剩余瓶颈归因（2026-11-12）
+
+同一 `:0` 会话、`vblank_mode=0`：
+
+| 项目 | 修前/安装栈 | 修后（dev 驱动） | 说明 |
+|---|---|---|---|
+| `glxgears` | 5894 FPS | **6737 FPS** | 每 draw CPU 开销受益 +14% |
+| `glmark2 -b :duration=1` 总分 | 939 | **1205** | 厂商 5209 |
+| `conditionals` 廉价场景 | 1017 | **1309–1348** | 已接近 present 下限 |
+| `shadow` | 673–823 | 777 | 厂商 1241 |
+| `terrain` | 109 | 115 | 厂商 155 |
+| `refract` | 88 | 93 | 厂商 123 |
+| `jellyfish` | 238 | 245 | 厂商 1175 |
+
+单项能力实测（dev 驱动）：
+
+- `glClear`（800×600，fast-cleared 走 TS）：**0.004 ms** ⇒ clear 不是瓶颈。
+- `glXSwapBuffers`（800×600 窗口，`tests/present-bench` swap-only）：**0.257 ms**；
+  clear+swap **0.659 ms**（同一会话内会随窗口是否可见/被遮挡波动，§15 那次是 0.248 ms）。
+- 顶点吞吐（`/tmp/vtxbench`，30k 顶点 × 100 帧，64×64 FBO 无填充压力）：**515 Mvert/s**。
+- 缓冲上传（`/tmp/upbench`，4 MB `glBufferSubData` 与 `GL_MAP_INVALIDATE` 映射）：**≈4.9 GB/s**（两种写法一致）。
+- 纯填充（`/tmp/fill`）：1920×1080 const **839 Mpx/s**；alu64 **2.8 Gops/s**。
+
+归因：
+
+1. **廉价场景现在受 present 限制**：1300 FPS = 0.76 ms/帧，其中 present ≈0.66 ms。
+   厂商同场景 7589 FPS（0.13 ms）说明它整帧不拷贝（flip 或 overlay）。
+   要让 X 走 flip 需要 DDX 支持（`modesetting` DDX 只翻 PRIMARY，且合成器未用 overlay），
+   不是 UMD 内能解决的，属结构性差距。
+2. **重场景（terrain/refract）差 1.35×，与填充率/ALU 吞吐同量级**，属 GPU 能力。
+3. **jellyfish 差 4.8×**：该场景每帧大量小批次绘制 + 顶点着色器，参考数字
+   515 Mvert/s、4.9 GB/s 上传，怀疑是顶点吞吐与每批次固定开销叠加，
+   下一步可对"每批次固定开销"再做一次插桩（本次未做）。
+4. `[buffer]` 场景（subdata 475 / map 644 FPS）主要吃上传带宽，4.9 GB/s 已接近
+   本机 DRAM 写带宽量级。
