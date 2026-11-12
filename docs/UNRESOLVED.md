@@ -1530,6 +1530,16 @@ initramfs 已刷并解包核对（`modinfo -F srcversion` 均为 `8DFC52…`）�
   已入库捕获工具 `tools/j2d/`（`j2dcap.c` LD_PRELOAD 截获命令流、`j2d-decode.py`
   按厂商落环命令字反解、`xcopy.c` 制造已知 `XCopyArea`、`capture-j2d.sh` 一键跑），
   需在厂商栈上执行一次即可拿到 64/256/1024 三档的命令配方。
+- **2026-11-12 执行结果（阻塞在闭源 opcode）**：抓包两轮共 166 个命令流，反解出
+  填充 `0x82000054`+4 字、拷贝 `0x8200001c`+7 字、结束 `0x81000000`；段头布局经
+  厂商源码 `jmgpu_accessible.c:46` 的 `struct tag_jms_wl_header {u32 dont_care0;
+  u32 byte16_cnt; …}` 证实与我们的 `pipe_2d_submit()` 相同（"计数在第一个字"的猜测
+  已证伪并回退 `807fe4b`）。但把抓到的命令原样送进我方 2D 环：提交成功、fence 正常，
+  目标缓冲全 0；描述字候选（`0`/`pitch`/`pitch/8`/`pitch/64`/`0x00010080`/`0x00040600`/
+  `0x00050680`）全部无效（`tests/j2d-copy/j2dtest.c`，`d43628e`）。原因是这两个 opcode
+  由**闭源 `libdrm_jmgpu.so`** 的 `jmo_2D_*` 生成（DDX 只是调用者，二进制里查不到这两个
+  立即数）⇒ 要继续只能反汇编该库，属独立逆向工作。详见
+  `reports/PRESENT-PATH-20261111.md` §14。
 - 详细数据与复现命令：`reports/PRESENT-PATH-20261111.md`。
 - 关联：`reports/GLMARK2-VENDOR-VS-OSS-20261111.md`（同条件总分与逐场景对照）。
 - 另注：`glxgears` 的 `vblank_mode=0` 我方 3462–5275 FPS vs 厂商 15134–17621，
