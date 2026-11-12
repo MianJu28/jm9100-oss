@@ -2505,6 +2505,31 @@ main() {
     set -- "${pos[@]+"${pos[@]}"}"
     local layer="${1:-}"
     local cmd="${2:-}"
+
+    # 会停 lightdm 的子命令必须搬出会话 cgroup。
+    # 否则 systemctl stop lightdm 会把"发起这次切换的那条命令"一起 SIGKILL
+    # （脚本正跑在 lightdm 的 user session cgroup 里），于是停在"已停 lightdm、
+    # 还没部署/没重启"的中间态：库是旧的、桌面也起不来，只能手动重启 lightdm。
+    # 用 systemd-run --scope 把整条命令放进独立 scope，停 lightdm 不影响它。
+    if [ "${MWV207_SWITCH_SCOPE:-0}" != 1 ] && [ "${MWV207_NO_SCOPE:-0}" != 1 ]; then
+        case "$layer:$cmd" in
+            umd:install|umd:activate|umd:rollback|stack:oss|stack:vendor|all:install|kmd:install|vendor:install)
+                if [ "$DRY_RUN" = 1 ]; then
+                    :
+                elif ! command -v systemd-run >/dev/null 2>&1; then
+                    log "  [WARN] 无 systemd-run，无法搬出会话 scope；停 lightdm 时本命令可能被一起终止"
+                elif [ "$(id -u)" != 0 ]; then
+                    log "  [WARN] 非 root 运行，无法 systemd-run --scope；停 lightdm 时本命令可能被一起终止"
+                else
+                    log "  [INFO] 本次操作会停 lightdm：已改用独立 scope 运行，避免本命令被一起终止"
+                    MWV207_SWITCH_SCOPE=1 exec systemd-run --scope --quiet --collect \
+                        --unit="mwv207-switch-$$" \
+                        --description="mwv207 switch: $layer $cmd" \
+                        /bin/bash "$0" "$@"
+                fi
+                ;;
+        esac
+    fi
     case "$layer" in
         umd)  shift 2; umd_main "${cmd:-help}" "$@" ;;
         stack) shift 2; stack_main "${cmd:-status}" "$@" ;;
