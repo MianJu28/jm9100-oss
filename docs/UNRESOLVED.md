@@ -1520,6 +1520,14 @@ initramfs 已刷并解包核对（`modinfo -F srcversion` 均为 `8DFC52…`）�
   该目录原先没有 `mwv207_dri.so` 软链，`Xorg.0.log` 一直报
   `(EE) AIGLX error: dlopen of .../mwv207_dri.so failed`；`switch-mwv207.sh` 已补
   `AIGLX_LINK` 常量、部署时建链、切厂商栈时改名停用。
+- **2026-11-12 下一步（按厂商方案）：2D 引擎拷贝**。厂商 present 快的原因是它的
+  X DDX（闭源 `mwv207_drv.so`，EXA）把拷贝交给 **2D 引擎**，而不是 3D；链路是
+  拼命令流 → `DRM_IOCTL_JM_J2D_SEND_CMD`（`_IOWR('d',0x4B,16)` = `0xc010644b`）→ 内核落环。
+  我们的 KMD 已暴露同一台 2D 引擎（`DRM_IOCTL_MWV207_SUBMIT` 的 `engine_type=3`，
+  `src/kernel-6.6/mwv207_pipe_2d.c` 把用户 `cmds` 原样落环），**缺的只是命令编码**。
+  已入库捕获工具 `tools/j2d/`（`j2dcap.c` LD_PRELOAD 截获命令流、`j2d-decode.py`
+  按厂商落环命令字反解、`xcopy.c` 制造已知 `XCopyArea`、`capture-j2d.sh` 一键跑），
+  需在厂商栈上执行一次即可拿到 64/256/1024 三档的命令配方。
 - 详细数据与复现命令：`reports/PRESENT-PATH-20261111.md`。
 - 关联：`reports/GLMARK2-VENDOR-VS-OSS-20261111.md`（同条件总分与逐场景对照）。
 - 另注：`glxgears` 的 `vblank_mode=0` 我方 3462–5275 FPS vs 厂商 15134–17621，
