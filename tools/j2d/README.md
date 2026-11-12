@@ -118,3 +118,26 @@ gcc -O2 -o /tmp/j2dtest tests/j2d-copy/j2dtest.c $(pkg-config --cflags --libs li
   与本机这一代硬件不一致。
 
 下一步优先级：先确认 ①/②/③ 中的哪一个，再决定是改 KMD 的环形头还是继续解描述字。
+
+## 2026-11-12 后续：段头布局已证伪，问题在 opcode 层
+
+- 从厂商 KMD 源码 `jmgpu_accessible.c:46-52` 拿到真正的段头结构：
+
+  ```c
+  typedef struct tag_jms_wl_header {
+          u32 dont_care0;
+          u32 byte16_cnt;      /* ← 计数在**第二个**字 */
+          u32 dont_care1;
+          u32 dont_care2;
+  } j9_reopposing;
+  ```
+
+  与我们的 `pipe_2d_submit()` 完全一致（`[0x80000000][count][0x80000000][0x80000000]`）。
+  ⇒ "厂商把计数写在第一个字"的猜测是错的；把计数挪到第一个字还会让段起点
+  4 字节对齐破坏，KMD 直接报 `mwv207_2d0: submit failed, errcode=-5`（我们的
+  `WARN_ON_ONCE((span & 0xf) || span > size)` 分支）。该实验已回退（`807fe4b`）。
+- 真正的缺口在 **draw opcode**：`0x82000054` / `0x8200001c` 由厂商 userspace 的
+  `libdrm_jmgpu.so` 生成（该库导出 `jmo_2D_Clear`/`jmo_2D_Blit`/`jmo_2D_Construct`/
+  `jmo_2D_Commit`/`jmo_2D_BatchBlit` 等一整套 2D API，符号未 strip），并不在 DDX 里
+  （DDX 链接它，且二进制里查不到这两个立即数）。这些 opcode 的确切编码只存在于
+  闭源库内部，要复刻需要反汇编该库或抓更多样本来差分。
