@@ -38,13 +38,18 @@
 #define MWV207_VA_BASE(idx)      (0x990000 + 0x100 * (idx) + ((idx) > 1 ? 0x600 : 0))
 
 #define crtc_to_va(crtc) container_of(crtc, struct mwv207_va, crtc)
-#define plane_to_va(plane) (((plane)->type == DRM_PLANE_TYPE_PRIMARY) \
-		? container_of(plane, struct mwv207_va, primary)    \
-		: container_of(plane, struct mwv207_va, cursor))
+#define plane_to_va(plane) (((plane)->type == DRM_PLANE_TYPE_PRIMARY)  \
+		? container_of(plane, struct mwv207_va, primary)     \
+		: ((plane)->type == DRM_PLANE_TYPE_CURSOR           \
+		   ? container_of(plane, struct mwv207_va, cursor)  \
+		   : container_of(plane, struct mwv207_va, overlay)))
 struct mwv207_va {
 	struct drm_crtc   crtc;
 	struct drm_plane  primary;
 	struct drm_plane  cursor;
+	/* WIN0 硬件窗口（厂商同一套寄存器用于 "大于 64x64 的光标"）：
+	 * 可显示任意线性缓冲、任意位置、支持逐像素 alpha，用作 overlay 平面。 */
+	struct drm_plane  overlay;
 	void __iomem   *mmio;
 	struct mwv207_device *jdev;
 	struct drm_pending_vblank_event *event;
@@ -67,6 +72,12 @@ static uint64_t format_modifiers[] = {
 
 static u32 cursor_formats[] = {
 	DRM_FORMAT_ARGB8888,
+};
+
+/* WIN0 硬件窗口只能读 32bpp；ARGB8888 走逐像素 alpha，XRGB8888 视为不透明。 */
+static u32 overlay_formats[] = {
+	DRM_FORMAT_ARGB8888,
+	DRM_FORMAT_XRGB8888,
 };
 
 static inline u32 mwv207_va_read(struct mwv207_va *va, u32 reg)
@@ -243,6 +254,101 @@ static int mwv207_primary_plane_get_scanout_buffer(struct drm_plane *plane,
 	return 0;
 }
 #endif
+
+/* ---- WIN0 硬件窗口用作 overlay 平面 -------------------------------------
+ *
+ * 厂商用同一套窗口寄存器实现"大于 64x64 的光标"（jmgpu_plane_set_cursor_win0，
+ * mwv207-1.8.0.uos/jmgpu_console.c）：该窗口能显示任意线性缓冲的任意位置，
+ * 带逐像素 alpha。这里把它注册成 DRM overlay 平面，供合成器/客户端把一整帧
+ * 直接扫出（present 零拷贝）或做半透明叠加。
+ *
+ * 寄存器（相对 window base = MWV207_WIN_BASE(idx)）来自厂商同名常量：
+ *   0x02C  PARAPSIDAL   : bit(1<<idx) = 窗口使能
+ *   0x050  EVENTUATED   : 缓冲地址 >> 6
+ *   0x068  LONGITUDINALLY: (pitch << 16) | pitch
+ *   0x028  REHANDICAP   : 8
+ *   0x03C  SEASONABLENESS: 0
+ *   0x014  MATSTER      : 0xFF
+ *   0x09C  RHODIZONIC   : 1
+ *   0x0E0  CLEANLIEST   : 0
+ *   0x0E4  PLOTTINGLY   : (w-1) | ((h-1) << 16)
+ *   0x00C  HERPETOGRAPHY: ((w-1) | 0x3) | ((h-1) << 16)
+ *   0x054  INGEMINATE   : 1
+ *   0x064  SHOWERIEST   : 1
+ *   0x084  40000        : 2
+ *   0x0EC  BLEND_MODE0_WIN0 : 0
+ *   0x010  BIREFRINGENCE: (x & 0xFFFF) | ((y & 0xFFFF) << 16)
+ */
+static void mwv207_win0_write(struct mwv207_va *va, u32 reg, u32 value)
+{
+	jdev_write(va->jdev, MWV207_WIN_BASE(va->idx) + reg, value);
+}
+
+static void mwv207_overlay_disable_win0(struct mwv207_va *va)
+{
+	mwv207_win0_write(va, 0x02C, 0);
+}
+
+static void mwv207_overlay_atomic_update(struct drm_plane *plane,
+		struct drm_atomic_state *old_state)
+{
+	struct mwv207_va *va = plane_to_va(plane);
+	struct drm_framebuffer *fb;
+	u32 w, h, pitch;
+	u64 fbaddr;
+
+	if (!plane->state->fb || !plane->state->crtc)
+		return;
+
+	w = plane->state->src_w >> 16;
+	h = plane->state->src_h >> 16;
+	fb = plane->state->fb;
+	pitch = fb->pitches[0];
+	fbaddr = mwv207_plane_fb_addr(plane);
+
+	if (!w || !h || (pitch & 0x3F))
+		return;
+
+	mwv207_win0_write(va, 0x0EC, 0);
+	mwv207_win0_write(va, 0x050, (u32)(fbaddr >> 6));
+	mwv207_win0_write(va, 0x068, (pitch << 16) | pitch);
+	mwv207_win0_write(va, 0x028, 8);
+	mwv207_win0_write(va, 0x03C, 0);
+	mwv207_win0_write(va, 0x014, 0xFF);
+	mwv207_win0_write(va, 0x09C, 1);
+	mwv207_win0_write(va, 0x0E0, 0);
+	mwv207_win0_write(va, 0x0E4, (w - 1) | ((h - 1) << 16));
+	mwv207_win0_write(va, 0x00C, ((w - 1) | 0x3) | ((h - 1) << 16));
+	mwv207_win0_write(va, 0x054, 1);
+	mwv207_win0_write(va, 0x064, 1);
+	mwv207_win0_write(va, 0x084, 2);
+	mwv207_win0_write(va, 0x010,
+			((u32)plane->state->crtc_x & 0xFFFF) |
+			(((u32)plane->state->crtc_y & 0xFFFF) << 16));
+	mwv207_win0_write(va, 0x02C, 1u << va->idx);
+}
+
+static void mwv207_overlay_atomic_disable(struct drm_plane *plane,
+		struct drm_atomic_state *old_state)
+{
+	struct mwv207_va *va = plane_to_va(plane);
+
+	mwv207_overlay_disable_win0(va);
+}
+
+static const struct drm_plane_helper_funcs mwv207_overlay_helper_funcs = {
+	.prepare_fb     = mwv207_plane_prepare_fb,
+	.cleanup_fb     = mwv207_plane_cleanup_fb,
+	.atomic_check   = mwv207_plane_atomic_check,
+	.atomic_update  = mwv207_overlay_atomic_update,
+	.atomic_disable = mwv207_overlay_atomic_disable,
+};
+
+static bool mwv207_overlay_enabled;
+
+module_param_named(overlay, mwv207_overlay_enabled, bool, 0644);
+MODULE_PARM_DESC(overlay,
+	"注册 WIN0 硬件窗口作为 DRM overlay 平面（实验性，默认关闭）");
 
 static void mwv207_cursor_switch(struct mwv207_va *va, bool on)
 {
@@ -697,6 +803,20 @@ static int mwv207_va_init_single(struct mwv207_device *jdev, int idx)
 
 	drm_plane_helper_add(&va->primary, &mwv207_primary_helper_funcs);
 	drm_plane_helper_add(&va->cursor, &mwv207_cursor_helper_funcs);
+
+	/* 可选：把 WIN0 硬件窗口注册成 overlay 平面（默认关闭，见模块参数 overlay）。
+	 * 开启前必须确认没有别的路径在用 WIN0（厂商用它承载 >64x64 的光标）。 */
+	if (mwv207_overlay_enabled) {
+		ret = drm_universal_plane_init(&jdev->base, &va->overlay, 1 << idx,
+				&mwv207_plane_funcs,
+				overlay_formats, ARRAY_SIZE(overlay_formats),
+				format_modifiers, DRM_PLANE_TYPE_OVERLAY,
+				"overlay_win0_%d", idx);
+		if (ret)
+			return ret;
+		drm_plane_helper_add(&va->overlay, &mwv207_overlay_helper_funcs);
+		mwv207_overlay_disable_win0(va);
+	}
 
 	ret = drm_crtc_init_with_planes(&jdev->base, &va->crtc,
 			&va->primary, &va->cursor, &mwv207_crtc_funcs, "crtc_%d",

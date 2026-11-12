@@ -126,6 +126,9 @@ OPENCL_DIR="/etc/OpenCL/vendors"
 OPENCL_ICD="$OPENCL_DIR/mwv207.icd"
 OPENCL_ICD_DISABLED="$OPENCL_DIR/jmgpu.icd.oss-disabled"
 DRI_LINK="/usr/local/lib/aarch64-linux-gnu/dri/mwv207_dri.so"
+# Xorg 的 AIGLX/glamor 只在 /usr/lib/aarch64-linux-gnu/dri 找驱动；缺这条软链时
+# Xorg.0.log 会报 "(EE) AIGLX error: dlopen of .../mwv207_dri.so failed"。
+AIGLX_LINK="/usr/lib/aarch64-linux-gnu/dri/mwv207_dri.so"
 VA_LINK="/usr/lib/aarch64-linux-gnu/dri/mwv207_drv_video.so"
 VDPAU_LINK="/usr/lib/aarch64-linux-gnu/vdpau/libvdpau_mwv207.so.1"
 
@@ -561,6 +564,8 @@ umd_deploy_files() {
     # 4) DRI / VA / VDPAU 默认搜索路径软链 (DRI 指向 rpath 实体副本, 见 deploy)
     mkdir -p /usr/local/lib/aarch64-linux-gnu/dri /usr/lib/aarch64-linux-gnu/vdpau
     ln -sfn "$INST_DIR/mwv207_dri.so"            "$DRI_LINK"    || die "DRI 软链失败: $DRI_LINK (deepin 不可变根未解锁?)"
+    mkdir -p /usr/lib/aarch64-linux-gnu/dri
+    ln -sfn "$INST_DIR/mwv207_dri.so"            "$AIGLX_LINK" || die "AIGLX 软链失败: $AIGLX_LINK"
     ln -sfn "$INST_DIR/libmwv207_drv_video.so"   "$VA_LINK"     || die "VA 软链失败: $VA_LINK"
     ln -sfn "$INST_DIR/libvdpau_mwv207.so.1.0.0" "$VDPAU_LINK"   || die "VDPAU 软链失败: $VDPAU_LINK"
     ln -sfn "$INST_DIR/libvdpau_mwv207.so.1.0.0" "$VDPAU_LINK.0" || die "VDPAU 软链失败: $VDPAU_LINK.0"
@@ -1972,6 +1977,7 @@ stack_ensure_oss_umd() {
     local need=0
     [ -f "$LDCONF" ] || need=1
     [ -e "$DRI_LINK" ] || need=1
+    [ -e "$AIGLX_LINK" ] || need=1
     [ -e "$VA_LINK" ] || need=1
     [ -e "$VDPAU_LINK" ] || need=1
     case "$(umd_active_stack)" in oss-*) ;; *) need=1 ;; esac
@@ -1982,8 +1988,8 @@ stack_ensure_oss_umd() {
     log "  用户态: 部署开源载荷"
     # 第二个参数 = 允许"内核驱动还不是 mwv207"(整套栈切换时必然如此, KMD 由重启换)
     umd_deploy_files 1 1 >/dev/null || return 1
-    rm -f "$LDCONF.vendor-off" "$DRI_LINK.vendor-off" "$VA_LINK.vendor-off" \
-          "$VDPAU_LINK.vendor-off" "$VDPAU_LINK.0.vendor-off" 2>/dev/null || true
+    rm -f "$LDCONF.vendor-off" "$DRI_LINK.vendor-off" "$AIGLX_LINK.vendor-off" \
+          "$VA_LINK.vendor-off" "$VDPAU_LINK.vendor-off" "$VDPAU_LINK.0.vendor-off" 2>/dev/null || true
     log "  用户态: 已切到 oss-${UMD_DEPLOYED_VER:-?}"
 }
 
@@ -1996,7 +2002,7 @@ stack_disable_oss_umd() {
             || warn "  恢复厂商 EGL ICD 失败"
     fi
     local l
-    for l in "$DRI_LINK" "$VA_LINK" "$VDPAU_LINK" "$VDPAU_LINK.0"; do
+    for l in "$DRI_LINK" "$AIGLX_LINK" "$VA_LINK" "$VDPAU_LINK" "$VDPAU_LINK.0"; do
         if [ -e "$l" ] || [ -L "$l" ]; then mv -f "$l" "$l.vendor-off" 2>/dev/null || true; fi
     done
     if [ -f "$OPENCL_ICD_DISABLED" ] && [ ! -e "$OPENCL_DIR/jmgpu.icd" ]; then

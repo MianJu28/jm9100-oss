@@ -289,6 +289,47 @@ MWV207DBG: blit=3250 shader=0 | last: BLIT 800x600 -> 1920x1080 nbox=1
 3. 廉价场景现在的 0.97 ms/帧里，拷贝 ≈0.5、3D ≈0.28、其余为同步开销；即使 present 归零
    （0.167 ms 级），`build` 也只能到 ≈3000 FPS，与厂商 5982 仍差 2×，那部分属于 3D 管线效率。
 
+
+## 13. overlay 零拷贝（方案 D）取证与试验平面（2026-11-12）
+
+### 13.1 厂商的 "overlay" 其实是"大光标窗口"
+
+`/tmp/vk/usr/src/mwv207-1.8.0.uos/`（`dpkg-deb -x ref/vendor-1.8.0/mwv207-dev_1.8.0.uos_arm64.deb`）里：
+
+- `jmgpu_crtc_set_overlay()`（`jmgpu_package.c:202`）只在 **光标图 > 64×64**
+  （`JMGPU_CURSOR_ENGINE_MAX`，`jmgpu_console.h:24`）时被走到，它把光标位置换算成
+  **主帧缓冲内的地址**再写窗口寄存器 ⇒ 本质是"用 WIN 窗口画一个大光标"，不是通用平面。
+- 真正的窗口编程在 `jmgpu_plane_set_cursor_win0()`（`jmgpu_console.c:401`），它写的是
+  `J9_NEUROPARALYTIC(chan)` 基址的一组寄存器：地址 `0x050 = fbaddr>>6`、步长 `0x068 =
+  pitch<<16 | pitch`、尺寸 `0x0E4/0x00C`、位置 `0x010`、使能 `0x02C = 1<<chan`。
+  这组寄存器支持**任意线性缓冲**，因此可以当作通用 overlay 平面使用。
+- `DRM_PLANE_TYPE_OVERLAY` 在厂商 KMD 里是 **空分支**（`jmgpu_console.c` 的 `switch
+  (plane->type)` 里 `case DRM_PLANE_TYPE_OVERLAY: break;`）⇒ 厂商也没把 WIN0 暴露成
+  DRM overlay 平面，X 的 modesetting DDX 只用 PRIMARY/CURSOR。
+
+### 13.2 我方试验平面（默认关闭）
+
+`src/kernel-6.6/dc/mwv207_va.c` 新增（`module_param_named(overlay, …, bool, 0644)`，
+默认 0）：
+
+- `struct mwv207_va.overlay` + `overlay_formats[] = { ARGB8888, XRGB8888 }`；
+- `mwv207_overlay_atomic_update()` 按上面的窗口寄存器布局编程 WIN0（地址/步长/尺寸/
+  位置/使能），`mwv207_overlay_atomic_disable()` 清 `0x02C`；
+- 仅当 `mwv207.overlay=1` 加载模块时才 `drm_universal_plane_init(... DRM_PLANE_TYPE_OVERLAY)`。
+
+`tests/overlay/overlay-test.c`（`cc -O2 -o /tmp/overlay-test tests/overlay/overlay-test.c
+-I/usr/include/libdrm -ldrm`）用 `drmModeSetPlane` 往该平面放一块纯色/半透明缓冲，
+用来判定窗口是否真的上屏。
+
+### 13.3 结论
+
+- 硬件确有可编程窗口（格式/alpha/线性或 TILE4X4 模式，`OVERLAY_CONFIG 0x04B0` 的
+  `FORMAT/MODE/ALPHA_*` 字段），但**语义未文档化**，且它同时被"大光标"路径占用；
+- **即使平面能用，X 的 modesetting DDX 也不会用它**（它只翻 PRIMARY）；所以"overlay
+  零拷贝 present"要真正收益，需要自写 DDX 或让合成器（kwin）用该平面，工作量远大于
+  一个 KMD 平面注册；
+- 因此本方案只作为**能力原型**保留（默认关闭、可随时弃用），不计入 present 收益。
+
 ## 11. 复现命令
 
 ```sh

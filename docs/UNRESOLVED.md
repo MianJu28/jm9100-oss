@@ -1509,6 +1509,17 @@ initramfs 已刷并解包核对（`modinfo -F srcversion` 均为 `8DFC52…`）�
   （≈2000 FPS），与厂商 0.167 ms 仍差 3×；厂商那 0.167 ms 说明它**几乎不整帧拷贝**
   （或走 TS 平铺 38 GB/s）。故再往下只有 **B（扫描出平铺+TS）** 与 **D（overlay 零拷贝）**
   两条路，A 已到位。
+- **2026-11-12 方案 D 取证（结论：只作能力原型，不解决 present）**：厂商
+  `jmgpu_crtc_set_overlay()` 并不是通用叠加面，而是"光标大于 64×64 时改用 WIN0 窗口画"；
+  真正的窗口编程在 `jmgpu_plane_set_cursor_win0()`（地址 `0x050`/步长 `0x068`/尺寸 `0x0E4`/
+  位置 `0x010`/使能 `0x02C`），可显示任意线性缓冲。我方已把 WIN0 注册成**实验性** DRM
+  overlay 平面（模块参数 `mwv207.overlay=1`，默认关闭；`src/kernel-6.6/dc/mwv207_va.c`），
+  配 `tests/overlay/overlay-test.c` 验证工具。**但它救不了 present**：X 的 modesetting DDX
+  只翻 PRIMARY，不用 overlay 面；要用它必须自写 DDX 或让合成器直接用该平面。
+- 同期修掉一条真实缺链：Xorg 的 AIGLX 只在 `/usr/lib/aarch64-linux-gnu/dri` 找驱动，
+  该目录原先没有 `mwv207_dri.so` 软链，`Xorg.0.log` 一直报
+  `(EE) AIGLX error: dlopen of .../mwv207_dri.so failed`；`switch-mwv207.sh` 已补
+  `AIGLX_LINK` 常量、部署时建链、切厂商栈时改名停用。
 - 详细数据与复现命令：`reports/PRESENT-PATH-20261111.md`。
 - 关联：`reports/GLMARK2-VENDOR-VS-OSS-20261111.md`（同条件总分与逐场景对照）。
 - 另注：`glxgears` 的 `vblank_mode=0` 我方 3462–5275 FPS vs 厂商 15134–17621，
