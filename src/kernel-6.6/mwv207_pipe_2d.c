@@ -93,6 +93,8 @@ static inline u32 pipe_2d_read(struct mwv207_pipe_2d *pipe, u32 reg)
 	return pipe_read(&pipe->base, reg);
 }
 
+static void pipe_2d_probe(struct mwv207_pipe_2d *pipe);
+
 static inline void pipe_2d_barrier(struct mwv207_pipe_2d *pipe)
 {
 	pipe_2d_read(pipe, 0x4100);
@@ -166,6 +168,56 @@ static inline bool pipe_2d_idle_on_noc(struct mwv207_pipe_2d *pipe)
 	if ((val & pending2) != pending2)
 		return false;
 	return true;
+}
+
+/*
+ * 一次性探测（diag >= 4，默认关闭）：在创建阶段、进程上下文里做，可以
+ * msleep。目的：找出"启动 2D 引擎"到底写哪个寄存器。把自包含的小命令
+ * 缓冲写在环开头（header + 一条同步寄存器写 + NOP），再逐个候选寄存器
+ * 写 1，等 50 ms 后读 0x6000 看同步值是否被写进去。
+ */
+static const u32 pipe_2d_trig_cand[] = {
+	0x4C00, 0x4C24, 0x4C04, 0x4C20, 0x4024, 0x4224, 0x4800, 0x4300,
+};
+
+static void pipe_2d_probe(struct mwv207_pipe_2d *pipe)
+{
+	const u32 magic = 0x5a5a0001;
+	u32 *buf = pipe->ring_start;
+	unsigned int i;
+	u32 self;
+
+	buf[0] = 0x80000000;
+	buf[1] = 3;			/* (64 / 16) - 1 */
+	buf[2] = 0x40006000;
+	buf[3] = magic;
+	for (i = 4; i < 16; i++)
+		buf[i] = 0x80000000;
+
+	pipe_2d_write(pipe, 0x4200, 0xdead0001);
+	pipe_2d_write(pipe, 0x4C00, 0xbeef0002);
+	pr_info("mwv207: %s probe: 4200/4c00 alias? read 4200=%08x 4c00=%08x",
+		pipe->base.fname, pipe_2d_read(pipe, 0x4200),
+		pipe_2d_read(pipe, 0x4C00));
+
+	pr_info("mwv207: %s probe: ring gpu=%llx", pipe->base.fname,
+		(unsigned long long)pipe->ring_start_addr);
+
+	for (i = 0; i < ARRAY_SIZE(pipe_2d_trig_cand); i++) {
+		u32 seq;
+
+		pipe_2d_write(pipe, 0x4200, pipe->ring_start_addr >> 4);
+		pipe_2d_write(pipe, 0x4800, 0);
+		pipe_2d_barrier(pipe);
+		pipe_2d_write(pipe, pipe_2d_trig_cand[i], 1);
+		pipe_2d_barrier(pipe);
+		msleep(50);
+		seq = pipe_2d_read(pipe, 0x6000);
+		self = pipe_2d_read(pipe, pipe_2d_trig_cand[i]);
+		pr_info("mwv207: %s probe: trig %04x=1 -> seq=%08x%s self=%08x",
+			pipe->base.fname, pipe_2d_trig_cand[i], seq,
+			seq == magic ? " [HIT]" : "", self);
+	}
 }
 
 static int pipe_2d_hw_init(struct mwv207_pipe_2d *pipe)
@@ -613,6 +665,8 @@ struct mwv207_pipe *mwv207_pipe_2d_create(struct mwv207_device *jdev,
 	pipe->ring_end = pipe->ring_start + (0x40000 >> 2);
 
 	mwv207_pipe_2d_reset(&pipe->base);
+	if (diag >= 4)
+		pipe_2d_probe(pipe);
 
 	pipe->irq = irq_find_mapping(jdev->irq_domain, 17 + id);
 	if (pipe->irq == 0) {
