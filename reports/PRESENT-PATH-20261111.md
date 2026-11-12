@@ -658,3 +658,39 @@ r26（= §19 的改法）装到安装栈后，桌面整体变慢：`jellyfish` 2
 
 预期：X 回到线性（r25 的桌面速度），客户端平铺保住 §19 的收益。载荷 r27
 （`payload-44`）待安装后实测确认。
+
+
+## 21. r27 安装后实测（2026-11-12 16:49）：桌面速度回到 r25，客户端平铺收益到位
+
+安装态 `oss-24.1.2-fullstack-r27`（`payload-44`，DRI md5 `93767de9…`），
+X 走 r27（`Xorg` 保持线性），客户端走 r27（平铺 + 影子）。
+
+**同会话交替 A/B：默认（客户平铺）vs `LIBGL_DRIVERS_PATH=payload-42`（客户端线性）**
+
+| 场景 | 线性 | 平铺 | 比值 |
+|---|---|---|---|
+| jellyfish | 236 | **679** | **2.88×** |
+| buffer | 519 | **765** | **1.48×** |
+| pulsar | 1063 | 1403 | 1.32× |
+| conditionals | 1048 | 1257 | 1.20× |
+| function | 1060 | 1224 | 1.15× |
+| effect2d | 840 | 965 | 1.15× |
+| shading | 1207 | 1377 | 1.14× |
+| loop | 1061 | 1185 | 1.12× |
+| desktop | 336 | 369 | 1.10× |
+| shadow / refract | 734 / 96 | 780 / 101 | 1.06× / 1.05× |
+| build / texture / bump / terrain | 1478 / 1325 / 1446 / 112 | 1473 / 1282 / 1396 / 107 | 1.00 / 0.97 / 0.96 / 0.96 |
+
+- 全套 `glmark2 -b :duration=2`：**1073 vs 1074**（基本持平）。原因：glmark2 的分数被
+  `conditionals`/`function`/`loop`/`build` 这类"每帧一次全屏写"的场景主导，它们是
+  present 下限，平铺拿不到带宽收益却要付一次影子拷贝；而真正重叠绘制的
+  （jellyfish / buffer / pulsar）不是分数主力。
+- 桌面手感（X 侧）已回到 r25：`jellyfish` 200→679、`buffer` 131→765（r26 时是
+  200/131，说明 Xorg 参与平铺才是回退元凶）。
+- 正确性：同一场景截屏 md5 仍为 `d95544a1afc1d17c0e49e6ab3f70a3b3`（与线性一致）；
+  `DRI_DIR=/usr/local/lib/mwv207-oss tests/query/run-query-tests.sh` **4/4 PASS**；
+  `tests/fbo-test` **PASS**；`tools/vp9-regression.sh` **18/18**。
+
+**结论**：保留 r27。这是"清单外"的净收益——全套分数不变，但重叠绘制的应用
+（游戏、合成器、浏览器滚动重绘）快 1.5–2.9×；代价是窗口缓冲约 2× 显存。
+若某个应用反而不适，可用 `MWV207_SCANOUT_TILE=0` 单独关掉。
