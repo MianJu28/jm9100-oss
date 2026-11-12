@@ -1,14 +1,19 @@
 # 未修复缺陷与未实现功能 · 总清单
 
-> 汇总截至 **2026-11-11 12:10**（运行中的 UMD 是 **r23**（`payload-42/VERSION =
-> 24.1.2-fullstack-r23`，2026-11-11 12:07 安装，含 I-5；DRI `8f52e997…`、
-> VA `e2ddc5bb…`）；r23 之前的 `payload-42` 依次是 r22（含 N18）、r21；
-> 内核 `6.6.155-arm64-desktop-hwe` 侧运行中的是 `8DFC520FB8FCDECFBC911AA`（20 处 `BUG_ON`
-> 收敛 + N16 + N4 异步 DMA/K11 + N17 引用计数，2026-11-10 17:55 重启后
-> `tests/verify-installed.sh 8DFC520FB8FCDECFBC911AA --bad-submit` 全过
-> `PASS=25 FAIL=0 SKIP=1`；N17 的引用计数对账 2052/2052；r23 安装后同一脚本再次
-> `PASS=25 FAIL=0 SKIP=1`），
-> 对应外层仓库工作树（含 `src/mwv207-umd/` 分层）。
+> 汇总截至 **2026-11-13 01:50**（运行中的 UMD 是 **r31**（`payload-46/VERSION =
+> 24.1.2-fullstack-r31`，2026-11-13 01:12 安装；DRI `e909cf0839d5b587ad9395f90ed3b12a`、
+> VA `ce204acb2a97c1b96bd46aff07efc728`）。r31 含：修法 1（VP9 参考槽别名 + MV 双缓冲）、
+> 修法 3（纹理上传暂存复用）、修法 4（buffer 改放 GTT）、回读缓冲复用、
+> `mwv207_video_buffer.h` 守卫修复、JPEG 三缓冲 SOI 判定修复。
+> 内核 `6.6.155-arm64-desktop-hwe` 侧运行中 srcversion `C588E9673F984406AF46A2F`
+> （20 处 `BUG_ON` 收敛 + N16 + N4 异步 DMA/K11 + N17 引用计数 + DE `peek` 只读口）；
+> `tests/verify-installed.sh C588E9673F984406AF46A2F` → PASS=21 FAIL=0 SKIP=3，
+> `tools/gl-regression.sh`（安装栈）→ pass=7 fail=0，`tools/vp9-regression.sh` → pass=19 fail=0。
+>
+> **性能基线（r31 安装栈）**：`glmark2 -b :duration=2` **1039–1046**；present 300×300
+> 0.17 ms/帧、1080p 1.54 ms；纹理上传（1024²/小块）**0.05 ms/次**、buffer `glBufferSubData`
+> 4 MB **0.30 ms（12.9 GB/s）**、`glMapBufferRange` 读 **0.33 ms**；VP9 1080p 解码
+> **220 fps**、H.264 **234 fps**、HEVC **269 fps**（均不下载帧）；`glReadPixels` 4 MB 4.8 ms。
 > 取代散落在 `api/06-KNOWN-ISSUES.md`、`api/11-FIX-FEASIBILITY.md` 里的分散记录：
 > 本文件是**唯一索引**，那两个文件保留历史细节与推导过程。
 >
