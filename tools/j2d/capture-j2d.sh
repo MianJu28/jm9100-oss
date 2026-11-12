@@ -31,7 +31,8 @@ trap lightdm_back EXIT INT TERM
 	systemctl start lightdm 2>/dev/null
   } ) &
 
-DIR="${1:-/tmp/j2d-cap}"
+# 默认落在 ~/j2d-captures/<时间戳>：/tmp 会被重启清空，抓包丢了就只能重抓
+DIR="${1:-$HOME/j2d-captures/$(date +%Y%m%d-%H%M%S)}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
 SO="$DIR/j2dcap.so"
