@@ -37,6 +37,13 @@
 #include "mwv207_screen.h"
 #include "mwv207_blit.h"
 
+/* 上传暂存等待上限: GPU 正常时 blit 在 1 ms 量级结束, 100 ms 足够;
+ * 超时说明 GPU 已卡死, 此时新建一份暂存比把进程挂住好。 */
+#define MWV207_STAGING_REUSE_TIMEOUT_NS  (100ull * 1000000ull)
+#define MWV207_STAGING_RETIRE_TIMEOUT_NS (2000ull * 1000000ull)
+/* 暂存缓存预算: 环里最多留这么多字节的上传暂存 */
+#define MWV207_STAGING_CACHE_BUDGET      (96ull * 1024ull * 1024ull)
+
 static bool mwv207_tile_supported_format(enum pipe_format format)
 {
    if (util_format_get_blocksize(format) > 8)
@@ -410,14 +417,26 @@ mwv207_flush_resource(struct pipe_context *pctx,
    }
 }
 
+/* 等 GPU 结束对 resource 的使用, 但只等到 timeout_ns。返回 true 表示已完成。
+ * GPU 卡死时无限等待会把调用的客户端进程一起挂住 (实测 Xorg 卡在 D 状态),
+ * 所以上传暂存复用这类内部路径一律走有界等待、超时走回退。 */
+static bool
+mwv207_wait_resource_timeout(struct pipe_context *pctx,
+                             struct pipe_resource *resource,
+                             int64_t timeout_ns)
+{
+   struct mwv207_context *ctx = mwv207_context(pctx);
+   struct mwv207_resource *res = (struct mwv207_resource *)resource;
+
+   mwv207_submit(ctx, NULL, true);
+   return ctx->ws->bo_wait(ctx->ws, res->bo, timeout_ns);
+}
+
 void
 mwv207_wait_resource(struct pipe_context *pctx,
                      struct pipe_resource *resource)
 {
-   struct mwv207_context *ctx = mwv207_context(pctx);
-   struct mwv207_resource *res = (struct mwv207_resource *)resource;
-   mwv207_submit(ctx, NULL, true);
-   ctx->ws->bo_wait(ctx->ws, res->bo, OS_TIMEOUT_INFINITE);
+   mwv207_wait_resource_timeout(pctx, resource, OS_TIMEOUT_INFINITE);
 }
 
 static void *
@@ -471,7 +490,36 @@ mwv207_transfer_map(struct pipe_context *pctx,
          struct pipe_resource templ = *pres;
          templ.usage |= PIPE_USAGE_STAGING;
          templ.bind |= PIPE_BIND_LINEAR;
-         trans->staging_res = pctx->screen->resource_create(pctx->screen, &templ);
+         /* 复用上一轮 retire 环里尺寸相同的 staging: 每次重新 create 会让
+          * 内核为整张纹理大小重新分配/填充页, 实测 2048x2048 纹理每次上传
+          * 固定花 13-20 ms。复用前先等它上一次 blit 读完。 */
+         struct pipe_resource *cached = NULL;
+         static int reuse_staging = -1;
+         if (reuse_staging < 0)
+            reuse_staging = debug_get_bool_option("MWV207_STAGING_REUSE", true);
+         if (reuse_staging) {
+            for (unsigned i = 0; i < ARRAY_SIZE(ctx->retired_staging); i++) {
+               struct pipe_resource *cur = ctx->retired_staging[i];
+
+               if (!cur || cur->width0 != templ.width0 || cur->height0 != templ.height0 ||
+                   cur->depth0 != templ.depth0 || cur->array_size != templ.array_size ||
+                   cur->last_level != templ.last_level || cur->format != templ.format)
+                  continue;
+               ctx->retired_staging[i] = NULL;
+               /* 注意 winsys 的 bo_wait 返回 bool: true 表示已完成 */
+               if (!mwv207_wait_resource_timeout(pctx, cur,
+                     MWV207_STAGING_REUSE_TIMEOUT_NS)) {
+                  /* GPU 迟迟不结束: 把这份暂存放回原槽位, 本次新建一份 */
+                  ctx->retired_staging[i] = cur;
+                  debug_printf("mwv207: 暂存复用等待超时, 改为新建\n");
+                  break;
+               }
+               cached = cur;
+               break;
+            }
+         }
+         trans->staging_res = cached ? cached :
+            pctx->screen->resource_create(pctx->screen, &templ);
 
          if (!trans->staging_res)
             return NULL;
@@ -542,16 +590,41 @@ mwv207_transfer_map(struct pipe_context *pctx,
    return ptr;
 }
 
+/* 暂存缓存占用的近似字节数 (只用于预算控制)。 */
+static uint64_t
+mwv207_staging_bytes(const struct pipe_resource *res)
+{
+   if (!res)
+      return 0;
+   return (uint64_t)res->width0 * res->height0 * res->depth0 * res->array_size *
+          util_format_get_blocksize(res->format) * (res->last_level + 1);
+}
+
 /* 上传暂存的延迟释放: 把 staging 资源挂到上下文的小环里, 环满时才等待最老的
- * 一个。这样 GPU 侧 blit 读它的数据不会被下一次上传覆盖 (见 context.h 注释)。 */
+ * 一个。这样 GPU 侧 blit 读它的数据不会被下一次上传覆盖 (见 context.h 注释),
+ * 同时 transfer_map() 可以复用同尺寸的一份, 省掉每次 4-16 MB 的 BO 分配。
+ * 环里的总量有预算上限, 避免大纹理把显存/系统内存全占满。 */
 void
 mwv207_retire_staging(struct pipe_context *pctx, struct pipe_resource *resource)
 {
    struct mwv207_context *ctx = mwv207_context(pctx);
    struct pipe_resource **slot = &ctx->retired_staging[ctx->retired_staging_next];
+   uint64_t total = mwv207_staging_bytes(resource);
+
+   for (unsigned i = 0; i < ARRAY_SIZE(ctx->retired_staging); i++)
+      total += mwv207_staging_bytes(ctx->retired_staging[i]);
+
+   if (total > MWV207_STAGING_CACHE_BUDGET) {
+      /* 超预算: 不再缓存这份暂存, 等 GPU 读完直接释放 */
+      mwv207_wait_resource_timeout(pctx, resource, MWV207_STAGING_RETIRE_TIMEOUT_NS);
+      pipe_resource_reference(&resource, NULL);
+      return;
+   }
 
    if (*slot) {
-      mwv207_wait_resource(pctx, *slot);
+      if (!mwv207_wait_resource_timeout(pctx, *slot,
+            MWV207_STAGING_RETIRE_TIMEOUT_NS))
+         debug_printf("mwv207: 暂存延迟释放等待超时, 直接替换\n");
       pipe_resource_reference(slot, NULL);
    }
    *slot = resource;

@@ -358,7 +358,6 @@ mwv207_submit(struct mwv207_context *ctx, int *out_fence_fd, bool force)
       return;
 
    mwv207_end_cmd(ctx);
-
    ctx->ws->cmdbuf_commit(ctx->ws, ctx->cmd, ctx->in_fence_fd, out_fence_fd);
 
    if (ctx->in_fence_fd >= 0) {

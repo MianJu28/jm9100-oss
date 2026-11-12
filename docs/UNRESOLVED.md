@@ -1339,6 +1339,48 @@ initramfs 已刷并解包核对（`modinfo -F srcversion` 均为 `8DFC52…`）�
 遗留：`glTexSubImage2D` 0.51 GB/s、`glReadPixels` 2.8 ms、以及 HEVC/H.264 的 `buf->res`
 读回仍在同一条"WC 映射读慢"的链上；修法 2（KMD cached 映射）未做，风险仍在。
 
+### 修法 3 已落地（2026-11-13 凌晨）：纹理上传的 5–15 ms 固定开销 → 0.03 ms
+
+现象：`glTexSubImage2D` 每次约 5 ms，且**与上传块大小无关、与纹理总大小成正比** ——
+64×64 上传到 1024² 纹理 4.9 ms、到 2048² 纹理 19.6 ms，传到 64² 纹理只要 1.0 ms
+（`tests/tex-upload/texbench.c`）。
+
+根因：`mwv207_transfer_map()` 对平铺纹理每次都 `resource_create()` 一份**全尺寸
+STAGING+LINEAR 影子**，把数据 blit 进平铺纹理后再延迟释放。内核要为这块 4–16 MB 的新 BO
+分配并填充页，代价 ∝ 纹理大小；`retired_staging[16]` 环只是延迟释放，从未复用。
+链路上的等待也印证：`[TX] wait=5–14 ms`，其中 `submit≈0`、`bo_wait=4–15 ms`
+（等的是"上一份暂存最后一次 blit"的 fence），第二次 `bo_wait` 立刻返回。
+
+改法（`src/mwv207-umd/drivers/mwv207/mwv207_resource.c`）：
+
+1. `mwv207_transfer_map()` 建暂存前先在同尺寸/同格式/同层数的 `retired_staging` 环里找一份，
+   取走后**有界等待**它上一次 blit 读完（`MWV207_STAGING_REUSE_TIMEOUT_NS` = 100 ms），
+   超时就把它放回槽位并新建一份 —— GPU 卡死时宁可多分配，也不能把进程挂住。
+2. `mwv207_retire_staging()` 的等待也从无限改为 2 s 上限；新增 96 MB 缓存预算，
+   超预算的暂存等 GPU 读完直接释放，避免大纹理把内存占满。
+3. 抽出 `mwv207_wait_resource_timeout()`（winsys `bo_wait` 返回 bool：true = 已完成），
+   `mwv207_wait_resource()` 仍是无限等待，保持原有语义。
+4. `MWV207_STAGING_REUSE=0` 可关闭复用做 A/B。
+
+实测（安装栈 r28 的 UMD 换成开发构建，`:0`，同一进程）：
+
+| 场景 | 修前 | 修后 | 倍率 |
+|---|---|---|---|
+| 2048² 纹理，64×64 上传（8 张轮换） | 14.95 ms/次 | **0.03 ms/次** | 500× |
+| 1024² 纹理，64×64 上传（8 张轮换） | 3.21 ms/次 | **0.03 ms/次** | 100× |
+| 1024² 纹理，整张 4 MB 上传 | 7.09 ms/次（0.53 GB/s） | **1.54 ms/次**（2.4 GB/s） | 4.6× |
+
+正确性：`tests/tex-upload/texcheck.c` **PASS**（12 轮整张 A→B 覆盖 + 8 纹理 × 4 轮
+小块背靠背上传的串数据检测）；`tests/query` 4/4；`tests/fbo-test` PASS；
+`glmark2 -b :duration=2` 1048（安装栈 1073，未回归）；`tools/vp9-regression.sh` 19/19。
+
+坑（都已记录）：① winsys `bo_wait` 返回 **bool（true = 成功）**，第一版按"0 成功"判断，
+结果每次都被当成超时、复用形同关闭；② EGL 上下文不指定 `EGL_CONTEXT_CLIENT_VERSION`
+时按规范得到 ES1 上下文（`OpenGL ES-CM 1.1`），**没有任何 shader 能力**，探针必须显式要 ES2，
+否则 `glCompileShader` 全是 `INVALID_OPERATION`；③ `~/vp9-assets/p1080_sw.yuv` 是旧编码的
+参考，导致 `p1080.webm` 一度判 FAIL —— 硬件解码与**当场重新软件解码**逐字节一致，
+测试资产必须与源样片同批生成。
+
 ## 5. 建议的推进顺序
 
 | 批次 | 内容 | 前置 | 代价 |
