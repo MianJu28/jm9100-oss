@@ -1669,3 +1669,46 @@ initramfs 已刷并解包核对（`modinfo -F srcversion` 均为 `8DFC52…`）�
   FBO 附件，读回 24 次绘制结果哈希）新旧驱动输出**完全一致**；`tests/query` 4/4；
   `glmark2 -b :duration=1` 939 → 943（±0.5%，符合"GPU-bound 场景不吃每 draw 开销"）。
 - 详见 `reports/PRESENT-PATH-20261111.md` §16。
+
+## DE 平铺扫描出：现状与第一步（2026-11-12）
+
+目标是让窗口/扫描出缓冲变成平铺+TS，从而把 PE 写窗口表面从 6.7 GB/s 提到
+~21 GB/s（`reports/PRESENT-PATH-20261111.md` §18）。当前状态与障碍：
+
+- **UMD 侧已就绪**：`supported_modifiers[]` 已含 `DRM_FORMAT_MOD_VIVANTE_SUPER_TILED`
+  （`src/mwv207-umd/drivers/mwv207/mwv207_resource.c:615`），导入路径会据此把
+  resource 设成 `MWV207_SUPERTILED`（`:154`）。但带 `PIPE_BIND_SCANOUT` 的资源会被
+  `mwv207_can_tile()` 的 `enable_scanout_tile = false` 拦成线性，且平铺 + SCANOUT
+  时会额外建一份 `res->linear` 影子资源（`:228`）。
+- **KMD 侧没接**：plane 只声明 `DRM_FORMAT_MOD_LINEAR`
+  （`src/kernel-6.6/dc/mwv207_va.c:68` 的 `format_modifiers[]` + `:103`
+  `mwv207_plane_format_mod_supported()`），主平面更新（`:195-212`）只写
+  pitch/size/addr/格式位，**没有任何 tile 位**；厂商 KMD 同样如此
+  （`j9_handle__attribute_chalkstone` 逐条对齐，见 `reports/PRESENT-PATH-20261111.md` §8）。
+- **DE 侧有平铺能力但语义未知**：厂商寄存器表
+  `DCREG_FRAME_BUFFER_CONFIG_Address 0x01518`（`jmgpu_coupling.h:1291`）的
+  `TILE_MODE 21:17` 列出 `LINEAR 0x00`、`TILED4X4 0x01`、`SUPER_TILED_XMAJOR 0x02`、
+  `SUPER_TILED_YMAJOR 0x03`、`TILE_MODE8X8 0x04` … 直到 `TILED256X1 0x10`；
+  `DCREG_OVERLAY_CONFIG(0x4B0)` 的 `TILE_MODE 12:8` 是同一套取值。
+  但厂商 75 个 `.c` **零引用**这些字段，语义要靠试验反推。
+- **读寄存器的通道**：`devmem` 在本机读任何 MMIO 都返回 `0xFFF8F8F8`（被限制），
+  因此给 KMD 加了一个只读调试口：`/sys/module/mwv207/parameters/peek`
+  （写寄存器偏移，例如 `echo 0x991400 > .../peek`，结果同时打印到 dmesg 并留在
+  `peek_result`）。srcversion `C588E9673F984406AF46A2F`，已 `dkms-sync` +
+  `kmd stage`，**待重启生效**。
+
+**重启后要读的寄存器**（判断到底是谁在扫描出）：
+
+| 偏移 | 含义（厂商命名） |
+|---|---|
+| `0x991400` | `DCREG_FRAME_BUFFER_ADDRESS`（若等于当前 fb 地址>>6，说明 DE FB 通路在用） |
+| `0x991408` | `DCREG_FRAME_BUFFER_STRIDE` |
+| `0x991518` | `DCREG_FRAME_BUFFER_CONFIG`（看 `TILE_MODE 21:17` 当前值） |
+| `0x990434` / `0x990438` | 我们主平面实际写的 pitch / addr>>6（对照用） |
+| `0x990430` | 我们主平面写的格式位 |
+
+读出来再决定：若 `0x991518` 的 TILE_MODE = 0 且 `0x991400` 是当前帧地址，则
+「改 `TILE_MODE` + KMD 声明 SUPER_TILED modifier + UMD 放开 scanout tiling」
+这条路可行；若 `0x991400` 恒 0（说明 DE FB 通路没在用、显示走的是 VA 窗口块），
+则平铺只能靠 VA 块，而 VA 块没有 tile 字段 ⇒ 此路不通，需改走「驱动内置
+平铺 FBO + 上屏 blit」或接受结构性差距。

@@ -72,6 +72,41 @@ static int selftest;
 module_param(selftest, int, 0644);
 MODULE_PARM_DESC(selftest, "run selftest when startup");
 
+/* 调试用的寄存器读取口：往 peek 写一个 32 位寄存器偏移，结果放在 peek_result。
+ * 只读、且仅 root 可写，用于核对显示侧寄存器（例如 DE 的平铺位）。
+ * FIX(jm9100-oss) */
+static u32 peek_reg;
+static u32 peek_result;
+static struct mwv207_device *peek_dev;
+
+static int mwv207_peek_set(const char *val, const struct kernel_param *kp)
+{
+	struct mwv207_device *jdev = peek_dev;
+	unsigned int reg;
+	int ret;
+
+	if (!jdev)
+		return -ENODEV;
+
+	ret = kstrtouint(val, 0, &reg);
+	if (ret)
+		return ret;
+
+	peek_reg = reg;
+	peek_result = jdev_read(jdev, reg);
+	pr_info("mwv207: peek 0x%08x = 0x%08x\n", reg, peek_result);
+	return 0;
+}
+
+static const struct kernel_param_ops mwv207_peek_ops = {
+	.set = mwv207_peek_set,
+};
+
+module_param_cb(peek, &mwv207_peek_ops, NULL, 0200);
+MODULE_PARM_DESC(peek, "read a 32-bit register offset (root only)");
+module_param(peek_result, uint, 0444);
+MODULE_PARM_DESC(peek_result, "result of the last peek");
+
 
 static int mwv207_driver_open(struct drm_device *dev, struct drm_file *file_priv)
 {
@@ -344,6 +379,7 @@ static int mwv207_pci_probe(struct pci_dev *pdev,
 	jdev->lite = jdev_read(jdev, 0x12c0000) == 0x21 ? false : true;
 
 	pci_set_drvdata(pdev, jdev);
+	peek_dev = jdev;
 
 	ret = mwv207_db_init(jdev);
 	if (ret)
@@ -414,6 +450,7 @@ err_sched:
 err_ttm:
 	mwv207_ttm_fini(jdev);
 err_irq:
+	peek_dev = NULL;
 	mwv207_irq_fini(jdev);
 err_vbios:
 	mwv207_vbios_fini(jdev);
