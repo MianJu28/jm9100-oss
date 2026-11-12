@@ -1238,6 +1238,40 @@ initramfs 已刷并解包核对（`modinfo -F srcversion` 均为 `8DFC52…`）�
 
 ---
 
+### 重场景（terrain/refract）比厂商慢 1.3–1.4× —— 判为 ISA/硬件边界（2026-11-12）
+
+结论先行：**差距落在"每像素的超越函数指令"上，不在 present、不在提交、不在降频**，
+本轮实测把可动的杠杆逐个量过，都不足以补上，因此归入硬件/ISA 边界。
+
+已排除（都有数据）：
+
+| 假设 | 实测 | 结论 |
+|---|---|---|
+| present 拖累 | 两个场景 on/off-screen 差 +0.3 / +0.7 ms（jellyfish 是 +3.24） | 不是主因（已在 §16 修掉 present） |
+| CPU 提交瓶颈 | 每 draw 0.17 µs（原 0.86），`strace` 显示 ioctl 总量可忽略 | 已修（`ccd9d9c`） |
+| 降频 | `devfreq_mwv207_3d0/cur_freq = 1000` = max，governor `performance` | 不是 |
+| 着色器编译期缓存 | 指纹脏标记已让 `update_shader` 0.76 → 0.08 µs | 已修（同上） |
+| 超越函数可向量化 | 把 ISA 源操作数的 `swiz_scalar` 强制去掉（`MWV207_VEC_TRIG`，见下）后输出**逐字节相同**、耗时**无变化**（10.38 vs 10.12 ms） | 硬件就是单 lane 串行，无 vec4 形式 |
+| 用多项式替换 sin/cos | 实测 sin 每个分量 ≈ 3–4 个 FMA 的代价（64 行 sin 9.15 ms vs 64 行 mul+add 2.4–3.3 ms）；多项式 sin 需 ~7 个 FMA + 范围归约 | 替换**只会更慢**，此路作废 |
+
+剩下的差距成因：`glmark2` 这两个场景是**超越函数密集**的——
+`terrain.frag` 每个点光每像素 `pow(nDotH, shininess)`（= `exp2(y*log2(x))`，
+两个超越函数）+ 雾的 `exp2`；`light-refract.frag` 同样 `pow` + `refract/reflect/normalize`
+（`rsqrt`）。而本 ISA 的超越函数（`0xC frcp`/`0xD frsq`/`0x21 fsqrt`/`0x22 fsin`/
+`0x23 fcos`/`0x12 flog2`/`0x11 fexp2`）在 `mwv207_opcode.c:68-71` 里只有单 lane 形式
+（`SRC_X_X_0`），`mwv207_emit.c:315` 还强制 `swiz_scalar`；实测其代价约为一次 FMA 的
+3–4 倍，也就是说这两类场景平均每像素要多付十几个 ALU 周期。
+
+厂商同场景只快 1.3–1.4×（155 vs 115、123 vs 97），说明它用的是同一套 ISA，只是
+每像素少几条指令（更紧的寄存器复用/更少的中间归一化）。这类差距只能靠"与厂商同等
+质量的着色器后端"来补，而我们手上既没有它的编译器产物也没有硬件计数器，无法反向
+验证任何改写是否真的更优——上一轮试图用 `OPT_FFMA`/`OPT_DIV`/`OPT_SET` 这些 peephole
+开关也是因为它们默认关闭、release 构建里根本不生效。
+
+**结论**：`terrain`/`refract` 的 1.3–1.4× 不作修复目标，记录为本机 ISA 的着色器执行
+效率边界；`jellyfish`/`buffer` 这类"重叠绘制 + 中等着色器"的场景已通过
+平铺扫描出（§19–§21）拿到 1.5–2.9×。
+
 ## 5. 建议的推进顺序
 
 | 批次 | 内容 | 前置 | 代价 |
