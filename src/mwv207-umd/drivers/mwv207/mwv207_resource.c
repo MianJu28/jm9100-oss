@@ -25,6 +25,8 @@
 * OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 #include "util/u_inlines.h"
+#include "util/u_process.h"
+#include <string.h>
 #include "util/u_memory.h"
 #include "util/u_transfer.h"
 #include "util/format/u_format.h"
@@ -70,7 +72,7 @@ static enum pipe_error
 mwv207_can_tile(struct mwv207_resource *res)
 {
 
-   const bool enable_scanout_tile = true;
+   const bool enable_scanout_tile = debug_get_bool_option("MWV207_SCANOUT_TILE", true);
 
    if (!mwv207_tile_supported_format(res->base.format))
       return PIPE_ERROR_BAD_INPUT;
@@ -79,7 +81,16 @@ mwv207_can_tile(struct mwv207_resource *res)
       return PIPE_ERROR_BAD_INPUT;
 
    if (res->base.bind & PIPE_BIND_SCANOUT) {
-      if (enable_scanout_tile &&
+      /* 构造/合成进程（Xorg）的扫描出缓冲保持线性。
+       * 它每个 frame 会对同一张 1080p 图提交很多批绘制，若走"平铺 + 线性影子"，
+       * 每批 flush 都要把整张图拷进影子（实测把桌面整体拖慢一倍）；而窗口客户端
+       * 的缓冲每帧只提交一两次，平铺带来的带宽收益远大于一次影子拷贝。 */
+      static int is_server = -1;
+      if (is_server < 0) {
+         const char *name = util_get_process_name();
+         is_server = (name && strstr(name, "Xorg")) ? 1 : 0;
+      }
+      if (enable_scanout_tile && !is_server &&
           res->base.array_size == 1 &&
           res->base.depth0 == 1 &&
           res->base.last_level == 0)
