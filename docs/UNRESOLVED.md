@@ -1571,6 +1571,25 @@ initramfs 已刷并解包核对（`modinfo -F srcversion` 均为 `8DFC52…`）�
 - 另注：`glxgears` 的 `vblank_mode=0` 我方 3462–5275 FPS vs 厂商 15134–17621，
   与 present 结论一致（glxgears 每帧只画几个三角形，几乎全是 present 开销）。
 
+## `umd install` 中途被杀、桌面没起来 —— 已修（2026-11-12，提交 `0070493`）
+
+现象：跑 `sudo ./switch-mwv207.sh umd install`（载荷 r26）后，日志只打到
+「先停 lightdm 再覆盖库」就没了；`/usr/local/lib/mwv207-oss/` 的 md5 仍停在
+r25（`e8570c…` / `d35b41…`），桌面也没自动回来，只能手动重启 lightdm。
+
+根因：脚本自己跑在 **lightdm 会话的 cgroup** 里，`systemctl stop lightdm`
+会把发起切换的这条命令一起 SIGKILL。上一轮为了解决"拷贝 .so 与重启 lightdm 的
+竞态"把顺序改成"先停 lightdm → 部署 → 重启"，于是脚本正好死在这个空隙：
+库没换、lightdm 也没被重新拉起。
+
+修法：`switch-mwv207.sh` 的 `main()` 里，对会停显示服务的子命令
+（`umd install/activate/rollback`、`stack oss/vendor`、`all install`、
+`kmd install`、`vendor install`）先用
+`systemd-run --scope --collect --unit=mwv207-switch-$$` 把整条命令搬进
+`/system.slice` 的独立 scope 再执行。实测 cgroup 从
+`user@1000.service/app.slice/…` 变成 `system.slice/t-scope-check.scope`，
+停 lightdm 不再影响它。可用 `MWV207_NO_SCOPE=1` 关掉。
+
 ## 火狐 WebGL 页仍未到 vsync 上限（性能，剩余项）
 
 - 现状（r9 测得，零 env；r12 未重新测数）：CSS 动画页 **96.6 FPS / 10.35ms**（已到 100Hz 面板上限），
