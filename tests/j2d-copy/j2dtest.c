@@ -174,6 +174,52 @@ static int sweep_copy(uint32_t w, uint32_t h)
 	return hit ? 0 : 2;
 }
 
+/* 模式 5：怀疑 2D 引擎要的是"总线地址"（厂商抓包里地址都是 0x01e0xxxx），
+ * 而我们的 BO GPU 地址从 0 附近开始。用 reloc 的 bo_offset 把地址整体
+ * 平移几个候选基址，看哪一档能让填充生效。 */
+static int sweep_base(uint32_t w, uint32_t h)
+{
+	uint32_t pitch = w * 4, size = pitch * h;
+	uint64_t bases[] = { 0, 0x01000000, 0x01e00000, 0x02000000, 0x20000000 };
+	uint32_t highs[] = { 0x0040, 0x0060, 0x00c0, 0x0100, 0x01e0 };
+	unsigned b, hi_i;
+	int hit = 0;
+
+	for (b = 0; b < sizeof(bases) / sizeof(bases[0]); b++) {
+		for (hi_i = 0; hi_i < sizeof(highs) / sizeof(highs[0]); hi_i++) {
+			uint32_t hd;
+			uint32_t *dst = bo_new(size, &hd);
+			uint32_t cmds[32], n = 0;
+			uint32_t desc = ((uint32_t)highs[hi_i] << 16) | 0x0600;
+
+			cmds[n++] = 0x40000000 | 0x1008; cmds[n++] = 0;
+			cmds[n++] = 0x40000000 | 0x100c; cmds[n++] = 0;
+			cmds[n++] = 0x40000000 | 0x1014; cmds[n++] = 0;
+			cmds[n++] = 0x40000000 | 0x1020; cmds[n++] = 0x00ff00ff;
+			cmds[n++] = 0x40000000 | 0x1054; cmds[n++] = 0xffffffff;
+			cmds[n++] = 0x82000054; cmds[n++] = 0;
+			uint32_t off = n * 4; cmds[n++] = 0;
+			cmds[n++] = desc; cmds[n++] = (w << 16) | h;
+			cmds[n++] = 0x81000000;
+
+			uint32_t bos[1] = { hd };
+			struct reloc rl[1] = { { 0, off, bases[b], 1, 0 } };
+			int bad = -1;
+			if (!submit(cmds, n, bos, 1, rl, 1)) {
+				bad = 0;
+				for (uint32_t i = 0; i < size / 4; i++)
+					if (dst[i] != 0x00ff00ffu) bad++;
+			}
+			printf("mode=5 base=%#llx desc=0x%08x: %s\n",
+			       (unsigned long long)bases[b], desc,
+			       bad == 0 ? "OK(命中)" : (bad < 0 ? "提交失败" : "无效"));
+			if (bad == 0) hit++;
+		}
+	}
+	printf("命中 %d 组\n", hit);
+	return hit ? 0 : 2;
+}
+
 int main(int argc, char **argv)
 {
 	int mode = argc > 3 ? atoi(argv[3]) : 0;      /* 0=填充 1=拷贝 3=描述字扫描 */
@@ -189,6 +235,12 @@ int main(int argc, char **argv)
 	if (ioctl(fd, IOCTL_CTX, &c)) { perror("CTX"); return 1; }
 	ctx = c.handle;
 
+	if (mode == 5) {
+		struct mwv207_ctx cc; memset(&cc, 0, sizeof(cc)); cc.op = 0;
+		if (ioctl(fd, IOCTL_CTX, &cc)) { perror("CTX"); return 1; }
+		ctx = cc.handle;
+		return sweep_base(w, h);
+	}
 	if (mode == 4) {
 		struct mwv207_ctx cc; memset(&cc, 0, sizeof(cc)); cc.op = 0;
 		if (ioctl(fd, IOCTL_CTX, &cc)) { perror("CTX"); return 1; }
