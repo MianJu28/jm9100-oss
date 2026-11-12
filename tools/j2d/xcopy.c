@@ -17,6 +17,8 @@ int main(int argc, char **argv)
 	const char *disp = argc > 1 ? argv[1] : ":0";
 	int size = argc > 2 ? atoi(argv[2]) : 256;
 	int count = argc > 3 ? atoi(argv[3]) : 50;
+	int depth = argc > 4 ? atoi(argv[4]) : 0;      /* 0 = 屏幕默认深度 */
+	const char *dest = argc > 5 ? argv[5] : "pix"; /* pix = 拷到 pixmap, win = 拷到窗口 */
 	Display *d;
 	Window win;
 	GC gc;
@@ -33,9 +35,12 @@ int main(int argc, char **argv)
 	XMapWindow(d, win);
 	XSync(d, False);
 
-	a = XCreatePixmap(d, win, (unsigned)size, (unsigned)size, DefaultDepth(d, DefaultScreen(d)));
-	b = XCreatePixmap(d, win, (unsigned)size, (unsigned)size, DefaultDepth(d, DefaultScreen(d)));
-	gc = XCreateGC(d, win, 0, NULL);
+	if (depth <= 0)
+		depth = DefaultDepth(d, DefaultScreen(d));
+	a = XCreatePixmap(d, win, (unsigned)size, (unsigned)size, (unsigned)depth);
+	b = XCreatePixmap(d, win, (unsigned)size, (unsigned)size, (unsigned)depth);
+	/* GC 必须与 pixmap 同深度，否则 XFillRectangle 会 BadMatch */
+	gc = XCreateGC(d, a, 0, NULL);
 
 	XSetForeground(d, gc, 0x3366cc);
 	XFillRectangle(d, a, gc, 0, 0, (unsigned)size, (unsigned)size);
@@ -44,8 +49,11 @@ int main(int argc, char **argv)
 	XSync(d, False);
 
 	if (count <= 0) {
-		/* 单次 pixmap→pixmap 拷贝：给命令流做"最干净"的对照样本 */
-		XCopyArea(d, a, b, gc, 0, 0, (unsigned)size, (unsigned)size, 0, 0);
+		/* 单次拷贝：给命令流做"最干净"的对照样本（默认 pixmap→pixmap） */
+		if (dest[0] == 'w')
+			XCopyArea(d, a, win, gc, 0, 0, (unsigned)size, (unsigned)size, 0, 0);
+		else
+			XCopyArea(d, a, b, gc, 0, 0, (unsigned)size, (unsigned)size, 0, 0);
 		XSync(d, False);
 	} else {
 		for (i = 0; i < count; i++) {
@@ -60,6 +68,7 @@ int main(int argc, char **argv)
 	XFreeGC(d, gc);
 	XDestroyWindow(d, win);
 	XCloseDisplay(d);
-	printf("xcopy: %d 次 XCopyArea(%dx%d) 完成\n", count, size, size);
+	printf("xcopy: %s 深度=%d -> %s, %dx%d (count=%d) 完成\n",
+	       disp, depth, dest, size, size, count);
 	return 0;
 }

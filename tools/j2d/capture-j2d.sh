@@ -82,6 +82,18 @@ for sz in $J2D_SIZES; do
 	"$BIN" :0 "$sz" "$J2D_COUNT" >/dev/null 2>&1 || echo "  (xcopy $sz 失败)"
 done
 
+# 可选矩阵：J2D_MATRIX="256:24:pix 256:32:pix …"（尺寸:深度:目标），
+# 用来把"描述字"里的 pitch/格式位对照出来。
+if [ -n "${J2D_MATRIX:-}" ]; then
+	echo "== 矩阵样本: $J2D_MATRIX =="
+	for item in $J2D_MATRIX; do
+		sz="${item%%:*}"; rest="${item#*:}"
+		dep="${rest%%:*}"; dst="${rest##*:}"
+		echo "   - $sz x $sz, depth=$dep, dest=$dst"
+		"$BIN" :0 "$sz" 0 "$dep" "$dst" >/dev/null 2>&1 || echo "     (失败: $item)"
+	done
+fi
+
 kill $XPID 2>/dev/null || true
 wait $XPID 2>/dev/null || true
 
