@@ -241,6 +241,14 @@ OpenCL/VA-API/VDPAU 全走我们的栈；自建 KMD 在跑（srcversion `D5EEF36
   C（查 UMD 侧 3D 写线性）已排除。
   数据见 `reports/PRESENT-PATH-20261111.md` 与 `docs/UNRESOLVED.md` 同名小节。
 
+- **2D 引擎（2026-11-12，未打通）**：KMD 侧的 2D 管线本身完好（描述符 dump 逐字正确、
+  `0x4200` 特殊全局寄存器可写、`0x4800` 复位状态正常），但**启动位没找到**：
+  `0x4C00` 与 `0x4200` 在地址解码上别名，8 个候选偏移写 1 后完成序号 `0x6000` 全为 0、
+  2D 中断一次未到。启动位由厂商未发布的 `j9_handle_j9m_incumbency()` 表计算，
+  `jmgpu.ko` 里也无相应立即数 ⇒ 需要更大范围的偏移扫描或更深的表定位，暂不推进。
+  证据与限制见 `docs/UNRESOLVED.md` 的 present 小节末两条。诊断参数 `mwv207.diag`
+  （默认 0）已随代码保留，供以后复查。
+
 ### 待办（按价值排序）
 1. **A5 已完成（2026-11-10，`82e7b02`）**：VP9 Profile 2（10bit 4:2:0）与软件解码逐位
    一致（64x64~1080p，含 inter 帧，零 TDR），默认声明；`MWV207_VP9_10BIT_DISABLE=1`

@@ -1540,6 +1540,32 @@ initramfs 已刷并解包核对（`modinfo -F srcversion` 均为 `8DFC52…`）�
   由**闭源 `libdrm_jmgpu.so`** 的 `jmo_2D_*` 生成（DDX 只是调用者，二进制里查不到这两个
   立即数）⇒ 要继续只能反汇编该库，属独立逆向工作。详见
   `reports/PRESENT-PATH-20261111.md` §14。
+- **2026-11-12 内核侧启动位探测（结论：2D 引擎暂不可用）**。把 `tests/j2d-copy/j2dtest.c`
+  的命令流送进我方 2D 环后，`diag=1` 证明描述符 28 字完全正确（段头 `80000000 | count=6`
+  + `40001008/0c/14` 清 0 + `40001020 填充色` + `40001054 掩码` + `82000054 …` +
+  `81000000` + 同步写 + `89000000 链接`），但**完成序号 `0x6000` 始终为 0、2D 中断一次
+  都没来**，即引擎根本没取指。`diag=2`（跳过 wait-link、直接走 RINGBUFFER 模式）显示
+  `0x4200`（`J9_SPECIAL_GLOBALS_ADDR`）写入生效、`0x4800` 复位状态为 1，但**读 `0x4C00`
+  返回的却是 `0x4200` 的值**（写 `0xdead0001` 后两边都读回 `0xdead0001`）⇒ `0x4C00`
+  与 `0x4200` 在地址解码上别名，`0x4C00` 不是启动位。
+  启动位 `J9_HANDLE_J9MATHS_GROUNDWAVE = VPG(ES30) + J9_BOMBARDMENTS` 里的
+  `j9_handle_j9m_incumbency()` 没有随厂商源码发布（75 个 `.c` 里搜不到），
+  厂商 `jmgpu.ko` 里也没有 `#0x968000`/`#0x96c200` 立即数（运行时按引擎表计算）。
+- **2026-11-12 启动位扫描结果（全不命中）**：在 `mwv207_pipe_2d_create()` 里做一次性探测，
+  向 8 个候选 `0x4C00 / 0x4C24 / 0x4C04 / 0x4C20 / 0x4024 / 0x4224 / 0x4800 / 0x4300`
+  各写 1 后等 50 ms 读 `0x6000`，**没有一个是启动位**（`seq` 全 0；只有 `0x4800`/`0x4300`
+  的 `self` 读到 1，属状态寄存器）。
+- **环境限制（已写入本节，避免重复踩）**：`rmmod mwv207` 在这台机器上做不到 ——
+  停 lightdm、`fuser -k /dev/dri/*`、`pkill kwin|Xorg|dde-*`、解绑 `vtconsole` 之后
+  `/sys/module/mwv207/refcnt` 仍为 **2**（驱动内部引用）⇒ "改模块参数后重载"不成立；
+  而 `modprobe.d` 的 `options mwv207 …` 对启动时从 **initramfs** 加载的模块无效。
+  要跑一次性探测只能**把参数默认值临时编进代码**（`static int diag = 4;`），部署
+  `dkms-sync.sh` → `kmd stage` → `update-initramfs -u` 后重启；探测结束再改回 0
+  （当前已改回，工作树干净）。
+- **结论**：2D 引擎的内核侧启动路径在缺少 `incumbency` 表的情况下无法确定；
+  继续推进需要"扫描 `0x968000+0x4000..0x4FFC` 全部偏移"（有写坏寄存器的风险）或
+  对厂商模块做更深的表定位，属独立逆向工作，**本轮到此为止**。present 侧已有
+  的收益（glamor blit 快路径 1.9–2.1×）不受影响。
 - 详细数据与复现命令：`reports/PRESENT-PATH-20261111.md`。
 - 关联：`reports/GLMARK2-VENDOR-VS-OSS-20261111.md`（同条件总分与逐场景对照）。
 - 另注：`glxgears` 的 `vblank_mode=0` 我方 3462–5275 FPS vs 厂商 15134–17621，
