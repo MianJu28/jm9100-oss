@@ -43,6 +43,8 @@
 #include "mwv207_decoder_vp9_slice_header.h"
 #include "vl/vl_video_buffer.h"
 #include "mwv207_utils.h"
+#include <stdio.h>
+#include "util/os_time.h"
 #include "mwv207_context.h"
 
 /* VP9 allows up to 64 tile columns (log2 6) and 4 tile rows (log2 2). */
@@ -63,7 +65,8 @@
 #define VP9_STREAM_COPY_SIZE (4u << 20)
 /* Slot 0 holds the MV image of the frame being decoded, 1..3 the copies the
  * LAST/GOLDEN/ALTREF references read as their temporal MV candidate. */
-#define VP9_MV_SLOTS 3u
+/* MV 图现在双缓冲（写一半、参考读另一半），只需要两个槽。 */
+#define VP9_MV_SLOTS 1u
 
 #define VP9_FILTER_SIZE (2u << 20)
 
@@ -98,6 +101,11 @@ struct mwv207_vp9_state {
    uint32_t stream_offset;
    /* Bounce buffer for the hardware's per-block motion vector store. */
    uint32_t mv_offset;
+   /* MV 图双缓冲：ASIC 把当前帧的 MV 写进 mv_write_off，参考帧的
+    * DBASE 指向另一半（上一帧的 MV）。每帧在 submit_done 里交换，
+    * 于是不再需要把上一帧的 MV 图用 CPU 拷三份 —— 那个 memcpy 走
+    * 写合并映射，1080p 每份约 522 KB × 3 次，实测占到 25–30 ms/帧。 */
+   uint32_t mv_write_off;
    uint32_t mv_size;
    uint32_t mv_bytes;
    bool prev_was_inter;
@@ -124,7 +132,6 @@ struct mwv207_vp9_state {
     * frame that last refreshed this slot.  The VA client keeps decoded
     * frames alive while they are referenced, so no extra reference is
     * taken here. */
-   struct mwv207_video_buffer *ref_slots[16];
    struct mwv207_video_buffer *ref_store;
    struct mwv207_video_buffer *pending;
    uint32_t pending_flags, pending_luma;
@@ -133,6 +140,12 @@ struct mwv207_vp9_state {
     * pick a reference of a different size; the hardware then scales it with
     * (ref_dim << 14) / cur_dim, and the reference's own stride/luma offset
     * differ from the current frame's.  So remember per slot what it holds. */
+   /* 每个逻辑槽当前指向 ref_store 的哪个字节偏移。刷新时不再复制像素，
+    * 只把若干槽指向同一张图片（VP9 的参考帧内容不可变，别名是安全的），
+    * 从而彻底绕开"CPU 从映射 BO 读"的慢路径。 */
+   uint32_t ref_off[16];
+   /* 当前帧解码输出在参考图片环里的字节偏移（submit_done 用它刷新槽）。 */
+   uint32_t pending_off;
    uint16_t ref_slot_w[16];
    uint16_t ref_slot_h[16];
    uint32_t ref_slot_luma[16];
@@ -300,6 +313,13 @@ vp9_frame_geometry(struct mwv207_video_dec *dec, uint32_t width,
       *frame_bytes = luma + 2 * chroma;
 }
 
+static inline uint32_t
+vp9_mv_read_off(struct mwv207_vp9_state *st)
+{
+   return st->mv_write_off == st->mv_offset ? st->mv_offset + st->mv_size
+                                            : st->mv_offset;
+}
+
 static void
 vp9_write_ref_regs(struct mwv207_vp9_state *st,
                    struct mwv207_video_reg_buf *reg_buf,
@@ -326,7 +346,7 @@ vp9_write_ref_regs(struct mwv207_vp9_state *st,
       /* A slot that has not been refreshed yet holds nothing usable. */
       if (!refw || !refh || !sh->width || !sh->height || !st->ref_stride)
          continue;
-      off = (uint64_t)slot * st->ref_stride;
+      off = (uint64_t)st->ref_off[slot];
       rluma = st->ref_slot_luma[slot];
       bo = st->ref_store->res->bo;
       if (!bo || !rluma)
@@ -373,13 +393,9 @@ vp9_write_ref_regs(struct mwv207_vp9_state *st,
       if (st->scratch && st->scratch->res) {
          /* VP9's temporal MV candidate is the previous decoded frame's MV
           * image (vp9_mvref_common.c: cm->prev_frame->mvs).  The ASIC reads
-          * it through the reference's DBASE, so hand every reference used by
-          * this frame a copy of slot 0, which still holds the previous
-          * frame's MV image (the current one is written after submit). */
-         uint32_t prev = st->mv_offset + (1u + k) * st->mv_size;
-         if (st->scratch_cpu && st->mv_bytes)
-            memcpy((uint8_t *)st->scratch_cpu + prev,
-                   (uint8_t *)st->scratch_cpu + st->mv_offset, st->mv_bytes);
+          * it through the reference's DBASE; with the double buffer that is
+          * simply the half the current frame is not writing. */
+         uint32_t prev = vp9_mv_read_off(st);
          reg_buf->set_addr_reg_hi(reg_buf, vp9_ref_dbase_msb[k],
                                   st->scratch->res->bo, prev,
                                   MWV207_BO_ACC_FLAG_WRITE);
@@ -435,63 +451,96 @@ vp9_program_pp(struct mwv207_video_reg_buf *reg_buf,
 
 }
 
+/* 参考图片环：解码输出直接落在这里，刷新只改"槽 -> 图片"的映射。
+ *
+ * 原先的做法是解码进应用的 staging BO、再用 CPU memcpy 把整张图片复制到
+ * 若干参考槽。实测该路径只有 0.28–0.35 GB/s（GEM mmap 是写合并的，
+ * CPU 读极慢），1080p 每帧要 70–90 ms，VP9 硬解因此只有 7–8 fps
+ * （同文件软件解码 400+ fps）。改成别名后完全不碰 CPU。
+ */
+static uint32_t
+vp9_ref_reserve(struct mwv207_video_decoder *decoder,
+                struct mwv207_vp9_state *st, uint32_t frame_bytes)
+{
+   uint32_t i, stride = (frame_bytes + 15u) & ~15u;
+
+   if (stride < st->ref_stride)
+      stride = st->ref_stride;
+   if (st->ref_store && st->ref_store->res &&
+       st->ref_buf_size >= stride * 16u)
+      return st->ref_stride ? st->ref_stride : stride;
+
+   struct mwv207_video_buffer *old = st->ref_store;
+   uint32_t old_stride = st->ref_stride;
+   uint8_t *dst = NULL, *src = NULL;
+
+   st->ref_store = mwv207_video_buffer_create_2(decoder->base.context,
+                                                stride * 16u,
+                                                PIPE_USAGE_STAGING);
+   if (!st->ref_store || !st->ref_store->res) {
+      st->ref_store = old;
+      return 0;
+   }
+   dst = decoder->ws->bo_map(decoder->ws, st->ref_store->res->bo);
+   if (old && old->res)
+      src = decoder->ws->bo_map(decoder->ws, old->res->bo);
+   if (dst && src && old_stride) {
+      /* 增长 stride 时把每张仍被引用的图片搬到它自己的新位置。 */
+      for (i = 0; i < 16; i++) {
+         uint32_t n = st->ref_slot_bytes[i];
+         if (!n)
+            continue;
+         if (n > old_stride)
+            n = old_stride;
+         memmove(dst + (size_t)i * stride,
+                 src + (size_t)st->ref_off[i], n);
+         st->ref_off[i] = i * stride;
+      }
+   }
+   if (old)
+      mwv207_video_buffer_destroy((struct pipe_video_buffer *)old);
+   st->ref_buf_size = stride * 16u;
+   st->ref_stride = stride;
+   return stride;
+}
+
+/* 找一个没有被任何槽引用的图片位置。VP9 最多 8 个参考槽，环有 16 个位置，
+ * 所以总能找到一个；找不到就退化为 0（此时会覆盖，但正常流不会发生）。 */
+static uint32_t
+vp9_pic_pick(struct mwv207_vp9_state *st, uint32_t stride)
+{
+   uint32_t p, i;
+
+   for (p = 0; p < 16; p++) {
+      bool used = false;
+      for (i = 0; i < 16; i++) {
+         if (st->ref_slot_bytes[i] && st->ref_off[i] == p * stride) {
+            used = true;
+            break;
+         }
+      }
+      if (!used)
+         return p;
+   }
+   return 0;
+}
+
 static void
 vp9_refresh_slots(struct mwv207_video_decoder *decoder,
                   struct mwv207_vp9_state *st, uint32_t refresh_flags,
                   struct mwv207_video_buffer *buf, uint32_t width,
                   uint32_t height, uint32_t frame_bytes, uint32_t luma_size)
 {
-   uint32_t i, stride;
+   uint32_t i;
 
-   if (!buf || !buf->res || !buf->res->bo)
-      return;
-   stride = (frame_bytes + 15u) & ~15u;
-   if (stride < st->ref_stride)
-      stride = st->ref_stride;
-   if (!st->ref_store || !st->ref_store->res ||
-       st->ref_buf_size < stride * 16u) {
-      struct mwv207_video_buffer *old = st->ref_store;
-      uint32_t old_stride = st->ref_stride;
-      uint8_t *dst = NULL, *src = NULL;
-
-      st->ref_store = mwv207_video_buffer_create_2(decoder->base.context,
-                                                   stride * 16u,
-                                                   PIPE_USAGE_STAGING);
-      if (!st->ref_store || !st->ref_store->res) {
-         st->ref_store = old;
-         return;
-      }
-      dst = decoder->ws->bo_map(decoder->ws, st->ref_store->res->bo);
-      if (old && old->res)
-         src = decoder->ws->bo_map(decoder->ws, old->res->bo);
-      if (dst && src && old_stride) {
-         /* Growing the pitch: move each slot back to front so the copies
-          * cannot overwrite data they still need. */
-         for (i = 16; i-- > 0;) {
-            uint32_t n = st->ref_slot_bytes[i];
-            if (!n)
-               continue;
-            if (n > old_stride)
-               n = old_stride;
-            memmove(dst + (size_t)i * stride,
-                    src + (size_t)i * old_stride, n);
-         }
-      }
-      if (old)
-         mwv207_video_buffer_destroy((struct pipe_video_buffer *)old);
-      st->ref_buf_size = stride * 16u;
-      st->ref_stride = stride;
-   }
+   (void)decoder;
+   (void)buf;
    if (!st->ref_store || !st->ref_store->res)
       return;
    for (i = 0; i < 16; i++) {
-      uint8_t *src, *dst;
       if (!(refresh_flags & (1u << i)))
          continue;
-      src = decoder->ws->bo_map(decoder->ws, buf->res->bo);
-      dst = decoder->ws->bo_map(decoder->ws, st->ref_store->res->bo);
-      if (src && dst)
-         memcpy(dst + (size_t)i * st->ref_stride, src, frame_bytes);
+      st->ref_off[i] = st->pending_off;
       st->ref_slot_w[i] = (uint16_t)width;
       st->ref_slot_h[i] = (uint16_t)height;
       st->ref_slot_luma[i] = luma_size;
@@ -615,6 +664,7 @@ vp9_get_state(struct mwv207_video_decoder *decoder, uint32_t width,
       st->height = height;
       st->stream_offset = vp9_align4k(st->filter_offset + VP9_FILTER_SIZE);
       st->mv_offset = vp9_align4k(st->stream_offset + VP9_STREAM_COPY_SIZE);
+      st->mv_write_off = st->mv_offset;
       /* The vendor places the motion vector store right behind the decoded
        * picture, luma * 3 / 2 bytes later.  We only need somewhere valid for
        * the hardware to write to, so give it a buffer of that size. */
@@ -1321,8 +1371,14 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
          }
       }
    }
+   /* 只冲刷 CPU 真正写过、ASIC 会读的那几段（概率表 / 计数 / tile 表）。
+    * 整段 mv_offset 一次冲刷在 1080p 下覆盖约 4.4 MB（其中 2×2 MB 是段
+    * 映射、2 MB 是滤波系数表，这两块本帧根本没写），在 ARM 上要 30–45
+    * ms/帧，是硬解吞吐的最后一个大头。段映射只在真正清零时单独冲刷。 */
    __builtin___clear_cache((char *)st->scratch_cpu,
-                           (char *)st->scratch_cpu + st->scratch_size);
+                           (char *)st->scratch_cpu + VP9_COUNTER_OFFSET);
+   __builtin___clear_cache((char *)st->scratch_cpu + st->tile_offset,
+                           (char *)st->scratch_cpu + st->seg_offset);
 
    dec->dec_param.bit_depth = sh->bit_depth;
    dec->dec_param.pp_enabled = 1;
@@ -1385,7 +1441,7 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
                                                st->ref_store->res->bo);
             uint8_t *dst = decoder->ws->bo_map(decoder->ws, buf->res->bo);
             if (src && dst)
-               memcpy(dst, src + (size_t)slot * st->ref_stride, need);
+               memcpy(dst, src + (size_t)st->ref_off[slot], need);
          } else {
             MWV207_LOG(MWV207_LEVEL_ERROR,
                        "vp9: show_existing_frame slot %u unavailable\n",
@@ -1419,14 +1475,23 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
          st->pending = NULL;
          return;
       }
-      vp9_set_addr(reg_buf, JMDEC_DEC_OUT_YBASE_LSB, buf->res->bo, 0);
-      vp9_set_addr(reg_buf, JMDEC_DEC_OUT_CBASE_LSB, buf->res->bo, luma_size);
+      /* 解码输出直接写进参考图片环的一个空闲位置：PPU 的输入就是
+       * 解码输出面，所以参考槽与输出会指向同一张图片，刷新只需改映射。 */
+      {
+         uint32_t ref_stride = vp9_ref_reserve(decoder, st, frame_bytes);
+         uint32_t pos = ref_stride ? vp9_pic_pick(st, ref_stride) : 0;
+         st->pending_off = pos * ref_stride;
+         vp9_set_addr(reg_buf, JMDEC_DEC_OUT_YBASE_LSB,
+                      st->ref_store->res->bo, st->pending_off);
+         vp9_set_addr(reg_buf, JMDEC_DEC_OUT_CBASE_LSB,
+                      st->ref_store->res->bo, st->pending_off + luma_size);
+      }
       /* The motion vectors the entropy engine decodes are written to the
        * "direct MV" area so that later blocks can use them for spatial MV
        * prediction; without it every block after the first row predicts
        * from garbage.  The vendor programs DEC_OUT_DBASE for VP9 too. */
       vp9_set_addr(reg_buf, JMDEC_DEC_OUT_DBASE_LSB,
-                   st->scratch->res->bo, st->mv_offset);
+                   st->scratch->res->bo, st->mv_write_off);
    }
 
    reg_buf->set_reg(reg_buf, JMDEC_DEC_MODE, DEC_MODE_VP9);
@@ -1509,7 +1574,7 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
    if (!sh->key_frame && !sh->intra_only && st->scratch && st->scratch->res) {
       reg_buf->set_reg(reg_buf, JMDEC_WRITE_MVS_E, 1);
       vp9_set_addr(reg_buf, JMDEC_DIR_MV_BASE_LSB, st->scratch->res->bo,
-                   st->mv_offset);
+                   st->mv_write_off);
    } else {
       reg_buf->set_reg(reg_buf, JMDEC_WRITE_MVS_E, 0);
    }
@@ -1568,8 +1633,12 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
     * does not carry a map update predicts its ids from the map this frame
     * left behind.  An intra-only or error resilient frame restarts the
     * prediction, so both maps go back to segment 0. */
-   if (sh->intra_only || sh->error_resilient)
+   if (sh->intra_only || sh->error_resilient) {
       memset(st->scratch_cpu + st->seg_offset, 0, st->seg_size * 2u);
+      __builtin___clear_cache((char *)st->scratch_cpu + st->seg_offset,
+                              (char *)st->scratch_cpu + st->seg_offset +
+                              st->seg_size * 2u);
+   }
    vp9_set_addr(reg_buf, JMDEC_SEGMENT_READ_BASE_LSB, st->scratch->res->bo,
                 st->seg_offset + st->seg_active * st->seg_size);
    vp9_set_addr(reg_buf, JMDEC_SEGMENT_WRITE_BASE_LSB, st->scratch->res->bo,
@@ -1659,6 +1728,12 @@ mwv207_dec_vp9_submit_done(struct mwv207_video_decoder *decoder)
    vp9_refresh_slots(decoder, st, st->pending_flags, st->pending,
                      st->pending_w, st->pending_h, st->ref_frame_bytes,
                      st->pending_luma);
+   /* 本帧的 MV 图已经写完，下一帧它就成了"上一帧 MV"，与写目标对调。 */
+   if (!st->sh.show_existing_frame) {
+      uint32_t other = st->mv_write_off == st->mv_offset
+                          ? st->mv_offset + st->mv_size : st->mv_offset;
+      st->mv_write_off = other;
+   }
    st->pending = NULL;
 }
 

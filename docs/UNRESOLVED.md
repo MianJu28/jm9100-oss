@@ -1300,6 +1300,40 @@ initramfs 已刷并解包核对（`modinfo -F srcversion` 均为 `8DFC52…`）�
 
 纹理上传的 0.51 GB/s 与 `glReadPixels` 的 2.8 ms 也都在同一条"映射 BO 慢"的链上，修 1 或 2 会一并改善。
 
+### 修法 1 已落地（2026-11-12 深夜）：VP9 解码 8.4 → 81 fps
+
+`mwv207_dec_vp9.c` 三处改动，全部是"别让 CPU 碰像素"：
+
+1. **参考槽改别名**（不再每帧拷贝）。解码单元的输出面（`JMDEC_DEC_OUT_YBASE/CBASE`）现在是
+   参考图片环 `ref_store` 里的一张图，`refresh_slots` 只把逻辑槽的 `ref_off[i]` 指向它 ——
+   VP9 的参考帧内容不可变，多个槽指向同一张图是安全的。环有 16 个位置、最多 8 个逻辑槽，
+   `vp9_pic_pick()` 每次挑一个没被任何槽引用的位置，长寿命参考（golden/altref）不会被覆盖。
+   环初始按 `stride*16` 分配，尺寸增长时把每张仍被引用的图搬到自己新位置（罕见）。
+2. **刷新缓存只冲刷写过的那几段**。原来每帧 `__builtin___clear_cache(scratch, scratch+mv_offset)`
+   在 1080p 覆盖约 4.4 MB（2×2 MB 段映射 + 2 MB 滤波系数表，这两块本帧根本没写），
+   ARM 上要 **30–45 ms/帧**。现在只冲刷概率表、计数区、tile 表；段映射只在
+   `intra_only || error_resilient` 真正 memset 之后单独冲刷。MV 缓冲在 `mv_offset` 之后，
+   本来就是 ASIC 写的，不参与冲刷。
+3. **MV 图双缓冲**。`vp9_write_ref_regs()` 原来给三路参考各拷一份上一帧的 MV 图
+   （`memcpy(scratch + prev, scratch + mv_offset, mv_bytes)`，1080p 每份约 522 KB、三次，
+   走 WC 映射读写，实测 **25–30 ms/帧**）。改为两个 MV 槽轮换：当前帧写 `mv_write_off`，
+   三路参考的 `DBASE` 都指向另一半（上一帧的 MV），`submit_done` 里对调。
+   `VP9_MV_SLOTS` 因此从 3 降到 1，scratch 少占 2×3.1 MB（1080p）。
+
+实测（`/tmp/vadec` 含每帧写 3.1 MB 到文件，所以它比纯解码慢；ffmpeg `-f null` 是不回读的净吞吐）：
+
+| 场景 | 修前 | 修后 | 净吞吐（ffmpeg -f null） |
+|---|---|---|---|
+| VP9 360p | 63.4 fps | 300–320 fps | 160 fps |
+| VP9 1080p | 7.1–8.5 fps | 53–57 fps | **81 fps** |
+
+正确性：`tools/vp9-regression.sh` **18/18**；`tests/vp9-resize/`（B2 跨尺寸）**IDENTICAL**；
+`tests/vp9-intraonly/`（I-5/N18）逐帧 IDENTICAL；改动前后解码输出 `cmp` **逐字节相同**
+（360p 与 1080p 各 120 帧）。
+
+遗留：`glTexSubImage2D` 0.51 GB/s、`glReadPixels` 2.8 ms、以及 HEVC/H.264 的 `buf->res`
+读回仍在同一条"WC 映射读慢"的链上；修法 2（KMD cached 映射）未做，风险仍在。
+
 ## 5. 建议的推进顺序
 
 | 批次 | 内容 | 前置 | 代价 |
