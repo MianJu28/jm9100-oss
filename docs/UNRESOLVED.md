@@ -875,7 +875,8 @@ hwdownload,format=nv12 -pix_fmt yuv420p`）与 `-c:v libvpx-vp9` 逐帧比对：
 `drm_sched_stop()` 已摘除 job 回调，不会误触发 job done。
 
 **部署状态（2026-11-10 已重启验证生效）**：`tools/dkms-sync.sh` 重建并安装到
-6.6.155 与 6.6.143 两个内核；`switch-mwv207.sh kmd stage` 暂存到 `updates/dkms`
+6.6.155（当时还有 6.6.143；2026-11-12 起只维护 6.6.155 —— 143 的 headers 已残缺、
+无法再编译，`updates/dkms/mwv207.ko` 已从该内核删除）；`switch-mwv207.sh kmd stage` 暂存到 `updates/dkms`
 并刷新 initramfs（srcversion `D507FC2774D547E7BEBA182` → `039F972EFE3279A155EE225`）。
 重启后实测 `/sys/module/mwv207/srcversion` = `039F972EFE3279A155EE225`，
 `modinfo -n mwv207` 指向 `updates/dkms`，`dkms status` 两个内核均干净。
@@ -923,7 +924,8 @@ hwdownload,format=nv12 -pix_fmt yuv420p`）与 `-c:v libvpx-vp9` 逐帧比对：
 | **K9-②** | 中 | ISR 无锁读 `irq_enable_reg[]`，mask/unmask 在 `irq_lock` 下写 | 读写都改 `READ_ONCE`/`WRITE_ONCE`（含 `irq_suspend`/`irq_resume`）；不加锁以免在 ISR 里持锁调 `generic_handle_irq` |
 | **N9** | 低 | 显示侧 `BUG_ON(va_irq == 0)`（`kms.c`）、`BUG_ON(hdmi->irq == 0)`（`hdmi.c`） | 改成 `pr_err` + `-ENODEV` 回退，与 3D/2D 的 K8 范式一致；`irq.c` 里引用旧 BUG_ON 的注释同步更新 |
 
-**部署状态**：`tools/dkms-sync.sh` 重建并安装到 6.6.155；6.6.143 另外
+**部署状态**：`tools/dkms-sync.sh` 重建并安装到 6.6.155（2026-11-12 起不再为
+6.6.143 编译）；6.6.143 当年另外
 `dkms build/install --force` + `depmod`；两个内核的 initramfs 都已
 `update-initramfs -u`（解包核对 `updates/dkms/mwv207.ko` 的 srcversion 均为
 `D5EEF36617A4D3FBF4AFD1D`），`dkms status` 两个内核均干净。2026-11-10 13:29

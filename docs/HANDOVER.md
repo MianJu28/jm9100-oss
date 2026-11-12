@@ -8,8 +8,10 @@
 
 **r19 已部署并验收通过**（`payload-42` / `24.1.2-fullstack-r19`，`umd status` 显示活动栈
 `oss-24.1.2-fullstack-r19`、快照 `20261110-132539`、安装目录 219M；当前启动内核
-`6.6.155-arm64-desktop-hwe`；本文早前写的 6.6.143 是升级前的内核，两个版本的 DKMS
-模块都已同步重建）。
+`6.6.155-arm64-desktop-hwe`。**只维护这一个内核**：6.6.143 是升级前的内核，
+它那套 headers 现在残缺（缺 `include/generated/autoconf.h`，连 `scripts/kconfig`
+都没有），`modules_prepare` 也补不回来，已停止为其编译 —— 那里的 mwv207.ko 已删，
+只剩厂商 jmgpu.ko）。
 桌面零 env 下 GL 4.0 / GLES 3.2 / `Video memory: 2048MB`，glxgears 110 FPS；
 OpenCL/VA-API/VDPAU 全走我们的栈；自建 KMD 在跑（srcversion `D5EEF36617A4D3FBF4AFD1D`，
 含 N14 的 reset/fence 修复与 N1/N2/K12/K9-②/N9 批次，**2026-11-10 13:29 重启后已验证生效**；
