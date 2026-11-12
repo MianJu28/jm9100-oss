@@ -90,6 +90,13 @@ static uint32_t desc_cand(int i, uint32_t pitch, uint32_t w, uint32_t h)
 	case 6: return ((pitch >> 6) & 0xffff) << 16;
 	case 7: return (pitch >> 4) & 0xffff;
 	case 8: return 0x00010080;
+	/* 9..12：从厂商抓包矩阵里观察到的描述字原值/变体（覆盖 pitch/8、
+	 * 带高位标志），全部实测无效 —— 说明 2D draw opcode 的编码不是
+	 * 我们猜的这套，留着仅作"已试过"的记录。 */
+	case 9: return 0x00050680;
+	case 10: return 0x00040600 | ((pitch / 8) & 0xffff);
+	case 11: return 0x00010000 | ((pitch / 8) & 0xffff);
+	case 12: return 0x00010000 | ((pitch / 64) & 0xffff);
 	default: return 0;
 	}
 }
