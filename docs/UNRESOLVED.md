@@ -87,7 +87,7 @@ modinfo /lib/modules/…/updates/dkms/…    -> srcversion 0EFB7F4433EA5311B08E8
 | 7 | 打包 | **DKMS 一致性警告（走 stage 时会复现，已记录处理步骤）** | `tools/dkms-sync.sh` 重建后两个内核都干净；`kmd stage` 直接覆盖仓库构建的 .ko 会让 6.6.155 重新报 `Diff between built and installed module!`，用 `dkms install --force` + `depmod` + `update-initramfs` 恢复即可 | §2.1、§5 |
 | 8 | 性能 | buffer 写入等待的吞吐代价未量化 | 仅 glxgears（110 FPS）观测；重负载未测 | 本文 §4 性能 |
 | 9 | 依赖补丁 | `loader_dri3` buffer age 恒 0 只在本地 mesa 树提交 | 未推厂商镜像；重建 mesa 时需保留 | `ref/oh-mesa` `248659c` |
-| 10 | 测试 | 无自动化 GL 回归 | Firefox/GL 侧探针均为一次性脚本；VP9 有 `tools/vp9-regression.sh` | §7 |
+| 10 | 测试 | **已有自动化 GL 回归（2026-11-13）** | `tools/gl-regression.sh` 串起 query / fbo / texcheck / texbench / bufbench / rbbench / glmark2，`DRI_DIR=` 指定驱动目录即可对开发构建或安装栈跑；与 `tools/vp9-regression.sh` 并列。Firefox/WebGL 侧仍是一次性脚本 | §7 |
 
 ## 1. UMD — 未修复缺陷
 
@@ -893,6 +893,7 @@ hwdownload,format=nv12 -pix_fmt yuv420p`）与 `-c:v libvpx-vp9` 逐帧比对：
 - `glxinfo -B`：JingjiaMicro MWV207 / Mesa 24.1.2 / GL 4.0 / `Video memory: 2048MB`，accelerated yes；
 - `glxgears` 117 FPS；
 - `tests/query/run-query-tests.sh`（`DRI_DIR=/usr/local/lib/mwv207-oss`）4/4 PASS；
+- `tools/gl-regression.sh` —— GL/GLES 回归（query/fbo/texcheck/texbench/bufbench/rbbench/glmark2）
 - `tools/vp9-regression.sh`（系统安装驱动）18/18 OK；
 - `dmesg` 无新增 WARN/BUG/Call Trace；只有 boot 时的 out-of-tree 与未签名告警，
   外加一条与驱动无关的 `sched: RT throttling activated`（上一轮启动同样出现）。

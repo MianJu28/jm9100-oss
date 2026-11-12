@@ -61,3 +61,12 @@ GPU 刚 DMA 写入 DRAM 的，CPU 读到的是**冷数据**，只能按 1.9 GB/s
    测出"12 GB/s"这类假值。`buffer-bench.c` 已加 `volatile sink` 校验；`bo-mmap-bench.c` 待补。
 2. 4 MB 级工作集受缓存影响极大，引用任何带宽数字都要注明工作集大小与冷热状态。
 3. `bo_wait` 返回 bool（`true` = 成功），按 `0` 判断会把"已完成"当成超时。
+
+## 6. 附带产出：GL 回归脚本
+
+`tools/gl-regression.sh` 把仓库里的 GL 探针串起来（query / fbo / texcheck / texbench /
+bufbench / rbbench / glmark2），默认对系统安装的驱动跑，`DRI_DIR=` 指向开发目录即可对
+开发构建跑；本次在开发构建上 **pass=7 fail=0 skip=0**（glmark2 1046）。
+
+这一步补上了 `docs/UNRESOLVED.md` §0.1 第 10 项"无自动化 GL 回归"的缺口；VP9 侧有
+`tools/vp9-regression.sh`（19 例），两者配合可覆盖解码与 GL 两条回归线。
