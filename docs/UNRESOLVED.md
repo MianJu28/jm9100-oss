@@ -90,7 +90,7 @@ modinfo /lib/modules/…/updates/dkms/…    -> srcversion 0EFB7F4433EA5311B08E8
 | 5 | KMD | 只剩 N10（决定只文档化） | K9-① 已核实为与厂商一致（非缺陷）；N10 改为只记录 | 本文 §2.3 |
 | 6 | 切换脚本 | **vendor 态端到端未实跑** | `stack vendor` 会重启，需人工确认；热切换已证不可行（refcnt 恒 2） | `switch-mwv207.sh` / §5 |
 | 7 | 打包 | **DKMS 一致性警告（走 stage 时会复现，已记录处理步骤）** | `tools/dkms-sync.sh` 重建后两个内核都干净；`kmd stage` 直接覆盖仓库构建的 .ko 会让 6.6.155 重新报 `Diff between built and installed module!`，用 `dkms install --force` + `depmod` + `update-initramfs` 恢复即可 | §2.1、§5 |
-| 8 | 性能 | buffer 写入等待的吞吐代价未量化 | 仅 glxgears（110 FPS）观测；重负载未测 | 本文 §4 性能 |
+| 8 | 性能 | **已量化并关闭（2026-11-13）** | buffer 改放 GTT 后 `glBufferSubData` 4 MB 0.30 ms（12.9 GB/s）、`glMapBufferRange` 读 0.33 ms；create（写入）路径本身有 `mwv207_wait_resource` 等 GPU 吃完，但 glmark2 buffer/build/jellyfish 场景 A/B 无回退（655/655、1526/1522、666/686） | 本文 §4 性能 |
 | 9 | 依赖补丁 | `loader_dri3` buffer age 恒 0 只在本地 mesa 树提交 | 未推厂商镜像；重建 mesa 时需保留 | `ref/oh-mesa` `248659c` |
 | 10 | 测试 | **已有自动化 GL 回归（2026-11-13）** | `tools/gl-regression.sh` 串起 query / fbo / texcheck / texbench / bufbench / rbbench / glmark2，`DRI_DIR=` 指定驱动目录即可对开发构建或安装栈跑；与 `tools/vp9-regression.sh` 并列。Firefox/WebGL 侧仍是一次性脚本 | §7 |
 
@@ -1222,7 +1222,7 @@ initramfs 已刷并解包核对（`modinfo -F srcversion` 均为 `8DFC52…`）�
 | **D7** | **Vulkan** | 不可达 | 官方 1.8.0 **也没有**（无 libvulkan / `vulkan/icd.d`；KMD 的 syncobj/vm_bind/gpuva/sparse 全 0）。官网"Vulkan 1.1"至今未交付 |
 | **D8** | **H.264 Multiview / StereoHigh 解码** | 硬件有、客户端栈不可达 ⇒ 不做 | 特性表 `mvc_support=1`、枚举里有 `JMDEC_MVC_E`；但 Mesa 24.1.2 的 `src/gallium/include/pipe/p_video_enums.h` **没有** MVC profile，`src/gallium/frontends/va/va_private.h` 的 `PipeToProfile()` / `ProfileToPipe()` 也不映射 `VAProfileH264MultiviewHigh(15)` / `VAProfileH264StereoHigh(16)`（走 `default: assert(0)` / 返回 -1）⇒ 客户端连 `vaCreateConfig` 都过不了。要支持需同时改 Mesa 枚举 + VA 前端 + 本驱动解析（subset SPS、prefix NAL、`nal_unit_type==20` 扩展 slice），而手上没有 MVC 样片做逐位验收（x264/ffmpeg 都不能编码 MVC）⇒ **不做，只记录** |
 | **D9** | **AVS / AVS+ / AVS2 / AVS2-10bit 解码** | 硬件有、客户端栈不可达 ⇒ 不做 | 特性表 `avs_support=1`、`avs_plus_support=1`、`avs2_support=1`、`avs2_main10_support=1`；但 libva 1.22 没有 AVS profile 枚举、Mesa VA 前端也无映射 ⇒ 没有客户端能调用，**不做** |
-| **D10** | **VPP（`scale_vaapi` / 色彩空间转换）** | **已可用，无需改驱动** | `vlVaCreateConfig(VAProfileNone, VAEntrypointVideoProc)` 走 Mesa VA 前端的通用 `vl_compositor` 路径（`src/gallium/frontends/va/postproc.c`），`context.c:345` 对 `PIPE_VIDEO_ENTRYPOINT_PROCESSING` **不创建驱动侧 codec**，所以 ours 不需要实现 video proc codec。实测（r31，1080p VP9 120 帧）：纯解码 **220.5 fps**、`scale_vaapi=w=1280:h=720` **170.9 fps**、`scale_vaapi=w=3840:h=2160` **97.3 fps**、`scale_vaapi=format=nv12` **216.5 fps** ⇒ 720p 缩放约 1.3 ms/帧、4× 面积缩放约 5.8 ms/帧，都是 3D 引擎在做 |
+| **D10** | **VPP（`scale_vaapi` / 色彩空间转换）** | **已可用，无需改驱动** | `vlVaCreateConfig(VAProfileNone, VAEntrypointVideoProc)` 走 Mesa VA 前端的通用 `vl_compositor` 路径（`src/gallium/frontends/va/postproc.c`），`context.c:345` 对 `PIPE_VIDEO_ENTRYPOINT_PROCESSING` **不创建驱动侧 codec**，所以 ours 不需要实现 video proc codec。实测（r31，1080p VP9 120 帧）：纯解码 **220.5 fps**、`scale_vaapi=w=1280:h=720` **170.9 fps**、`scale_vaapi=w=3840:h=2160` **97.3 fps**、`scale_vaapi=format=nv12` **216.5 fps** ⇒ 720p 缩放约 1.3 ms/帧、4× 面积缩放约 5.8 ms/帧，都是 3D 引擎在做。质量对照：`scale_vaapi` 1080p→720p 与 swscale 逐帧比 **PSNR 平均 47.0 dB（y 49.5）**，几何与颜色正确，差异来自双线性 vs 双三次核 |
 | **D4（结论）** | 4 个扩展 opcode `WAIT_GROUP_EVENT`/`TD_OP`/`TEX_INVALIDATE`/`PRE_NORM` | 不做（死代码） | `grep -rn "WAIT_GROUP\|TEX_INVALIDATE\|PRE_NORM\|EXTENDED_OPCODE" src/` **零命中** ⇒ 本驱动编译器从不发射这四条，实现它们没有任何可观测收益；与 E3 同类，将来若做 compute/tessellation 后端再按需补 |
 
 ---
