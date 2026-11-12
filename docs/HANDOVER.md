@@ -253,6 +253,11 @@ OpenCL/VA-API/VDPAU 全走我们的栈；自建 KMD 在跑（srcversion `D5EEF36
   三组着色器指纹（≈200 次哈希），实测占 config 阶段 70%。改成 `fp_dirty` 脏标记后
   端到端提交 **0.86 → 0.17 µs/draw**；`/tmp/swapsh` 交替纹理/FBO 格式的读回哈希
   新旧驱动一致，`tests/query` 4/4。`glmark2` 不受影响（GPU-bound）。
+- **窗口渲染改平铺 + 线性影子（`f486a1b`，载荷 r26）**：`can_tile` 放开 SCANOUT 平铺，
+  `flush_resource` 按 `sync_needed` 把平铺内容拷到 `res->linear` 影子，X/显示仍读线性。
+  实测 `jellyfish` 2.98×、`buffer` 1.61×、`pulsar` 1.35×、`conditionals` 1.22×，
+  `build`/`texture`/`bump`/`terrain` 慢 2–5%，全套 1109–1236 → 1252–1254；
+  代价是窗口缓冲约 2× 显存。详见 `reports/PRESENT-PATH-20261111.md` §19。
 ### 待办（按价值排序）
 1. **A5 已完成（2026-11-10，`82e7b02`）**：VP9 Profile 2（10bit 4:2:0）与软件解码逐位
    一致（64x64~1080p，含 inter 帧，零 TDR），默认声明；`MWV207_VP9_10BIT_DISABLE=1`

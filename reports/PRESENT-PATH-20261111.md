@@ -564,3 +564,70 @@ RGBA8/RGBA32F FBO 附件，读回 24 次绘制结果做哈希）在旧/新驱动
    代码量和风险都远大于收益，暂不做。
 
 因此 present/廉价场景的剩余差距属**结构性**，不是可以通过调参或补一条快路径解决的。
+
+
+## 19. 扫描出资源平铺 + 线性影子（2026-11-12，提交 `f486a1b`）
+
+### 19.1 为什么之前是线性
+
+UMD 的 `mwv207_can_tile()` 里有一条 `enable_scanout_tile = false`：带
+`PIPE_BIND_SCANOUT` 的资源一律 `MWV207_LINEAR`。原因是显示侧只能读线性，
+但代价是窗口渲染完全拿不到：
+
+- 平铺的 PE 写带宽（同一段着色器：平铺 21.3 GB/s vs 线性 6.7 GB/s）；
+- tile status（fast clear + 免读改写的部分写入）。
+
+18.2 节的 on/off-screen 差值（jellyfish +3.24 ms/帧）就是这条限制的直接后果。
+
+### 19.2 改法
+
+`res->linear`（线性影子）与 `resource_get_handle()` 对它的导出**在代码里本来就有**
+（`mwv207_resource.c` 的 `set_miptree`/`resource_get_handle`/`flush_resource`），
+只是 `enable_scanout_tile` 关着，这条路径从未被走到。打开后：
+
+1. `can_tile` 允许 SCANOUT 平铺（单层、单 array、无 mip 时）；
+2. `set_miptree` 建一份 `PIPE_USAGE_STAGING|PIPE_BIND_LINEAR` 的线性影子；
+3. `resource_get_handle` 导出影子 ⇒ X/DRM 看到线性缓冲，KMD 与 plane
+   modifier 都不用动（DE 平铺那条路在第 14 节已证明不可达）；
+4. `flush_resource` 在需要时把平铺内容拷进影子；
+5. 新增 `res->sync_needed`：`mwv207_submit()` 里对当前 framebuffer 的平铺附件
+   置位，拷贝后清零。**必须去重**：一次 swap 里 `flush_resource` 会被调用多次
+   （`dri_flush` 的 back_left + kopper `flush_frontbuffer` 的 front_left），
+   未去重时实测每帧约 3.8 次拷贝，800×600 每帧多花 0.5–0.7 ms，廉价场景净亏
+   （全套 1173 vs 1841）；去重后每帧一次，变成净赚。
+
+### 19.3 实测（800×600，`vblank_mode=0`，同会话交替 A/B）
+
+| 场景 | 线性（安装态 r25） | 平铺+影子（`/tmp/gd4`） | 比值 |
+|---|---|---|---|
+| jellyfish | 248 | 738 | **2.98×** |
+| buffer | 616 | 995 | **1.61×** |
+| pulsar | 1231 | 1668 | 1.35× |
+| conditionals | 1197 | 1464 | 1.22× |
+| function | 1202 | 1404 | 1.17× |
+| shading | 1386 | 1611 | 1.16× |
+| ideas | 933 | 1080 | 1.16× |
+| effect2d | 953 | 1076 | 1.13× |
+| loop | 1208 | 1358 | 1.12× |
+| desktop / shadow / refract | 452 / 797 / 97 | 485 / 852 / 103 | 1.06–1.07× |
+| build / texture / bump / terrain | 1868 / 1541 / 1694 / 117 | 1829 / 1492 / 1628 / 113 | 0.96–0.98× |
+
+- `glmark2 -b :duration=2` 全套：**1109–1236 → 1252–1254**（同一会话交替跑）。
+- 只有"全屏和都不重叠地写"的场景（build/texture/bump/terrain）小亏 2–5%：
+  它们省不下过绘制，却要付一次影子拷贝。
+
+### 19.4 正确性
+
+- 同一场景（clear + 渐变三角形）在两种驱动下截屏 **md5 完全一致**
+  （`d95544a1afc1d17c0e49e6ab3f70a3b3`）；
+- `tests/query/run-query-tests.sh` **4/4 PASS**；
+- 初次创建资源时把 `sync_needed` 预置为 true，避免第一帧影子是未初始化内容。
+
+### 19.5 代价与注意
+
+- 窗口/扫描出缓冲多一份线性影子 ⇒ **约 2× 显存**占用（800×600×4 ≈ 1.9 MB/帧缓冲，
+  1080p ≈ 8.3 MB）。多个窗口同时开时要留意显存。
+- 影子是 `PIPE_USAGE_STAGING` 资源，`resource_get_handle` 导出的就是它，因此
+  DRI3 客户端与 X 侧的共享路径不变；
+- 拷贝走 3D 引擎的 blit（`mwv207_copy_image`），带 TS 的源需要 resolve；
+  每帧一次、800×600 约 0.15 ms（从 0.5–0.7 ms/3.8 次降到 0.15 ms/1 次）。

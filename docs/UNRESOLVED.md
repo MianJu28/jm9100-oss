@@ -1697,6 +1697,25 @@ initramfs 已刷并解包核对（`modinfo -F srcversion` 均为 `8DFC52…`）�
   `peek_result`）。srcversion `C588E9673F984406AF46A2F`，已 `dkms-sync` +
   `kmd stage`，**待重启生效**。
 
+### 后续（同日）：改走"平铺渲染 + 线性影子"，已修并实测
+
+DE 不可达之后，换了个不依赖显示侧的做法：**窗口缓冲在驱动内按平铺+TS 渲染，
+`flush` 时把内容拷到一份线性影子给 X/显示**。这套影子机制本来就在代码里
+（`res->linear`、`resource_get_handle` 导出影子、`flush_resource` 同步），只是
+`mwv207_can_tile()` 的 `enable_scanout_tile = false` 从未启用。
+
+- 提交 `f486a1b`：`can_tile` 允许 SCANOUT 平铺；`flush_resource` 在 `sync_needed`
+  时把平铺内容拷到影子；`mwv207_submit()` 对当前 framebuffer 的平铺附件置脏。
+  **去重很关键**——一次 swap 里 `flush_resource` 会被调多次（`dri_flush` 的
+  back_left 与 kopper `flush_frontbuffer` 的 front_left），不去重每帧约 3.8 次拷贝，
+  800×600 多花 0.5–0.7 ms，全套 1173 vs 线性 1841（净亏）；去重后每帧一次。
+- 实测（800×600，交替 A/B）：`jellyfish` 248→**738**（2.98×）、`buffer` 616→**995**
+  （1.61×）、`pulsar` 1.35×、`conditionals` 1.22×、`function` 1.17×、`shading` 1.16×；
+  `build`/`texture`/`bump`/`terrain` 各慢 2–5%（全是"写但不重叠"的场景，省不下过绘制）。
+  `glmark2` 全套 1109–1236 → 1252–1254。
+- 正确性：同场景截屏 md5 完全一致，`tests/query` 4/4。代价：窗口缓冲约 2× 显存。
+- 载荷 `payload-43`（r26）已生成，安装后生效。
+
 ### 实测结论（2026-11-12，KMD `C588E9673F984406AF46A2F`，用 peek 口读取）
 
 | 偏移 | 读出 | 判读 |
