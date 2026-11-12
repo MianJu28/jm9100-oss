@@ -27,6 +27,15 @@
 
 #define DEFAULT_MAX_FREQ_2D 600
 
+/*
+ * 2D 引擎诊断（默认关闭）：提交前后各读一次完成序号 0x6000，并 dump
+ * 这次命令描述符的前 32 个字。用来区分"引擎根本没执行命令"和"执行了
+ * 但写到了别的地址"——这两种情况在用户态看起来都是目标缓冲没变。
+ */
+static int diag;
+module_param(diag, int, 0644);
+MODULE_PARM_DESC(diag, "2D 引擎诊断：提交后 dump 环内容与完成序号（默认 0）");
+
 #define wait_for(COND, MS) ({                                           \
 	unsigned long timeout__ = jiffies + msecs_to_jiffies(MS) + 1;   \
 	int ret__ = 0;                                                  \
@@ -353,7 +362,6 @@ static void pipe_2d_wtol(struct mwv207_pipe_2d *pipe, u32 *start, u32 *new_wait)
 	pipe_2d_barrier(pipe);
 	pos[0] = 0x89000000;
 	pipe_2d_barrier(pipe);
-	pipe_2d_write(pipe, 0x4C00, 1);
 
 	pipe->last_wait = new_wait;
 }
@@ -412,7 +420,33 @@ mwv207_pipe_2d_submit(struct mwv207_pipe *mpipe, struct mwv207_job *mjob)
 	}
 	start[1] = pipe_2d_ptr_span(pipe->tail, start) / 16 - 1;
 
-	pipe_2d_wtol(pipe, start, wait);
+	{
+		u32 i, n;
+
+		if (diag) {
+			u32 seq_pre = pipe_2d_read(pipe, 0x6000);
+			char buf[128];
+
+			pr_info("mwv207: %s diag arm: start=%px gpu=%llx seqno=%08x nwords=%u",
+				mpipe->fname, start,
+				(unsigned long long)pipe_2d_gpu_addr(pipe, start),
+				seq_pre, (u32)(pipe->tail - start));
+
+			n = (u32)(pipe->tail - start);
+			for (i = 0; i < n && i < 32; i += 8) {
+				snprintf(buf, sizeof(buf), "%08x %08x %08x %08x %08x %08x %08x %08x",
+					 start[i + 0], start[i + 1], start[i + 2], start[i + 3],
+					 start[i + 4], start[i + 5], start[i + 6], start[i + 7]);
+				pr_info("mwv207: %s diag w[%u] %s", mpipe->fname, i, buf);
+			}
+		}
+
+		pipe_2d_wtol(pipe, start, wait);
+
+		if (diag)
+			pr_info("mwv207: %s diag armed: seqno=%08x",
+				mpipe->fname, pipe_2d_read(pipe, 0x6000));
+	}
 
 	return fence;
 }
@@ -425,6 +459,8 @@ static irqreturn_t mwv207_pipe_2d_isr(int irq_unused, void *data)
 
 	pipe_2d_write(pipe, 0x4308, 0xFFFFFFFF);
 	seqno = pipe_2d_read(pipe, 0x6000);
+	if (diag)
+		pr_info("mwv207: %s diag isr seqno=%08x", pipe->base.fname, seqno);
 
 	spin_lock(&pipe->fence_queue_lock);
 	list_for_each_entry_safe(fence, p, &pipe->fence_queue, q) {
