@@ -1420,6 +1420,40 @@ GPU 侧没有回归（同一驱动 A/B，`:0`，`-b <scene>:duration=2`）：`bu
 未见差异，若后续有场景退化再用 `MWV207_BUFFER_VRAM=1` 定点关；② 导出成 dmabuf 的
 buffer 现在 memory type 是 TT，跨进程共享仍走 dma-buf，未见异常。
 
+### 着色器窥孔 OPT_DIV / OPT_FFMA / OPT_SET 评估（2026-11-13）：保持默认关闭
+
+背景：`nir/mwv207_lower.c:1562` 的 `#define do_by_default(OPT) (debug_get_bool_option("OPT_"#OPT, false))`
+让三个窥孔（`DIV`→`mwv207_nir_opt_peephole_fdiv`、`FFMA`→`…_ffma`、`SET`→`…_set`）
+可以在**不重新构建**的情况下用环境变量打开（`mwv207_lower.c:1622/1677/1680`）。
+它们都是标准改写：`fdiv` 除常数 → `frcp`+`fmul`、`fmul`+`fadd` → `ffma`、
+`b2f32(cmp)` → `SET`。
+
+评估方法：新增 `tests/shader-peephole/peep.c`（EGL pbuffer 256²，着色器里同时放
+除常数、除变量、`x*y+c`、比较转浮点，走 `fract()` 后输出 RGBA8），在
+`LIBGL_DRIVERS_PATH=/home/admin/dev-dri MESA_LOADER_DRIVER_OVERRIDE=mwv207` 下
+分别用默认 / `OPT_DIV=1` / `OPT_FFMA=1` / `OPT_SET=1` / 三者全开渲染，再逐字节比较。
+
+结果：
+
+| 配置 | 与默认逐字节比较 | 说明 |
+|---|---|---|
+| `OPT_DIV=1` | **完全相同**（0/262144 字节不同） | 除法本来就已在别处降成 `RCP`（转储里默认就有 4 条 `RCP`），此窥孔未再改变 ISA |
+| `OPT_FFMA=1` | **完全相同** | 探针里的 `x*y+c` 没触发该窥孔（转储里默认/开都无 `FFMA`） |
+| `OPT_SET=1` | **完全相同** | 转储里 `CMP.lt`+`AND.u16 1.0` 被合并成单条 `SET.lt`，每处省 1 条指令 |
+| 三者全开 | **完全相同** | — |
+
+着色器转储（`mwv207_debug=nir`）对比确认窥孔确实生效：`OPT_SET` 让 ISA 从
+`CMP.lt.denorm` + `AND.u16 … 1.000000` 变成 `SET.lt`（少一条），其它 opcode 计数不变。
+
+性能：9 个着色器相关场景 A/B（`glmark2 -b <scene>:duration=2`，默认 vs 三者全开）
+全部在噪声内：`shading` 1355/1354、`conditionals` 1223/1229、`function` 1231/1217、
+`loop` 1221/1222、`bump` 1600/1590、`refract` 101/101、`terrain` 113/116、
+`jellyfish` 678/662、`pulsar` 1384/1376。
+
+结论：**保持默认关闭**。收益只体现在个别着色器的指令数（`SET` 省一条），在这些场景里
+量不出来；`FFMA`/`DIV` 还会改变浮点舍入，收益不明而需全量着色器回归，不值得为此改默认值。
+探针留在 `tests/shader-peephole/peep.c`，将来若有真实应用的着色器受此影响可直接复测。
+
 ### JPEG baseline 解码调研（2026-11-13）：硬件报错，不实现
 
 背景：`hw_build_id 0x1F76` 的能力表（`video-codec/mwv207/mwv207_video_dec_vpu_features_list.h`）
