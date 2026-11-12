@@ -514,3 +514,53 @@ RGBA8/RGBA32F FBO 附件，读回 24 次绘制结果做哈希）在旧/新驱动
    下一步可对"每批次固定开销"再做一次插桩（本次未做）。
 4. `[buffer]` 场景（subdata 475 / map 644 FPS）主要吃上传带宽，4.9 GB/s 已接近
    本机 DRAM 写带宽量级。
+
+## 18. 为什么"廉价场景/重场景"仍慢：窗口缓冲是线性表面（2026-11-12）
+
+### 18.1 先否掉"向量超越函数"这条
+
+`nir/mwv207_opcode.c` 里 `fsin/fcos/frcp/frsq/flog2/fexp2/fsqrt` 都只有一个操作码
+（`0x22/0x23/0xC/0xD/0x12/0x11`），源操作数形式统一是 `SRC_X_X_0`（单个标量 X），
+`emit` 里对这些 op 还会强制 `swiz_scalar`。也就是说这套 ISA 的超越函数就是
+**单 lane** 执行的，没有 vec4 形式可放行；`mwv207_alu_to_scalar_filter_cb` 把它们
+列进标量化名单是**正确的**，不是遗漏。⇒ 这条路没有收益，不做。
+
+### 18.2 真正的原因：窗口 drawable 是线性、无 TS
+
+同一段"全屏三角形 + 平凡片元着色器"（`/tmp/wfill2.c`，800×600，`glFinish`）：
+
+| 渲染目标 | 每帧 |
+|---|---|
+| 离屏 FBO（tiled + TS） | **0.124 ms** |
+| 窗口 front/back buffer（linear，无 TS） | **0.949 ms**（含 swap 0.257 ms） |
+
+⇒ PE 写线性窗口表面约 **5.7×** 于写平铺+TS 表面。这与 §9 的带宽测量一致
+（PE 写平铺无 TS 12.8 GB/s、写线性 6.7 GB/s，TS 再乘 2）。
+
+`glmark2` 的 jellyfish 每帧把整个窗口重绘一遍（还带混合读），所以它的差距
+几乎全部来自这里：
+
+| 场景 | on-screen | off-screen | 差值 |
+|---|---|---|---|
+| jellyfish | 4.39 ms（228 FPS） | 1.15 ms（873 FPS） | +3.24 ms |
+| terrain | 8.6 ms | 8.3 ms | +0.3 ms |
+| refract | 10.5 ms | 9.8 ms | +0.7 ms |
+| shadow | 1.25 ms | 0.87 ms | +0.38 ms |
+| desktop | 2.3 ms | 1.8 ms | +0.5 ms |
+
+旁证：`glmark2 --visual-config samples=4` 时它拿不到多重采样配置、退化成
+"渲染到 FBO 再上屏"，同一场景立刻从 228 涨到 **360 FPS**。
+
+### 18.3 结论与可选路径
+
+1. **窗口缓冲改平铺（B 路径）**：UMD 侧只需放开 `mwv207_can_tile()`
+   里 `enable_scanout_tile = false`（`mwv207_resource.c`），但**前提是显示端能扫描出
+   平铺/带 TS 的帧缓冲**：当前 KMD 的 plane 只声明 `DRM_FORMAT_MOD_LINEAR`
+   （`src/kernel-6.6/dc/mwv207_va.c:68`）且主平面更新不写任何 tile 位
+   （与厂商 KMD 一致，见 §8）。要做必须先在 KMD 里试探 DE 的
+   `SUPERTILE_VERSION`/tile 尺寸并验证显示正确性，风险是花屏。
+   建议用 `mwv207.overlay=1` 的 WIN0 试验平面做这项试探（只影响 overlay，坏了不黑主屏）。
+2. **驱动内"先渲染到平铺 FBO 再 blit 上屏"**：等价于在 UMD 里做一层小型合成器，
+   代码量和风险都远大于收益，暂不做。
+
+因此 present/廉价场景的剩余差距属**结构性**，不是可以通过调参或补一条快路径解决的。
