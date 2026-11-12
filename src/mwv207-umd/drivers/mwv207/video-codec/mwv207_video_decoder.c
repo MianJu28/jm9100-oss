@@ -464,9 +464,16 @@ mwv207_video_decoder_decode_bitstream(struct pipe_video_codec *decoder,
       return;
 
    for (i = 0; i < num_buffers; ++i) {
-      if ((i == 0)
-          && num_buffers == 3) { 
-         continue;
+      /* FIX(jm9100-oss): 三缓冲布局里跳过 buffer 0 是给 H.264/HEVC 用的
+       * （buffer 0 是参数/长度头）。JPEG 的 VA 前端同样用 3 个缓冲提交，
+       * 但 buffer 0 是它合成的 JPEG 头（SOI + DQT + SOF + DHT + SOS），
+       * 丢掉它之后熵数据既没有 SOS 也没有量化/Huffman 表，解码必然失败
+       * （实测 ffmpeg -hwaccel vaapi 解 1080p JPEG 报 "no SOS marker"）。
+       * 用 SOI 标记区分：以 0xFF 0xD8 开头的 buffer 0 必须保留。 */
+      if ((i == 0) && num_buffers == 3) {
+         const uint8_t *first = buffers[0];
+         if (!(sizes[0] >= 2 && first[0] == 0xFF && first[1] == 0xD8))
+            continue;
       }
 
       if (num_buffers == 1) {

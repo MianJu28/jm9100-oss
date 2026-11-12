@@ -26,7 +26,7 @@
 */
 
 #ifndef mwv207_video_buffer_h
-#define jmpgu_video_buffer_h
+#define mwv207_video_buffer_h
 
 #include "pipe/p_context.h"
 #include "pipe/p_state.h"

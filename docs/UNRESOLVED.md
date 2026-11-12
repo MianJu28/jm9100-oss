@@ -1420,6 +1420,57 @@ GPU 侧没有回归（同一驱动 A/B，`:0`，`-b <scene>:duration=2`）：`bu
 未见差异，若后续有场景退化再用 `MWV207_BUFFER_VRAM=1` 定点关；② 导出成 dmabuf 的
 buffer 现在 memory type 是 TT，跨进程共享仍走 dma-buf，未见异常。
 
+### JPEG baseline 解码调研（2026-11-13）：硬件报错，不实现
+
+背景：`hw_build_id 0x1F76` 的能力表（`video-codec/mwv207/mwv207_video_dec_vpu_features_list.h`）
+里 `jpeg_support=1`、`jpeg_esupport=1`、`jpeg_prog_support=0`，而**同一张表**里
+`mpeg2_support=0`、`mpeg4_support=0`、`vc1_support=0`、`vp8_support=0`（熔断）——
+即 MPEG-2/MPEG-4/VC-1/VP8 在这颗 SKU 上根本不存在，JPEG 是唯一“硬件声称有、我方没实现”
+的解码缺口。寄存器名在 `mwv207_video_dec_8170enum.h` 里齐全，mainline 有同代
+Hantro G1 的参考实现（ST 的 `v6.6-stm32mp` 分支，`hantro_g1_jpeg_dec.c`），
+于是按它实现了一版：`mwv207_dec_jpeg.c`（头解析、ECS 定位、544 B QP/AC/DC 表上传、
+`DEC_MODE=3`/`JPEG_MODE=2`/`STREAM_LEN`/`STRM_START_BIT` 等寄存器、平铺输出 + PPU），
+并声明 `PIPE_VIDEO_PROFILE_JPEG_BASELINE`（仅 BITSTREAM）。
+
+结果（证据链）：
+
+1. **地址寄存器全 0** → 定位到 `set_addr_reg_hi(id_lsb + 1, …)`：JM 的地址寄存器是
+   “MSB 在前”（`YBASE_MSB 0x100` / `YBASE_LSB 0x104`），`+1` 写到的是 LSB 后面那个
+   寄存器（例如把 YBASE 高半写进了 `REFER0/JPG_CH_OUT_BASE_MSB`）。改成 vp9 那样的
+   显式 LSB→MSB 映射后，用 KMD 的 `peek` 口确认 `0x930104 = 54067200`、
+   `0x93010c = 56140800`、`0x9302bc = 618987520`，地址确实被 patch 上了。
+2. **硬件报错**：DEC0 状态 `0x930004 = 0x00010102` = bit8（`DEC_IRQ`）+
+   bit16（`DEC_ERROR_INT`）。KMD `pipe_dec_polling` 要求 `(stat & 0x1100) == 0x1100`
+   （bit8 + bit12），JPEG 永不满足 ⇒ fence 不 signal、PPU 不执行、2 s 后被调度器
+   TDR 复位；dmesg 每帧一条 `job from 'dec0:0:mjpeg' to 'mwv207_dec0', timed out!` +
+   `irq state reg: 0x00010102`（与 I-4 的 H.264 High10 是同一失效模式）。
+3. **输出面零字节**：同一 JPEG 连解两帧，在第二帧 `set_regs` 开头统计上一帧的自建
+   解码面 `[JPG] prev out size=2592000 nonzero=0 head=00000000` ⇒ 不是完成位掩码
+   或缓存时序的假象，DEC 连一个字节都没写。错误详情寄存器（`0x414` 的 ERROR_ADDR/SLICE、
+   `0x0c0`、`0x428`）读回全 0，无可用信息。
+4. **试过的变体全部同样报错**：① `PJPEG_E`/`PJPEG_LAST_SCAN_E`/`JPEG_INTERLEAVED_E`
+   + `PJPEG_SS/SE/AH/AL`；② 输出改线性 NV12 直接写目标面（跳过 PPU）；③ 平铺输出
+   （vp9 的 7680 stride 几何）+ PPU；④ ECS 单独拷进 256 B 对齐缓冲、`STRM_START_BIT=0`。
+5. **厂商侧没有解码参照**：`jmgpu_drv_video.so` 里所有 JPEG 字符串都是**编码器**参数
+   （`Encoded jpeg width. jpgLumWidth`、`JPEG CodingMode 0:420 1:422 2:lumaonly`、
+   `JPEG encoder supported by HW`），没有解码侧字段 ⇒ 能力表的 `jpeg_support` 很可能
+   只覆盖编码块，解码需要厂商未公开的东西（与 high10p 位流预转换同类）。
+
+结论：**JPEG baseline 解码在当前 SKU 上不可实现（缺厂商未公开的启动条件）**，
+收回 profile 声明、删除实现，避免留一条"每次尝试都会让 DEC 管道卡 2 s 再复位"的路径。
+
+保留的两处真修复（与 JPEG 无关，随本次提交上）：
+
+- `video-codec/mwv207_video_buffer.h`：include guard 写成了
+  `#ifndef mwv207_video_buffer_h` + `#define jmpgu_video_buffer_h`（名字不一致，
+  守卫形同虚设），二次 include 会 `redefinition of 'struct mwv207_video_buffer'`。
+- `mwv207_video_decoder_decode_bitstream()`：三缓冲布局里跳过 buffer 0 是给
+  H.264/HEVC 用的（buffer 0 是长度头），JPEG 的 VA 前端同样用 3 个缓冲但 buffer 0
+  是合成头（SOI + DQT + SOF + DHT + SOS），丢掉会报 `no SOS marker`。
+  改为只在 buffer 0 **不以 `FF D8` 开头**时才跳过（对 H.264/HEVC 行为不变）。
+
+回归：`tools/vp9-regression.sh` **pass=19 fail=0**、`tests/query` **PASS=4 FAIL=0**。
+
 ## 5. 建议的推进顺序
 
 | 批次 | 内容 | 前置 | 代价 |
