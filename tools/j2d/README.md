@@ -141,3 +141,68 @@ gcc -O2 -o /tmp/j2dtest tests/j2d-copy/j2dtest.c $(pkg-config --cflags --libs li
   `jmo_2D_Commit`/`jmo_2D_BatchBlit` 等一整套 2D API，符号未 strip），并不在 DDX 里
   （DDX 链接它，且二进制里查不到这两个立即数）。这些 opcode 的确切编码只存在于
   闭源库内部，要复刻需要反汇编该库或抓更多样本来差分。
+
+## 2026-11-12 第二轮：静态反编译得到的两条硬结论
+
+### 1. load-state 的字格式（已确认）
+
+`jmo_HARDWARE_Load2DState`（`libdrm_jmgpu.so` 偏移 `0x8ece0`）就是"一次写
+若干个寄存器"的打包器：
+
+```asm
+ubfx  x0, x0, #2, #16      ; x0 = (reg >> 2) & 0xffff
+ubfiz w4, w19, #16, #10    ; w4 = (width & 0x3ff) << 16
+orr   w4, w4, w0
+orr   w4, w4, #0x8000000   ; 加上 0x08000000 标记
+str   w4, [x3, w2, uxtw #2]; 写命令字
+...  memcpy(下一个字, vals, width*4)
+```
+
+即：**`word = 0x08000000 | (width << 16) | ((reg >> 2) & 0xffff)`，
+随后跟 `width` 个字的数据**。这和抓包里看到的 `0x40000000|reg` + 值
+是两种不同粒度的写法（后者是单寄存器）。
+
+### 2. draw 类的字是另一套编码
+
+抓包里的两条绘制命令按上面的位域拆开：
+
+| 命令字 | 拆解 |
+|---|---|
+| `0x82000054` | `0x80000000 | 0x02000000 | 0x54` |
+| `0x8200001c` | `0x80000000 | 0x02000000 | 0x1c` |
+
+`0x54`/`0x1c` **不是寄存器号**（寄存器号在这里要 `>>2` 才对得上），
+而是 draw 类自己的子操作码；两条命令后面分别跟 4 个和 7 个操作数。
+
+### 3. 静态搜不到 emit 点
+
+- 库里 `0x82000054` / `0x8200001c` **不以立即数形式出现**（`0x82000000`
+  只在 `.rodata` 的测试向量里出现，和 2D 无关），说明 emit 点是
+  `0x80000000 | 0x02000000 | cmd` 这样算出来的；
+- 逐个排查 `orr w, w, #0x2000000` 的 6 个命中点，分别落在
+  `jmo_DECHARDWARE_SetTilingConfig`、`jmo_HARDWARE_UpdateTextureDesc`、
+  `jmo_HARDWARE_BindTexture` 等 3D/DEC 代码里，没有一个属于 2D；
+- 2D 的调用链是
+  `jmo_2D_Clear/Blit → _DoBlitOrClear(0x37610) → jmo_HARDWARE_Clear2D(0xb6da4)
+  → jmo_HARDWARE_StartDE(0xb5744)`，它们往上下文里那个"每块 0x86c8 字节"
+  的命令结构里填字段，再由更内层统一序列化——真正的落字函数还没定位到。
+
+### 4. 描述字扫描：16 种全灭
+
+把 `desc` 按"`(格式/标志 << 16) | (pitch/8)`"这个从抓包反推出来的形状
+穷举（fmt 0..7 × 额外标志 {0,0x600}，`tests/j2d-copy/j2dtest.c` 模式 3），
+目标缓冲全部保持全 0 ⇒ 问题不在描述字取值，而是整条 draw 命令没有被
+2D 引擎执行。
+
+### 5. 于是改用动态观测（已备好工具）
+
+`tools/j2d/j2dsem.c`：LD_PRELOAD 拦截 `jmo_HARDWARE_Load2DState` /
+`StartDE` / `Clear2D` / `2DChipEnable`，打印每次调用的
+`(ctx, reg, width, vals[])`，并把命令缓冲新增的字（游标在 `ctx+0x3770`，
+基址指针在 `ctx+0x3768`）逐条 dump 出来。`capture-j2d.sh` 默认
+`J2D_SEM=1`，会在起临时 X 时同时预加载两个 so，日志落在
+`$OUT/sem.log`。
+
+这一步不再需要读反汇编：只要在厂商栈上跑一次已知拷贝，就能拿到
+"高层语义 → 命令字"的完整对照，直接就能回填 `j2dtest`。
+
