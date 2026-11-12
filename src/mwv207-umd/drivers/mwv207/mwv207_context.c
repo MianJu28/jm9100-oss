@@ -193,6 +193,7 @@ mwv207_context_create(struct pipe_screen *pscreen, void *priv, unsigned flags)
 {
    struct mwv207_screen *screen = mwv207_screen(pscreen);
    struct mwv207_context *ctx = CALLOC_STRUCT(mwv207_context);
+   ctx->fp_dirty = true;
 
    if (!ctx)
       goto fail;

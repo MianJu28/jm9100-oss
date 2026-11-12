@@ -31,6 +31,7 @@
 #include "util/format/u_format.h"
 #include "indices/u_primconvert.h"
 
+#include <time.h>
 #include "mwv207_cmd.h"
 #include "mwv207_context.h"
 #include "mwv207_query.h"
@@ -1083,8 +1084,12 @@ mwv207_update_shader(struct mwv207_context *ctx)
 
          sampler_view = mwv207_sampler_view(view);
 
-         if (ctx->info.tex_128bit && sampler_view->tex_desc.tex_128bit)
+         if (ctx->info.tex_128bit && sampler_view->tex_desc.tex_128bit) {
             mwv207_split_128bit((struct pipe_context *)ctx, sampler_view->base.texture, PIPE_FORMAT_NONE);
+            /* 拆分会把视图换成新纹理，指纹缓存必须失效，否则下一次绘制
+             * 会继续用拆分前的着色器（texelFetch 只取 x/y）。FIX(jm9100-oss) */
+            ctx->fp_dirty = true;
+         }
 
          res = mwv207_resource(sampler_view->base.texture);
 
@@ -1128,6 +1133,7 @@ mwv207_update_shader(struct mwv207_context *ctx)
     * 尾部未用的槽会被解绑），所以指纹不能带"绑了几个"这类调用计数，只能带
     * 内容：按 stage 分开、只看该槽的视图是否走 128 位取样。实测这样之后
     * 编译次数从每秒 100 次降到启动期一次性。 */
+   if (ctx->fp_dirty)
    for (unsigned st = 0; st < PIPE_SHADER_TYPES; st++) {
       uint32_t fp = 2166136261u;
 
@@ -1148,7 +1154,7 @@ mwv207_update_shader(struct mwv207_context *ctx)
       ctx->fp_z32_shadow[st] = fp;
    }
 
-   {
+   if (ctx->fp_dirty) {
       uint32_t fp = 2166136261u;
       for (unsigned i = 0; i < ctx->fb_state.nr_cbufs; i++)
          if (ctx->fb_state.cbufs[i])
@@ -1156,6 +1162,7 @@ mwv207_update_shader(struct mwv207_context *ctx)
       ctx->fp_pixel_128bit = fp;
 
       ctx->fp_is_dual = ctx->info.dsbi.is_dual ? 1u : 0u;
+      ctx->fp_dirty = false;
    }
 
    if (ctx->shader_states[PIPE_SHADER_VERTEX])

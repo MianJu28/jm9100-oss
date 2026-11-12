@@ -985,6 +985,7 @@ mwv207_bind_sampler_states(struct pipe_context *pctx, enum pipe_shader_type stag
                            void **samplers)
 {
    struct mwv207_context *ctx = mwv207_context(pctx);
+   ctx->fp_dirty = true;   /* 采样器状态变了 → z32_shadow 指纹要重算 */
    uint32_t max_samplers = start_slot + num_samplers;
 
    for (int i = 0; i < num_samplers; ++i)
@@ -1077,6 +1078,7 @@ mwv207_set_sampler_views(struct pipe_context *pctx,
 {
    struct mwv207_sampler_view *sampler_view;
    struct mwv207_context *ctx = mwv207_context(pctx);
+   ctx->fp_dirty = true;   /* 视图集合变了 → 指纹要重算 */
    uint32_t tex_128_offset = 0;
    uint32_t max_sampler_views = start_slot + num_views;
 

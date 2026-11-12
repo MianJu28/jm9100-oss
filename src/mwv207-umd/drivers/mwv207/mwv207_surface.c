@@ -278,6 +278,8 @@ void
 mwv207_set_framebuffer_state(struct pipe_context *pctx,
                              const struct pipe_framebuffer_state *state)
 {
+   struct mwv207_context *ctx_fb = mwv207_context(pctx);
+   ctx_fb->fp_dirty = true;   /* 颜色附件变了 → 像素指纹要重算 */
    struct mwv207_context *ctx = mwv207_context(pctx);
    struct mwv207_surface *surface;
    struct mwv207_resource *res;
