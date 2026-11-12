@@ -571,7 +571,36 @@ mwv207_transfer_map(struct pipe_context *pctx,
          templ.usage |= PIPE_USAGE_STAGING;
          templ.bind |= PIPE_BIND_LINEAR;
          templ.flags |= (PIPE_RESOURCE_FLAG_DRV_PRIV<<2);
-         struct pipe_resource *pdma = pctx->screen->resource_create(pctx->screen, &templ);
+
+         /* 回读缓冲同样复用 retire 环里的同尺寸条目。实测（4 MB、
+          * 1024x1024 RGBA8）复用只快 5-8% —— 这段路主要卡在本机内存读
+          * 带宽（约 2 GB/s）和 DMA 引擎（约 2.5 GB/s）上，不是分配开销；
+          * 复用留着是为了避免每次 4-16 MB 的 BO 分配与页操作。
+          * 见 reports/READBACK-PATH-20261113.md。 */
+         static int rb_reuse = -1;
+         if (rb_reuse < 0)
+            rb_reuse = debug_get_bool_option("MWV207_READBACK_REUSE", true);
+         struct pipe_resource *rb_cached = NULL;
+         if (rb_reuse) {
+            for (unsigned i = 0; i < ARRAY_SIZE(ctx->retired_staging); i++) {
+               struct pipe_resource *cur = ctx->retired_staging[i];
+
+               if (!cur || cur->width0 != templ.width0 || cur->height0 != templ.height0 ||
+                   cur->depth0 != templ.depth0 || cur->array_size != templ.array_size ||
+                   cur->last_level != templ.last_level || cur->format != templ.format)
+                  continue;
+               ctx->retired_staging[i] = NULL;
+               if (!mwv207_wait_resource_timeout(pctx, cur,
+                     MWV207_STAGING_REUSE_TIMEOUT_NS)) {
+                  ctx->retired_staging[i] = cur;
+                  break;
+               }
+               rb_cached = cur;
+               break;
+            }
+         }
+         struct pipe_resource *pdma = rb_cached ? rb_cached :
+            pctx->screen->resource_create(pctx->screen, &templ);
          struct mwv207_resource *dma = mwv207_resource(pdma);
 
          if (trans->staging_res) {

@@ -11,6 +11,8 @@
 static double now_ms(void){ struct timespec ts; clock_gettime(CLOCK_MONOTONIC,&ts);
    return ts.tv_sec*1000.0 + ts.tv_nsec/1e6; }
 
+static volatile unsigned sink;
+
 int main(int argc, char **argv){
    int n = argc>1 ? atoi(argv[1]) : 20;
    EGLDisplay dpy = eglGetDisplay(EGL_DEFAULT_DISPLAY);
@@ -41,6 +43,7 @@ int main(int argc, char **argv){
       void *p = glMapBufferRange(GL_ARRAY_BUFFER,0,bytes,GL_MAP_READ_BIT);
       if(!p){ printf("map READ 失败 err=0x%x\n", glGetError()); break; }
       memcpy(buf,p,bytes);
+      sink ^= ((unsigned char *)buf)[i & (bytes - 1)];   /* 防止编译器把循环里的 memcpy 提成一次 */
       glUnmapBuffer(GL_ARRAY_BUFFER);
    }
    glFinish();
@@ -52,6 +55,7 @@ int main(int argc, char **argv){
       void *p = glMapBufferRange(GL_ARRAY_BUFFER,0,bytes,GL_MAP_WRITE_BIT|GL_MAP_INVALIDATE_BUFFER_BIT);
       if(!p){ printf("map WRITE 失败 err=0x%x\n", glGetError()); break; }
       memcpy(p,buf,bytes);
+      sink ^= ((unsigned char *)p)[i & (bytes - 1)];
       glUnmapBuffer(GL_ARRAY_BUFFER);
    }
    glFinish();

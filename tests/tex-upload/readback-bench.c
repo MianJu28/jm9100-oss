@@ -23,6 +23,9 @@ int main(int argc, char **argv){
    EGLSurface surf=eglCreatePbufferSurface(dpy,cfg,pa);
    eglMakeCurrent(dpy,surf,surf,ctx);
    printf("renderer: %s\n", glGetString(GL_RENDERER));
+   { GLint rf=0, rt=0; glGetIntegerv(GL_IMPLEMENTATION_COLOR_READ_FORMAT,&rf);
+     glGetIntegerv(GL_IMPLEMENTATION_COLOR_READ_TYPE,&rt);
+     printf("impl read format=0x%x type=0x%x (RGBA=0x%x UBYTE=0x%x)\n", rf, rt, GL_RGBA, GL_UNSIGNED_BYTE); }
 
    unsigned char *buf = malloc(1024*1024*4);
    /* 小读回 64x64 */

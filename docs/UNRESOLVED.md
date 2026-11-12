@@ -1505,6 +1505,33 @@ Hantro G1 的参考实现（ST 的 `v6.6-stm32mp` 分支，`hantro_g1_jpeg_dec.c
 
 回归：`tools/vp9-regression.sh` **pass=19 fail=0**、`tests/query` **PASS=4 FAIL=0**。
 
+### 回读路径（glReadPixels / VAAPI 下载）分析（2026-11-13）：受内存与 DMA 带宽限制，不再优化
+
+`glReadPixels` 4 MB（1024×1024 RGBA8）在 r30 上稳定约 **3.8–4.4 ms**（≈0.9–1.0 GB/s）。
+用 `MWV207_RBTIME`（临时插桩，已删）把 `mwv207_transfer_map()` 拆开：
+
+| 段 | 实测 | 归属 |
+|---|---|---|
+| staging 分支（`resource_create` + blit + wait） | 从未触发 | pbuffer 表面是 `MWV207_LINEAR`，走线性分支 |
+| DMA 缓冲创建 | 0.009–0.021 ms | `screen->resource_create()` |
+| DMA 拷贝 + 等待 | **1.4–2.0 ms**（4 MB） | 2D/DMA 引擎，约 2.5 GB/s |
+| CPU 侧逐行拷贝（Mesa 打包） | **≈2.3 ms**（4 MB） | 冷 DRAM 读，约 1.9 GB/s |
+
+本机内存带宽基准（`/tmp/mc2.c`，64 MB）：**memcpy 33.0 ms ⇒ 1.94 GB/s**；memset 2.61 ms ⇒ 24.5 GB/s。
+4 MB 的小缓冲在缓存里可以跑到 12 GB/s（`buffer-bench` 复用同一块源数据的场景），但读回的数据
+是 GPU 刚 DMA 写进 DRAM 的，缓存是冷的 ⇒ 只能按 1.9 GB/s 走。
+
+结论：
+- 3.8–4.4 ms ≈ `1.4–2.0 ms DMA + 2.3 ms 冷 DRAM 拷贝`，已接近该路径的硬件下限；
+- 唯一能省的"分配"部分（每次新建 4–16 MB 的回读 BO）已改为复用 `ctx->retired_staging[]`
+  里的同尺寸条目（`MWV207_READBACK_REUSE=0` 可关）：实测只快 **5–8%**（`4.19 vs 4.38 ms`、
+  `3.77 vs 4.11 ms`），属噪声级，但省掉了每次 4–16 MB 的 BO 分配与页操作，保留；
+- 若要让回读真正变快，需要让 DMA 与 CPU 拷贝重叠（双缓冲流水），但那改变了 `glReadPixels`
+  的同步语义（调用返回前必须拿到像素），在 GL/VA 的 API 约束下做不到；
+- 顺带记录两个探针坑：① `buffer-bench`/`bo-mmap-bench` 里的 `memcpy` 如果没有把结果读出来，
+  编译器会把它从循环里提出来（表现为"12 GB/s"这类假值），已在 `buffer-bench` 加了 `sink` 校验；
+  ② 4 MB 级小缓冲受缓存影响极大，引用带宽数字必须注明工作集大小。
+
 ## 5. 建议的推进顺序
 
 | 批次 | 内容 | 前置 | 代价 |
