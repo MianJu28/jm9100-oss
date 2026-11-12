@@ -19,6 +19,7 @@
 #include <stdint.h>
 #include <dlfcn.h>
 #include <unistd.h>
+#include <execinfo.h>
 
 /* 上下文里命令缓冲的位置（从 jmo_HARDWARE_Load2DState 的反汇编得到） */
 #define CTX_BUF_PTR 0x3768
@@ -152,6 +153,75 @@ int jmo_HARDWARE_2DChipEnable(void *ctx, uint32_t on)
 		fprintf(out, "#%lu 2DChipEnable(ctx=%p on=%u)\n", ++seq, ctx, on);
 	rc = real ? real(ctx, on) : -1;
 	dump_delta(ctx, before, "2DChipEnable");
+	return rc;
+}
+
+/* 判断"命令流到底是谁拼的"：如果 DDX 调这两个高层 API，
+ * 那实现就在库里；否则在 DDX 自己的 EXA 代码里。 */
+static void bt(const char *tag)
+{
+	void *buf[24];
+	int n;
+
+	if (!enabled)
+		return;
+	n = backtrace(buf, 24);
+	fprintf(out, "#%lu %s 调用栈:\n", ++seq, tag);
+	backtrace_symbols_fd(buf, n, fileno(out));
+}
+
+int jmo_2D_Clear(void *ctx, void *a, void *b, void *c, void *d, void *e)
+{
+	static int (*real)(void *, void *, void *, void *, void *, void *);
+	int rc;
+
+	if (!real)
+		real = dlsym(RTLD_NEXT, "jmo_2D_Clear");
+	if (enabled) {
+		fprintf(out, "#%lu jmo_2D_Clear(ctx=%p)\n", ++seq, ctx);
+		bt("jmo_2D_Clear");
+	}
+	/* 只记录不转发：这两个 API 的参数个数不确定（Clear 用到 x0..x6），
+	 * 用猜的参数去转发有崩溃风险；这里只需要"有没有被调用"这一个事实。 */
+	(void)real; (void)a; (void)b; (void)c; (void)d; (void)e;
+	rc = 0;
+	return rc;
+}
+
+int jmo_2D_Blit(void *ctx, void *a, void *b, void *c, void *d, void *e, void *f)
+{
+	static int (*real)(void *, void *, void *, void *, void *, void *, void *);
+	int rc;
+
+	if (!real)
+		real = dlsym(RTLD_NEXT, "jmo_2D_Blit");
+	if (enabled) {
+		fprintf(out, "#%lu jmo_2D_Blit(ctx=%p)\n", ++seq, ctx);
+		bt("jmo_2D_Blit");
+	}
+	(void)real; (void)a; (void)b; (void)c; (void)d; (void)e; (void)f;
+	rc = 0;
+	return rc;
+}
+
+int drm_jmgpu_j2d_send_cmd(int fd, void *cmd)
+{
+	static int (*real)(int, void *);
+	uint64_t addr = 0;
+	uint32_t size = 0, flags = 0;
+	int rc;
+
+	if (!real)
+		real = dlsym(RTLD_NEXT, "drm_jmgpu_j2d_send_cmd");
+	if (enabled && cmd) {
+		memcpy(&addr, cmd, 8);
+		memcpy(&size, (char *)cmd + 8, 4);
+		memcpy(&flags, (char *)cmd + 12, 4);
+		fprintf(out, "#%lu j2d_send_cmd(fd=%d cmd=%p addr=%#llx size=%u flags=%u)\n",
+			++seq, fd, cmd, (unsigned long long)addr, size, flags);
+		bt("j2d_send_cmd");
+	}
+	rc = real ? real(fd, cmd) : -1;
 	return rc;
 }
 

@@ -206,3 +206,55 @@ str   w4, [x3, w2, uxtw #2]; 写命令字
 这一步不再需要读反汇编：只要在厂商栈上跑一次已知拷贝，就能拿到
 "高层语义 → 命令字"的完整对照，直接就能回填 `j2dtest`。
 
+## 2026-11-12 第三轮：抓到"是谁拼的命令流"，并解出描述字公式
+
+### 1. 命令流是厂商 DDX 自己拼的（不是 libdrm_jmgpu）
+
+`j2dsem` 的调用栈（`~/j2d-captures/sem2/sem.log`）给出决定性事实：
+
+```
+drm_jmgpu_j2d_send_cmd
+ ← mwv207_drv.so(+0x150bb)          ← jmgpuDoneSolid（提交累积的 solid 填充）
+ ← libexa.so(+0x8e1f) / (+0xa84f)   ← EXA 的 CopyArea/PixmapClear
+ ← Xorg(miPaintWindow / MapWindow …)
+```
+
+也就是说：**2D 命令字由闭源 DDX（`mwv207_drv.so`）构建，`libdrm_jmgpu.so`
+只负责把缓冲发下去**。这解释了为什么在 libdrm_jmgpu 里搜不到
+`0x82000054`/`0x8200001c` 的立即数。
+
+### 2. DDX 里的构造函数与公式
+
+符号未 strip，直接可读：
+
+- `jmgpu2dCopyArea`（`0x17900`）：**拷贝**命令的拼装点。关键指令：
+
+  ```asm
+  179c0: mov  w10, #0x1c
+  179d0: movk w10, #0x8200, lsl #16   ; w10 = 0x8200001c  ← 拷贝 opcode
+  179d8: mov  w4,  #0x81000000        ; 结束标记
+  179d4: orr  w3,  w3, #0x20000       ; w3 = 格式表值 | 0x20000
+  17a5c: orr  w2,  w16, w2, lsl #16   ; desc = (pitch/16 << 16) | 格式码
+  ```
+
+- `jmgpu2dFillRectHW`（`0x14e60`）/ `jmgpuDoneSolid`（`0x15050`）：
+  填充路径；`jmgpuDoneSolid` 里就是 `bl jmgpu2dFillRectHW` 之后
+  `bl drm_jmgpu_j2d_send_cmd`。
+
+- 两张 `.rodata` 表（已 dump）：
+
+  | 表 | 地址 | 内容 |
+  |---|---|---|
+  | 格式码 | `0x1f650`（16 项） | `0, 0xa0, 0x50, 0xf0, 0xa, 0xaa, 0x5a, 0xfa, 0x5, 0xa5, 0x55, 0xf5, 0xf, 0xaf, 0x5f, 0xff` |
+  | 位深码 | `0x1f690`（按 depth-8 索引） | `8→2`、`16→1`、其余 `0xffffffff`(无效) |
+
+  第一条操作数 = 格式码 `| 0x20000` ⇒ 抓包里的 `0x000200f0` 对应格式码 `0xf0`
+  （32bpp 那档）。
+
+### 3. 下一步（等切回开源栈）
+
+`tests/j2d-copy/j2dtest.c` 新增模式 4：按
+`desc = (pitch/16 << 16) | 低 16 位格式码` 扫描
+`{0x600,0x680,0x80,0xc0,0x60,0x0}` 六档，配合 `0x20000 | 0xf0` 的拷贝
+操作数；跑了就能确定 32bpp 线性 surface 的正确描述字。
+

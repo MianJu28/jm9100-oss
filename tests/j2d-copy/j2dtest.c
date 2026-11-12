@@ -101,9 +101,82 @@ static uint32_t desc_cand(int i, uint32_t pitch, uint32_t w, uint32_t h)
 	}
 }
 
+/* 提交一次"填充"并读回；返回不一致的字数（0 = 成功）。每次都用全新的
+ * dst BO，便于扫描时互不干扰。 */
+static int fill_once(uint32_t w, uint32_t h, uint32_t pitch, uint32_t desc)
+{
+	uint32_t size = pitch * h, hd;
+	uint32_t *dst = bo_new(size, &hd);
+	uint32_t cmds[32], n = 0;
+
+	cmds[n++] = 0x40000000 | 0x1008; cmds[n++] = 0;
+	cmds[n++] = 0x40000000 | 0x100c; cmds[n++] = 0;
+	cmds[n++] = 0x40000000 | 0x1014; cmds[n++] = 0;
+	cmds[n++] = 0x40000000 | 0x1020; cmds[n++] = 0x00ff00ff;
+	cmds[n++] = 0x40000000 | 0x1054; cmds[n++] = 0xffffffff;
+	cmds[n++] = 0x82000054; cmds[n++] = 0;
+	uint32_t dst_addr_off = n * 4; cmds[n++] = 0;
+	cmds[n++] = desc; cmds[n++] = (w << 16) | h;
+	cmds[n++] = 0x81000000;
+
+	uint32_t bos[1] = { hd };
+	struct reloc rl[1] = { { 0, dst_addr_off, 0, 1, 0 } };
+	if (submit(cmds, n, bos, 1, rl, 1)) return -1;
+
+	int bad = 0;
+	for (uint32_t i = 0; i < size / 4; i++)
+		if (dst[i] != 0x00ff00ffu) bad++;
+	return bad;
+}
+
+/* 描述字扫描：假设 desc = (格式/标志 << 16) | (pitch/8)，
+ * 枚举 fmt 0..7 × 额外标志 {0,0x600}，看哪一组真的能出图。 */
+static int sweep_desc(uint32_t w, uint32_t h)
+{
+	uint32_t pitch = w * 4;
+	uint32_t extra[2] = { 0, 0x600 };
+	unsigned f, e;
+	int hit = 0;
+
+	for (f = 0; f <= 7; f++) {
+		for (e = 0; e < 2; e++) {
+			uint32_t desc = (f << 16) | extra[e] | ((pitch / 8) & 0x3ff);
+			int bad = fill_once(w, h, pitch, desc);
+			printf("mode=3 fmt=%u extra=0x%x desc=0x%08x: %s\n",
+			       f, extra[e], desc,
+			       bad == 0 ? "OK(命中)" : (bad < 0 ? "提交失败" : "无效"));
+			if (bad == 0) hit++;
+		}
+	}
+	printf("命中 %d 组\n", hit);
+	return hit ? 0 : 2;
+}
+
+/* 模式 4：按厂商 DDX 反编译出来的公式扫描描述字
+ *   desc = (pitch/16 << 16) | 低 16 位格式码
+ * 低 16 位取抓包里出现过的 0x600/0x680/0x80/0xc0/0x60/0x0。 */
+static int sweep_copy(uint32_t w, uint32_t h)
+{
+	uint32_t pitch = w * 4;
+	uint32_t lows[] = { 0x600, 0x680, 0x80, 0xc0, 0x60, 0x0 };
+	uint32_t hi = (pitch / 16) & 0xffff;
+	unsigned i;
+	int hit = 0;
+
+	for (i = 0; i < sizeof(lows) / sizeof(lows[0]); i++) {
+		uint32_t desc = (hi << 16) | lows[i];
+		int bad = fill_once(w, h, pitch, desc);
+		printf("mode=4 desc=0x%08x (pitch/16=%u): %s\n", desc, pitch / 16,
+		       bad == 0 ? "OK(命中)" : (bad < 0 ? "提交失败" : "无效"));
+		if (bad == 0) hit++;
+	}
+	printf("命中 %d 组\n", hit);
+	return hit ? 0 : 2;
+}
+
 int main(int argc, char **argv)
 {
-	int mode = argc > 3 ? atoi(argv[3]) : 0;      /* 0=填充 1=拷贝 */
+	int mode = argc > 3 ? atoi(argv[3]) : 0;      /* 0=填充 1=拷贝 3=描述字扫描 */
 	int cand = argc > 4 ? atoi(argv[4]) : 0;
 	uint32_t w = argc > 1 ? (uint32_t)atoi(argv[1]) : 256;
 	uint32_t h = argc > 2 ? (uint32_t)atoi(argv[2]) : 256;
@@ -115,6 +188,19 @@ int main(int argc, char **argv)
 	struct mwv207_ctx c; memset(&c, 0, sizeof(c)); c.op = 0;
 	if (ioctl(fd, IOCTL_CTX, &c)) { perror("CTX"); return 1; }
 	ctx = c.handle;
+
+	if (mode == 4) {
+		struct mwv207_ctx cc; memset(&cc, 0, sizeof(cc)); cc.op = 0;
+		if (ioctl(fd, IOCTL_CTX, &cc)) { perror("CTX"); return 1; }
+		ctx = cc.handle;
+		return sweep_copy(w, h);
+	}
+	if (mode == 3) {
+		struct mwv207_ctx cc; memset(&cc, 0, sizeof(cc)); cc.op = 0;
+		if (ioctl(fd, IOCTL_CTX, &cc)) { perror("CTX"); return 1; }
+		ctx = cc.handle;
+		return sweep_desc(w, h);
+	}
 
 	uint32_t *src = bo_new(size, &hs);
 	uint32_t *dst = bo_new(size, &hd);
