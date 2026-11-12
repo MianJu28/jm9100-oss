@@ -95,3 +95,26 @@ sudo ./tools/j2d/capture-j2d.sh /tmp/j2d-cap
 
 下一步：在自有栈上用"2D 拷贝 → GL 读回比对"的自校验环，逐位试出描述字编码
 （比继续在厂商栈上做黑盒差分更快，因为我们可以直接控制 surface 属性）。
+
+## 自校验工具（`tests/j2d-copy/j2dtest.c`）
+
+用 `DRM_IOCTL_MWV207_SUBMIT(engine_type=3)` 直接给 2D 引擎喂上面反解出的命令，
+再用 CPU 读回比对，无需屏幕或第三方参照：
+
+```
+gcc -O2 -o /tmp/j2dtest tests/j2d-copy/j2dtest.c $(pkg-config --cflags --libs libdrm)
+/tmp/j2dtest 64 64 0 <desc_cand>     # 0 = 填充, 1 = 拷贝
+```
+
+当前结论（2026-11-12，开源栈 `8DFC520FB8FCDECFBC911AA`）：
+
+- 命令能被引擎接受：提交成功、out fence 置位（说明环形缓冲被消费）。
+- 但 dst 内容仍是全 0，填充/拷贝都没有落盘 —— 尝试过的描述字候选
+  （`0`、`pitch`、`pitch<<16`、`0x40600`、`0x100000`、`0x10080` 等）都无效。
+- 因此缺口不在"命令流格式"（那部分已由厂商捕获反解出来），而在
+  ① 描述字编码，或 ② 我们 KMD 的 2D 环形头布局（`pipe_2d_submit()` 在用户
+  命令前插了 `0x80000000, count, 0x80000000, 0x80000000` 四个字，而厂商
+  抓包里 `count` 是缓冲区**第一个**字），或 ③ 2D 引擎的寄存器基址/opcode
+  与本机这一代硬件不一致。
+
+下一步优先级：先确认 ①/②/③ 中的哪一个，再决定是改 KMD 的环形头还是继续解描述字。
