@@ -379,3 +379,52 @@ qdbus org.kde.KWin /Compositor suspend && vblank_mode=0 glmark2 -b build:duratio
 参数"的范围。当前 present 收益仍以 14.1 之外的 glamor blit 快路径为准
 （1.9–2.1×，见 §12）。
 
+
+## 15. 2026-11-12：AIGLX 软链补齐后 glamor 走硬件 2D，present 再降 2×
+
+### 15.1 发现
+
+`/var/log/Xorg.0.log` 一直有：
+
+```
+(EE) AIGLX error: dlopen of /usr/lib/aarch64-linux-gnu/dri/mwv207_dri.so failed (No such file or directory)
+(EE) AIGLX: unable to load driver mwv207
+```
+
+Xorg 的 AIGLX 只在 `/usr/lib/aarch64-linux-gnu/dri` 找驱动，而我们的 DRI 实体
+在 `/usr/local/lib/mwv207-oss/`（客户端经 glvnd/`LIBGL_DRIVERS_PATH` 走
+`/usr/local/lib/aarch64-linux-gnu/dri/mwv207_dri.so` 软链）。缺这一条时
+glamor 只能退回 llvmpipe → `Refusing to try glamor on llvmpipe` →
+`ShadowFB` 软件合成（**每帧 CPU 拷贝整窗**）。
+
+`switch-mwv207.sh` 的 `AIGLX_LINK` 已经覆盖这条软链（`umd_deploy_files`
+里 `ln -sfn "$INST_DIR/mwv207_dri.so" "$AIGLX_LINK"`），补上后：
+
+```
+(II) modeset(0): glamor X acceleration enabled on MWV207 (JingjiaMicro Corporation)
+(II) modeset(0): glamor initialized
+(II) AIGLX: Loaded and initialized mwv207
+```
+
+### 15.2 实测（800×600，`vblank_mode=0`，同一个 `tests/present-bench`）
+
+| 阶段 | swap-only | clear+swap |
+|---|---|---|
+| 原始（glamor 在 llvmpipe） | 0.643 ms | 0.927 ms |
+| + glamor blit 快路径（§12） | 0.036 ms | 0.485–0.567 ms |
+| **+ AIGLX 软链（本节）** | **0.016 ms** | **0.248 ms** |
+| 厂商栈 | — | 0.167 ms |
+
+1920×1080 clear+swap：**1.328 ms**（厂商同条件未测单帧，`build` 场景 0.167 ms 是 800×600）。
+
+`glmark2 -b :duration=1`：**Score 1225**（今天上午 933、原始 723，厂商 5209）。
+廉价场景 `conditionals` 1230–1254、`function` 1252–1419、`loop` 1423–1745 FPS
+（上午 1025–1038）；重场景不变（`terrain` 118、`refract` 94、`jellyfish` 248）。
+
+### 15.3 结论
+
+- 800×600 的一次全窗合成拷贝从 0.9 ms 降到 0.248 ms（3.7×），与厂商 0.167 ms 只差 1.5×。
+- 剩余差距集中在**重场景**（GPU 本身）与**多窗合成**（`desktop` 467–488 FPS），
+  不再是 present 的固定开销。
+- 这条修复不需要改代码，只要保证安装流程建好 `AIGLX_LINK`（脚本已覆盖），
+  以及**装完载荷后重启 X**（glamor 在启动时选 EGL provider）。
