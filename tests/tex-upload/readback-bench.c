@@ -50,16 +50,5 @@ int main(int argc, char **argv){
    printf("glBufferSubData 4MB x%d: %.2f ms/次 (%.2f GB/s)\n", n,
       (now_ms()-t0)/n, 4.0*n/((now_ms()-t0)/1000.0)/1024.0);
 
-   /* buffer 读映射: 顶点/索引等 buffer 在 VRAM 时是 write-combined, 读很慢 */
-   t0=now_ms();
-   for(int i=0;i<n;i++){
-      unsigned char *p = glMapBufferRange(GL_ARRAY_BUFFER,0,4*1024*1024,GL_MAP_READ_BIT);
-      if(!p){ printf("glMapBufferRange 失败 err=0x%x\n", glGetError()); break; }
-      memcpy(buf,p,4*1024*1024);
-      glUnmapBuffer(GL_ARRAY_BUFFER);
-   }
-   glFinish();
-   printf("glMapBufferRange+memcpy 4MB x%d: %.2f ms/次 (%.2f GB/s)\n", n,
-      (now_ms()-t0)/n, 4.0*n/((now_ms()-t0)/1000.0)/1024.0);
    return 0;
 }
