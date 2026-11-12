@@ -43,10 +43,16 @@ int main(int argc, char **argv)
 	XFillRectangle(d, b, gc, 0, 0, (unsigned)size, (unsigned)size);
 	XSync(d, False);
 
-	for (i = 0; i < count; i++) {
+	if (count <= 0) {
+		/* 单次 pixmap→pixmap 拷贝：给命令流做"最干净"的对照样本 */
 		XCopyArea(d, a, b, gc, 0, 0, (unsigned)size, (unsigned)size, 0, 0);
-		XCopyArea(d, b, win, gc, 0, 0, (unsigned)size, (unsigned)size, 0, 0);
 		XSync(d, False);
+	} else {
+		for (i = 0; i < count; i++) {
+			XCopyArea(d, a, b, gc, 0, 0, (unsigned)size, (unsigned)size, 0, 0);
+			XCopyArea(d, b, win, gc, 0, 0, (unsigned)size, (unsigned)size, 0, 0);
+			XSync(d, False);
+		}
 	}
 
 	XFreePixmap(d, a);
