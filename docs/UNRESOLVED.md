@@ -1215,6 +1215,8 @@ initramfs 已刷并解包核对（`modinfo -F srcversion` 均为 `8DFC52…`）�
 | **D5** | 开启三个窥孔 `OPT_DIV` / `OPT_FFMA` / `OPT_SET`（默认全关） | 小改动 + 大验证 | 潜在性能收益，需全量着色器回归 |
 | **D6** | 多视口 | 与 E8 同 | 取决于硬件是否支持（`GL_MAX_VIEWPORTS` 现报 0/1） |
 | **D7** | **Vulkan** | 不可达 | 官方 1.8.0 **也没有**（无 libvulkan / `vulkan/icd.d`；KMD 的 syncobj/vm_bind/gpuva/sparse 全 0）。官网"Vulkan 1.1"至今未交付 |
+| **D8** | **H.264 Multiview / StereoHigh 解码** | 硬件有、客户端栈不可达 ⇒ 不做 | 特性表 `mvc_support=1`、枚举里有 `JMDEC_MVC_E`；但 Mesa 24.1.2 的 `src/gallium/include/pipe/p_video_enums.h` **没有** MVC profile，`src/gallium/frontends/va/va_private.h` 的 `PipeToProfile()` / `ProfileToPipe()` 也不映射 `VAProfileH264MultiviewHigh(15)` / `VAProfileH264StereoHigh(16)`（走 `default: assert(0)` / 返回 -1）⇒ 客户端连 `vaCreateConfig` 都过不了。要支持需同时改 Mesa 枚举 + VA 前端 + 本驱动解析（subset SPS、prefix NAL、`nal_unit_type==20` 扩展 slice），而手上没有 MVC 样片做逐位验收（x264/ffmpeg 都不能编码 MVC）⇒ **不做，只记录** |
+| **D9** | **AVS / AVS+ / AVS2 / AVS2-10bit 解码** | 硬件有、客户端栈不可达 ⇒ 不做 | 特性表 `avs_support=1`、`avs_plus_support=1`、`avs2_support=1`、`avs2_main10_support=1`；但 libva 1.22 没有 AVS profile 枚举、Mesa VA 前端也无映射 ⇒ 没有客户端能调用，**不做** |
 
 ---
 
