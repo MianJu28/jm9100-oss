@@ -2,8 +2,9 @@
 
 ## 结论
 
-VP9 1080p 硬件解码 **7.1–8.5 fps → 81 fps**（净解码吞吐，`ffmpeg -f null`；含回读写文件的
-`/tmp/vadec` 是 53–57 fps，受客户端自身 3.1 MB/帧 的写盘与映射读限制）。
+VP9 1080p 硬件解码 **7.1–8.5 fps → 224 fps**（`ffmpeg -hwaccel_output_format vaapi`，
+不下载帧）；若命令不带 `-hwaccel_output_format vaapi`，ffmpeg 会把每帧下载回系统内存，
+走 0.28 GB/s 的 WC 映射读（1080p 约 10 ms/帧），测出来是 73–80 fps —— 那是另一条链。
 360p **63.4 → 160 fps**（同一口径）。解码输出与改动前逐字节相同。
 
 ## 根因链（全部用 `MWV207_DECTIME` 插桩证实，测完已删除）

@@ -1322,10 +1322,15 @@ initramfs 已刷并解包核对（`modinfo -F srcversion` 均为 `8DFC52…`）�
 
 实测（`/tmp/vadec` 含每帧写 3.1 MB 到文件，所以它比纯解码慢；ffmpeg `-f null` 是不回读的净吞吐）：
 
-| 场景 | 修前 | 修后 | 净吞吐（ffmpeg -f null） |
+| 场景 | 修前 | 修后（含回读写文件） | 不下载帧（`-hwaccel_output_format vaapi`） |
 |---|---|---|---|
-| VP9 360p | 63.4 fps | 300–320 fps | 160 fps |
-| VP9 1080p | 7.1–8.5 fps | 53–57 fps | **81 fps** |
+| VP9 360p | 63.4 fps | 300–320 fps | **433 fps** |
+| VP9 1080p | 7.1–8.5 fps | 53–57 fps | **224 fps** |
+
+口径说明：`ffmpeg -f null` 若不带 `-hwaccel_output_format vaapi`，每帧仍会 **下载回系统内存**
+（走 0.28 GB/s 的 WC 映射读，1080p 3.1 MB ≈ 10 ms/帧），测出来只有 73–80 fps —— 那仍是
+同一条"WC 读慢"链，不是解码器吞吐。不下载时的 224 fps 才是解码器真实能力
+（H.264 1080p 同口径 **259 fps**）。
 
 正确性：`tools/vp9-regression.sh` **18/18**；`tests/vp9-resize/`（B2 跨尺寸）**IDENTICAL**；
 `tests/vp9-intraonly/`（I-5/N18）逐帧 IDENTICAL；改动前后解码输出 `cmp` **逐字节相同**
