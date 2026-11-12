@@ -51,12 +51,13 @@ int main(int argc, char **argv)
    memset(p, 0xA5, bytes);                 /* 让页进来, 顺便测写 */
    for (int i = 0; i < 8; i++) memcpy(buf, p, bytes);   /* 预热 */
 
+   static volatile unsigned long long sink;
    double t0 = now_ms();
-   for (int i = 0; i < R; i++) memcpy(buf, p, bytes);
+   for (int i = 0; i < R; i++) { memcpy(buf, p, bytes); sink += ((unsigned char*)buf)[i & (bytes-1)]; }
    double tr = (now_ms()-t0)/R;
 
    t0 = now_ms();
-   for (int i = 0; i < R; i++) memcpy(p, buf, bytes);
+   for (int i = 0; i < R; i++) { memcpy(p, buf, bytes); sink += ((unsigned char*)p)[i & (bytes-1)]; }
    double tw = (now_ms()-t0)/R;
 
    /* 稀疏逐元素读: cached 时会比 memcpy 快; WC/uncached 时一样慢 */
@@ -66,8 +67,8 @@ int main(int argc, char **argv)
    for (int i = 0; i < R; i++) for (size_t k = 0; k < bytes/8; k += 64) acc += q[k];
    double tv = (now_ms()-t0)/R;
 
-   printf("domain=%s %s handle=%u %zu MB  读 %7.2f ms (%5.2f GB/s)  写 %7.2f ms (%5.2f GB/s)  稀疏读 %7.2f ms  首字节=%02x 校验=%llu\n",
-      dname, path, h, mb, tr, mb/tr*1000.0/1024.0, tw, mb/tw*1000.0/1024.0, tv,
+   printf("domain=%s %s handle=%u %zu MB (sink=%llu)  读 %7.2f ms (%5.2f GB/s)  写 %7.2f ms (%5.2f GB/s)  稀疏读 %7.2f ms  首字节=%02x 校验=%llu\n",
+      dname, path, h, mb, sink, tr, mb/tr*1000.0/1024.0, tw, mb/tw*1000.0/1024.0, tv,
       ((unsigned char*)p)[0], acc);
    fflush(stdout);
    munmap(p, bytes);
