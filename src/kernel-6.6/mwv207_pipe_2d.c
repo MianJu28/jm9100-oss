@@ -27,21 +27,6 @@
 
 #define DEFAULT_MAX_FREQ_2D 600
 
-/*
- * 2D 环形缓冲的"段头"布局。
- *
- * 厂商 KMD 在 j9_gelatinizable() 里把命令缓冲拼成 [byte16 计数][写寄存器][…][等待]，
- * 计数位于缓冲**第一个字**。我们原来的实现把它写在第二个字，前面多一个
- * 0x80000000。若硬件确实按"第一个字 = 长度"解析，多出来的那一个字会让引擎
- * 认为整段长度是 0x80000000 个 16 字节单元，于是什么也不做（实测：提交成功、
- * fence 置位，但目标缓冲一个字节都没变）。
- *
- * 该参数用于在不重启的前提下切换两种布局做 A/B：1=厂商布局（默认），0=旧布局。
- */
-static int hdr_mode = 0;
-module_param(hdr_mode, int, 0644);
-MODULE_PARM_DESC(hdr_mode, "2D 段头布局：1=计数在第一个字（厂商），0=计数在第二个字（旧）");
-
 #define wait_for(COND, MS) ({                                           \
 	unsigned long timeout__ = jiffies + msecs_to_jiffies(MS) + 1;   \
 	int ret__ = 0;                                                  \
@@ -396,15 +381,10 @@ mwv207_pipe_2d_submit(struct mwv207_pipe *mpipe, struct mwv207_job *mjob)
 	last_tail = pipe->tail;
 	pipe->tail = start;
 
-	if (hdr_mode) {
-		/* 厂商布局：第一个字留给长度，命令紧随其后 */
-		pipe->tail++;
-	} else {
-		*pipe->tail++ = 0x80000000;
-		pipe->tail++;
-		*pipe->tail++ = 0x80000000;
-		*pipe->tail++ = 0x80000000;
-	}
+	*pipe->tail++ = 0x80000000;
+	pipe->tail++;
+	*pipe->tail++ = 0x80000000;
+	*pipe->tail++ = 0x80000000;
 
 	memcpy_toio(pipe->tail, mjob->cmds, mjob->cmd_size);
 	pipe->tail += mjob->cmd_size >> 2;
@@ -430,10 +410,7 @@ mwv207_pipe_2d_submit(struct mwv207_pipe *mpipe, struct mwv207_job *mjob)
 		 * fence 已入队，由 ISR/reset 统一回收；本次提交报错交给上层。 */
 		return ERR_PTR(-EIO);
 	}
-	if (hdr_mode)
-		start[0] = pipe_2d_ptr_span(pipe->tail, start) / 16 - 1;
-	else
-		start[1] = pipe_2d_ptr_span(pipe->tail, start) / 16 - 1;
+	start[1] = pipe_2d_ptr_span(pipe->tail, start) / 16 - 1;
 
 	pipe_2d_wtol(pipe, start, wait);
 
