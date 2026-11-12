@@ -1211,12 +1211,14 @@ initramfs 已刷并解包核对（`modinfo -F srcversion` 均为 `8DFC52…`）�
 | **D1** | **VP9 解码** | **已完成：Profile0 + Profile2 均落地** | **Profile0 8bit** 已实现并上机验证（`mwv207_dec_vp9.c` 的切片/bool 解析 + `mwv207_video_dec.c` 的 `mwv207_dec_vp9_set_regs()` 分支；`tools/vp9-regression.sh` 18/18 逐位一致）。**Profile2（10bit 4:2:0）** 2026-11-10 完成（`82e7b02`，见 §1.6）：4 组样片与软件解码逐位一致、零 TDR。Profile1/3（4:2:2/4:4:4）定案不可实现——解码器没有色度采样格式选择字段 |
 | ~~D2~~ | ~~**H264 4:2:2 / 4:4:4**~~ | **已定案（2026-11-10）：不可实现** | 原 I-3 二选一已终结 —— 硬件只有 4:0:0/4:2:0，已收回声明（`a5a938b`），见 §1.5；`chroma_format_idc` 硬置保持 1，另加 `chroma_format_idc>1` 即跳过解码的防线 |
 | **D3** | **编码（H264/HEVC）** | 大（从零） | UMD 侧 `base.encode_bitstream` **从未安装**（全树 0 处）；KMD 有 `mwv207_pipe_enc.c`。硬件侧有 HEVC 编码证据（闭源串含 `jmenc/source/hevc/hevcencapi.c`） |
-| **D4** | 4 个未实现的扩展 opcode：`WAIT_GROUP_EVENT`(0x11) / `TD_OP`(0x12) / `TEX_INVALIDATE`(0x14) / `PRE_NORM`(0x15) | 小-中 | 厂商枚举齐全（`MWV207REG_SH_EXTENDED_OPCODE`），需逐个确定语义 |
+| ~~D4~~ | 4 个未实现的扩展 opcode（结论见下方 D4（结论）行）：`WAIT_GROUP_EVENT`(0x11) / `TD_OP`(0x12) / `TEX_INVALIDATE`(0x14) / `PRE_NORM`(0x15) | 小-中 | 厂商枚举齐全（`MWV207REG_SH_EXTENDED_OPCODE`），需逐个确定语义 |
 | **D5** | 开启三个窥孔 `OPT_DIV` / `OPT_FFMA` / `OPT_SET`（默认全关） | 小改动 + 大验证 | 潜在性能收益，需全量着色器回归 |
 | **D6** | 多视口 | 与 E8 同 | 取决于硬件是否支持（`GL_MAX_VIEWPORTS` 现报 0/1） |
 | **D7** | **Vulkan** | 不可达 | 官方 1.8.0 **也没有**（无 libvulkan / `vulkan/icd.d`；KMD 的 syncobj/vm_bind/gpuva/sparse 全 0）。官网"Vulkan 1.1"至今未交付 |
 | **D8** | **H.264 Multiview / StereoHigh 解码** | 硬件有、客户端栈不可达 ⇒ 不做 | 特性表 `mvc_support=1`、枚举里有 `JMDEC_MVC_E`；但 Mesa 24.1.2 的 `src/gallium/include/pipe/p_video_enums.h` **没有** MVC profile，`src/gallium/frontends/va/va_private.h` 的 `PipeToProfile()` / `ProfileToPipe()` 也不映射 `VAProfileH264MultiviewHigh(15)` / `VAProfileH264StereoHigh(16)`（走 `default: assert(0)` / 返回 -1）⇒ 客户端连 `vaCreateConfig` 都过不了。要支持需同时改 Mesa 枚举 + VA 前端 + 本驱动解析（subset SPS、prefix NAL、`nal_unit_type==20` 扩展 slice），而手上没有 MVC 样片做逐位验收（x264/ffmpeg 都不能编码 MVC）⇒ **不做，只记录** |
 | **D9** | **AVS / AVS+ / AVS2 / AVS2-10bit 解码** | 硬件有、客户端栈不可达 ⇒ 不做 | 特性表 `avs_support=1`、`avs_plus_support=1`、`avs2_support=1`、`avs2_main10_support=1`；但 libva 1.22 没有 AVS profile 枚举、Mesa VA 前端也无映射 ⇒ 没有客户端能调用，**不做** |
+| **D10** | **VPP（`scale_vaapi` / 色彩空间转换）** | **已可用，无需改驱动** | `vlVaCreateConfig(VAProfileNone, VAEntrypointVideoProc)` 走 Mesa VA 前端的通用 `vl_compositor` 路径（`src/gallium/frontends/va/postproc.c`），`context.c:345` 对 `PIPE_VIDEO_ENTRYPOINT_PROCESSING` **不创建驱动侧 codec**，所以 ours 不需要实现 video proc codec。实测（r31，1080p VP9 120 帧）：纯解码 **220.5 fps**、`scale_vaapi=w=1280:h=720` **170.9 fps**、`scale_vaapi=w=3840:h=2160` **97.3 fps**、`scale_vaapi=format=nv12` **216.5 fps** ⇒ 720p 缩放约 1.3 ms/帧、4× 面积缩放约 5.8 ms/帧，都是 3D 引擎在做 |
+| **D4（结论）** | 4 个扩展 opcode `WAIT_GROUP_EVENT`/`TD_OP`/`TEX_INVALIDATE`/`PRE_NORM` | 不做（死代码） | `grep -rn "WAIT_GROUP\|TEX_INVALIDATE\|PRE_NORM\|EXTENDED_OPCODE" src/` **零命中** ⇒ 本驱动编译器从不发射这四条，实现它们没有任何可观测收益；与 E3 同类，将来若做 compute/tessellation 后端再按需补 |
 
 ---
 
