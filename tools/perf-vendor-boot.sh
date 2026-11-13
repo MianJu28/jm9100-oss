@@ -21,7 +21,7 @@ runuser -u admin -- env \
     DISPLAY=:0 XAUTHORITY=/home/admin/.Xauthority \
     MESA_LOADER_DRIVER_OVERRIDE=jmgpu \
     LIBVA_DRIVER_NAME=jmgpu \
-    bash -lc 'cd /home/admin/jm9100-oss && ./tools/perf-suite.sh vendor'
+    bash -lc "cd /home/admin/jm9100-oss && timeout 900 ./tools/perf-suite.sh vendor"
 echo "---- suite rc=$? ----"
 touch /home/admin/perf-vendor.done
 
