@@ -37,7 +37,7 @@ VP9 1080p 解码 **220 fps**、H.264 234 fps、HEVC 269 fps（均不下载帧；
   结论：present 是结构性差距（厂商 2D 引擎/直接扫描出；我方 2D 死路、DE 平铺不可达），
   draw 密集差距在 present 与每 draw 的提交/拷贝，**不是 `u_threaded_context`**（试过，崩溃且收益低）。
 - **JPEG 取证大突破**（`077812b`）：用 kprobe 抓厂商 KMD 的 `dec_write_reg.isra.0`，
-  拿到完整的 502 条寄存器序列（`tools/vendor-capture/vendor-jpeg-regs.txt`）。 descubrimiento：
+  拿到完整的 502 条寄存器序列（`tools/vendor-capture/vendor-jpeg-regs.txt`）。 关键发现：
   厂商 `DEC_OUT_DIS=1`、不写任何显存输出面，解码走内部通路进 PPU（PPU 半尺寸输入 + 2x2 复制）。
   按其复刻后仍 `STRM_CORRUPTED` ⇒ 剩下的是缓冲区内容/布局，见
   `reports/JPEG-VENDOR-TRACE-20261113.md`。profile 不启用。
