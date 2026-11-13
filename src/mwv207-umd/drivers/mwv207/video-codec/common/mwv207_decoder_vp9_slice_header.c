@@ -330,10 +330,20 @@ setup_frame_size_with_refs(struct mwv207_strm_data *rb,
           * their own size.  Falling back to 0 here makes the tile-count
           * fields (which depend on the frame width) be read with the wrong
           * width and shifts the whole header by a bit or two. */
-         if (slice_header->pic_param_passed_width &&
-             slice_header->pic_param_passed_height) {
-            slice_header->width = slice_header->pic_param_passed_width;
-            slice_header->height = slice_header->pic_param_passed_height;
+         /* 该参考槽的真实尺寸优先（VP9 允许参考帧与当前帧不同尺寸，
+          * 由 HOR/VER_SCALE 做缩放）；槽尺寸未知时才退回调用方给的尺寸。 */
+         {
+            uint32_t slot = slice_header->active_ref_idx[i];
+
+            if (slot < 16 && slice_header->ref_slot_w[slot] &&
+                slice_header->ref_slot_h[slot]) {
+               slice_header->width = slice_header->ref_slot_w[slot];
+               slice_header->height = slice_header->ref_slot_h[slot];
+            } else if (slice_header->pic_param_passed_width &&
+                       slice_header->pic_param_passed_height) {
+               slice_header->width = slice_header->pic_param_passed_width;
+               slice_header->height = slice_header->pic_param_passed_height;
+            }
          }
 
          STREAM_TRACE("frame_widthRx", slice_header->width);

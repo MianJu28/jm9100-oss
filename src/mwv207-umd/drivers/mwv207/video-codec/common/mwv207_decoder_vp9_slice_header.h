@@ -688,6 +688,11 @@ struct mwv207_vp9_slice_header {
 
    uint32_t width; 
    uint32_t height;
+   /* 16 个参考槽的几何，由驱动在解析前填好：帧头里 frame_size_with_refs
+    * 的 use_prev_frame_size 位要求"沿用该参考帧的尺寸"，VP9 允许同一
+    * 码流里分辨率变化（官方 resize_inter 向量就是这么编的）。 */
+   uint32_t ref_slot_w[16];
+   uint32_t ref_slot_h[16];
    uint32_t pic_param_passed_width;
    uint32_t pic_param_passed_height;
    uint32_t scaled_width;

@@ -505,14 +505,19 @@ vp9_lin_blit_to_target(struct mwv207_video_decoder *decoder,
 static void
 vp9_program_pp(struct mwv207_video_reg_buf *reg_buf,
                struct mwv207_video_decoder *decoder,
-               struct pipe_video_buffer *target)
+               struct pipe_video_buffer *target,
+               uint32_t coded_w, uint32_t coded_h)
 {
    struct mwv207_video_dec *dec = decoder->decoder;
 
    if (dec->dec_param.pp_enabled) {
       mwv207_pp_unit_config ppu_ext_cfg[DEC_MAX_PPU_COUNT] = {0};
-      uint32_t in_width = align(decoder->base.width, 16);
-      uint32_t in_height = align(decoder->base.height, 16);
+      /* in 尺寸是解码单元的像素几何（可能小于/大于 surface：分辨率
+       * 中途变化的码流、以及 >8bit 走 8bit 输出时都会不同），out 尺寸由
+       * outsurface 决定；两者不同时 PPU 负责缩放（见 mwv207_dec_ppu.c
+       * 的 HOR/VER_SCALE_MODE 分支）。 */
+      uint32_t in_width = align(coded_w ? coded_w : decoder->base.width, 16);
+      uint32_t in_height = align(coded_h ? coded_h : decoder->base.height, 16);
 
       mwv207_dec_pp_params_init(dec, ppu_ext_cfg, dec->dec_param.bit_depth,
                                 target);
@@ -1259,6 +1264,13 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
 
    sh->pic_param_passed_width = width;
    sh->pic_param_passed_height = height;
+   /* 参考槽的真实几何：码流允许 int​er 帧沿用参考帧的尺寸（VP9 的
+    * frame_size_with_refs），容器/surface 尺寸可能已经在中途变了，
+    * 不能拿它当帧尺寸。 */
+   for (uint32_t i = 0; i < 16; i++) {
+      sh->ref_slot_w[i] = st->ref_slot_w[i];
+      sh->ref_slot_h[i] = st->ref_slot_h[i];
+   }
    memcpy(sh->mb_ref_lf_delta, st->lf_ref_delta, sizeof(sh->mb_ref_lf_delta));
    memcpy(sh->mb_mode_lf_delta, st->lf_mode_delta, sizeof(sh->mb_mode_lf_delta));
    if (!st->ctx_ready) {
@@ -1386,6 +1398,13 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
       st->tile_off[0] = tile_off;
       st->tile_len[0] = tile_len;
    }
+
+   if (debug_get_bool_option("MWV207_VP9SIZE", false))
+      fprintf(stderr, "[SZ] %ux%u show=%u exist=%u key=%u intra=%u refresh=0x%02x"
+              " ref=%u/%u size=%u\n", sh->width, sh->height, sh->show_frame,
+              sh->show_existing_frame, sh->key_frame, sh->intra_only,
+              sh->refresh_frame_flags, st->ref_slot_w[sh->active_ref_idx[0]],
+              st->ref_slot_h[sh->active_ref_idx[0]], stream_len);
 
    memcpy(st->scratch_cpu + VP9_PROB_OFFSET, &sh->entropy,
           VP9_PROB_TABLE_SIZE);
@@ -1786,7 +1805,7 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
             }
          }
       }
-      vp9_program_pp(reg_buf, decoder, pp_target);
+      vp9_program_pp(reg_buf, decoder, pp_target, sh->width, sh->height);
    }
 
    if (sh->log2_tile_columns || sh->log2_tile_rows) {

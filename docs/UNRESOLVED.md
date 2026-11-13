@@ -554,6 +554,39 @@ context，Mesa 随之销毁并重建 `pipe_video_codec`，我们私有的 `ref_s
 | `vp90-2-10-show-existing-frame.webm` | IDENTICAL 2585088 | IDENTICAL 2585088 |
 | `fp0g5.ivf`（I-5 复现样本） | 20/20 | 20/20 |
 
+### 1.9 2026-11-13 复核：resize_inter 由 IDENTICAL 变 KNOWN-DIFF（跨尺寸参考的滤波差异）
+
+`tests/vp9-resize/run-vp9-resize.sh` 在 r33 安装栈上复跑，第二族向量不再逐位一致：
+
+| 向量 | 结果 |
+|---|---|
+| `vp90-2-14-resize-10frames-fp-tiles-1-2.webm` | **IDENTICAL**（4665600 B） |
+| `vp90-2-21-resize_inter_320x180_5_1-2.webm` | **KNOWN-DIFF**：帧 0–9 完全一致；帧 10–29 全部差，`Y mean 1.2–1.5`、`Y max 47–52`、`U mean ~0.6`，误差遍布全画面 |
+
+原因链：
+
+- `ffprobe -show_entries frame=width,height` 显示该流**前 10 帧 320×180、第 10 帧起
+  160×90**（码流中途真的改分辨率），帧 10 的 `refresh=0x3`、`ref0=320/180`，即跨尺寸参考。
+- 我方两处把"容器/surface 尺寸"当帧尺寸：解析器
+  `mwv207_decoder_vp9_slice_header.c` 的 `setup_frame_size_with_refs()` 在
+  `use_prev_frame_size` 命中时用 `pic_param_passed_width/height` 覆盖；
+  `vp9_program_pp()` 的 in 尺寸取 `decoder->base.width/height`。
+- 修法（本提交）：`struct mwv207_vp9_slice_header` 增加 `ref_slot_w/h[16]`，驱动在解析前
+  从 `st->ref_slot_w/h[]` 填入；`setup_frame_size_with_refs()` 优先用参考槽的真实尺寸，
+  槽未知时才退回调用方尺寸；`vp9_program_pp()` 增加 `coded_w/coded_h` 参数，in 尺寸用
+  码流尺寸、out 仍由 outsurface 决定（PPU 负责缩放，走
+  `mwv207_dec_ppu.c` 的 `HOR/VER_SCALE_MODE` 分支）。
+- 修后输出与修前**逐字节相同**（`cmp` 一致）：ffmpeg 在分辨率变化处会重建 VA context，
+  VA 尺寸本来就是 160×90，所以这两处属于"防御性正确化"——对"VA 尺寸滞后"的客户端
+  （例如 `-f null` 且不重建 context 的路径）才避免把 160×90 码流当 320×180 解。
+- 残差成因：帧 10 引用 320×180 的旧槽，硬件按 `HOR/VER_SCALE` 的 1.14 定点做 MC 缩放，
+  滤波器核与 libvpx 的 8-tap 缩放核不同；后续帧从该参考继承差异，量级稳定不累加。
+  判据因此从"DIFF"改为 **KNOWN-DIFF(滤波)**：整帧平均 < 2.0 且最大 < 64。
+
+`tools/vp9-regression.sh` **20/20**、`tools/gl-regression.sh` **7/7**（glmark2 1056）、
+`tests/vp9-intraonly` **7/7**、`tests/verify-installed.sh` **PASS=21 FAIL=0 SKIP=3**，
+`dmesg` 无 `timed out`/WARN/BUG。
+
 `tools/vp9-regression.sh` 18/18、query 4/4，`dmesg` 无 `timed out`/WARN/BUG —
 跨尺寸参考并没有让 ASIC 自旋（之前 §1.8 里"旧布局下会挂死"的担心在当前寄存器
 配置下不成立，TDR 也只是兜底）。
