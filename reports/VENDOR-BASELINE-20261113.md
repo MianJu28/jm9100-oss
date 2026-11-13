@@ -67,3 +67,23 @@ VAProfileVP9Profile0 / Profile2            : VLD
 
 ⇒ **硬件 JPEG baseline 解码在本 SKU 上是可用的**，我方此前遇到的 `DEC_ERROR_INT(0x10102)+TDR`
 是寄存器编程细节问题，不是硬件缺失。这一项可以从"不可实现"改回"待解决"，且厂商输出可作参考。
+
+## 复跑（2026-11-13 15:49，安装栈 r35）
+
+同一套 `tools/perf-suite.sh oss-r35`，结果 `~/perf-oss-r35.txt`。与 r31 那次相比属同一量级，
+注意这一次**桌面上开着 Firefox**（`top` 里 firefox 占 73% CPU、load average 5.3），
+所以 draw/解码类数字偏保守，present 与像素带宽不受影响：
+
+| 项 | r35（15:49，有 Firefox） | r31（11:13，空桌面） |
+|---|---|---|
+| glmark2 | 1062 | 1039 |
+| build / texture / shading / bump / conditionals | 1563 / 1234 / 1359 / 1611 / 1242 | 1532 / 1236 / 1362 / 1610 / 1245 |
+| jellyfish / shadow / pulsar | 689 / 768 / 1388 | 670 / 772 / 1396 |
+| present 300² / 800×600 / 1080p | 0.151 / 0.508 / 1.593 ms | 0.186 / 0.501 / 1.569 ms |
+| SubData / map READ / map WRITE（4 MB） | 12.88 / 13.40 / 11.91 GB/s | 12.59 / 10.07 / 12.11 GB/s |
+| glReadPixels 1024² / 2048² | 4.30 / 12.61 ms | 4.27 / 11.05 ms |
+| VP9 / H.264 / HEVC 解码 1080p | 131.6 / 238.6 / 267.0 fps | 217.0 / 233.2 / 238.4 fps |
+| scale_vaapi 720p | 128.7 fps | 171.6 fps |
+
+VP9 解码那两项的差异来自 Firefox 抢 CPU（同一份代码在 r34 上单独测仍是 215.8 fps），
+不是回归；要干净的解码数字需关掉图形负载重跑。
