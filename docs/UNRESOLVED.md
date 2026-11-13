@@ -1,14 +1,17 @@
 # 未修复缺陷与未实现功能 · 总清单
 
-> 汇总截至 **2026-11-13 01:50**（运行中的 UMD 是 **r31**（`payload-46/VERSION =
-> 24.1.2-fullstack-r31`，2026-11-13 01:12 安装；DRI `e909cf0839d5b587ad9395f90ed3b12a`、
-> VA `ce204acb2a97c1b96bd46aff07efc728`）。r31 含：修法 1（VP9 参考槽别名 + MV 双缓冲）、
-> 修法 3（纹理上传暂存复用）、修法 4（buffer 改放 GTT）、回读缓冲复用、
+> 汇总截至 **2026-11-13 12:40**（运行中的 UMD 是 **r33**（`payload-46/VERSION =
+> 24.1.2-fullstack-r33`，2026-11-13 12:35 安装；DRI `568baf7f566f3a0b478a59533fd590f4`、
+> VA `f26ab271d71ad005b9a0c38a6f0ca780`）。r33 在 r32 基础上新增：`show_existing`
+> 重放帧改走线性副本（官方 intra-only 向量 7/7 逐字节一致）。r32 含 N19
+> （PERSISTENT/UNSYNCHRONIZED buffer 不再误等）；r31 含：修法 1（VP9 参考槽别名 +
+> MV 双缓冲）、修法 3（纹理上传暂存复用）、修法 4（buffer 改放 GTT）、回读缓冲复用、
 > `mwv207_video_buffer.h` 守卫修复、JPEG 三缓冲 SOI 判定修复。
 > 内核 `6.6.155-arm64-desktop-hwe` 侧运行中 srcversion `C588E9673F984406AF46A2F`
 > （20 处 `BUG_ON` 收敛 + N16 + N4 异步 DMA/K11 + N17 引用计数 + DE `peek` 只读口）；
 > `tests/verify-installed.sh C588E9673F984406AF46A2F` → PASS=21 FAIL=0 SKIP=3，
-> `tools/gl-regression.sh`（安装栈）→ pass=7 fail=0，`tools/vp9-regression.sh` → pass=19 fail=0。
+> `tools/gl-regression.sh`（安装栈）→ pass=7 fail=0（glmark2 1069），`tools/vp9-regression.sh`
+> → pass=20 fail=0，`tests/vp9-intraonly/run-vp9-intraonly.sh` → 7/7 IDENTICAL。
 >
 > **性能基线（r31 安装栈）**：`glmark2 -b :duration=2` **1039–1046**；present 300×300
 > 0.17 ms/帧、1080p 1.54 ms；纹理上传（1024²/小块）**0.05 ms/次**、buffer `glBufferSubData`

@@ -6,9 +6,9 @@
 
 ## 1. 当前状态（一句话）
 
-**r32 已部署并验收通过**：活动栈 `oss-24.1.2-fullstack-r32`（`payload-46`，2026-11-13 11:04
-安装，快照 `20261113-110411`，安装目录 219M）；DRI `ef947a5bb24fb65926e2f1314ce3979f`、
-VA `e06fe9b94d3da4a681750c80eb27085b`，与 `payload-46/` 内文件一致。自建 KMD 在跑
+**r33 已部署并验收通过**：活动栈 `oss-24.1.2-fullstack-r33`（`payload-46`，2026-11-13 12:35
+安装，快照 `20261113-123505`，安装目录 219M）；DRI `568baf7f566f3a0b478a59533fd590f4`、
+VA `f26ab271d71ad005b9a0c38a6f0ca780`，与 `payload-46/` 内文件一致。自建 KMD 在跑
 （srcversion `C588E9673F984406AF46A2F`，唯一维护内核 `6.6.155-arm64-desktop-hwe`；
 6.6.143 的 headers 残缺，已停止维护）。
 
@@ -18,8 +18,9 @@ VA `e06fe9b94d3da4a681750c80eb27085b`，与 `payload-46/` 内文件一致。自�
 | 命令 | 结果 |
 |---|---|
 | `tests/verify-installed.sh C588E9673F984406AF46A2F` | PASS=21 FAIL=0 SKIP=3（SKIP 需 root） |
-| `DRI_DIR=/usr/local/lib/mwv207-oss tools/gl-regression.sh` | pass=7 fail=0（glmark2 1068） |
+| `DRI_DIR=/usr/local/lib/mwv207-oss tools/gl-regression.sh` | pass=7 fail=0（glmark2 1069） |
 | `tools/vp9-regression.sh` | pass=20 fail=0 |
+| `tests/vp9-intraonly/run-vp9-intraonly.sh` | 7/7 IDENTICAL（含 3 个 `show_existing` 重放帧） |
 
 **性能基线（r31，同机同口径）**：`glmark2 -b :duration=2` **1039–1046**；
 present 300×300 0.17 ms/帧（≈5900 FPS）、800×600 0.51 ms、1080p 1.54 ms；
@@ -27,6 +28,13 @@ present 300×300 0.17 ms/帧（≈5900 FPS）、800×600 0.51 ms、1080p 1.54 ms
 **0.30 ms（12.9 GB/s）**、`glMapBufferRange` 读 0.33 ms（修法 4 前 2.10 / 24.78 ms）；
 VP9 1080p 解码 **220 fps**、H.264 234 fps、HEVC 269 fps（均不下载帧；修法 1 前 VP9 8 fps）；
 `glReadPixels` 4 MB 4.8 ms（瓶颈是 DMA 引擎约 2 GB/s，见 UNRESOLVED §4）。
+
+**r33 新增（2026-11-13 深夜）：`show_existing` 重放帧黑图已修**（`80150c5`）。PPU 只有输出
+地址、没有输入 base，关掉 `DEC_E` 的重放帧拿不到画面。改为让不可见帧（`show_frame=0`）
+的 PPU 输出直接写进一份 NV12 `PIPE_USAGE_STAGING` 线性副本（GTT，CPU 读得动），参考槽
+只记映射，重放时 CPU 逐行拷进 surface；`ffmpeg` 这类连不可见帧也输出的客户端，作业完成
+后再把副本拷回。官方 intra-only 向量 7 帧（含 3 个重放帧）与 libvpx 全部逐字节一致，
+`MWV207_VP9_REPLAY_LINEAR=0` 可退回。至此 `docs/UNRESOLVED.md` 里没有已知的、可修的功能缺陷。
 
 2026-11-13 晚间新增（r32 之后，仅文档与工具，驱动二进制未变）：
 - **N19 已修**（`8822f43`，r32）：`mwv207_transfer_map()` 对
