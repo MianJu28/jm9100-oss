@@ -103,3 +103,48 @@ ffmpeg -hwaccel vaapi -vaapi_device /dev/dri/renderD128 -i t1080.jpg \
 - 被搁置的实现代码放在 `~/jpeg-parked/`（`mwv207_dec_jpeg.{c,h}`），未进仓库。
 - 下一步优先级更高的替代项：VP9 `show_existing` 重放帧（决定 PPU 独立启动或 CPU tiled→线性），
   它影响的是已声明功能，用户可见。
+
+## 6. 2026-11-13 15:00–15:35 最后一轮：拿到厂商 DEC 窗口全文
+
+### 6.1 厂商的寄存器写入方式（此前一直没看清）
+
+- `jmgpu_drv_video.so` **不用 ioctl 逐条写寄存器**，而是让 KMD 在 `ioctl(_IOC(_IOC_NONE,0x65,0xc,0),0)`
+  里把 16 KB 的 DEC 窗口装进进程地址空间，之后用普通内存写。
+- 佐证：整次 1080p JPEG 解码只有 **69 个 ioctl**（31 个在 `/dev/jmgpu` 上、全是 8 字节结构；2 个在
+  DRM 节点上；其余是 `fd=3` 的 `0x7530`）；`strace` 里**没有任何 `MAP_SHARED` 映射**，拦 `mmap`
+  也拿不到它（映射由 KMD 在 ioctl 内部建立，`/proc/self/maps` 才可见）。
+- 新工具 `tools/vendor-capture/vfollow.c`：拦 `ioctl`，对 8 字节参数跟它的用户指针读窗口内容，
+  直接落盘。产物 `tools/vendor-capture/vendor-jpeg-window.{bin,txt}`（16 KB，201 个非零字）。
+
+### 6.2 窗口与之前的 501 条 trace 的差别
+
+| word | 厂商 JPEG | 厂商 H.264 | 我方 |
+|---|---|---|---|
+| `0x004` | `0x00000001`（DEC_E=1） | `0x1` / 完成后 `0x1100` | 同 |
+| `0x008` | **`0x00003400`** = `DEC_CLK_GATE_E(4b@12)=3` + `TILED_MODE_LSB(bit10)=1` | `0x00003480`（+ `DRM_E(bit7)=1`） | `CLK_GATE_E=1`、TILED 未设 |
+
+（kprobe 的 501 条从 `0x00c` 开始，所以长期以来 `0x008` 这一字从未被比较。）
+
+其它从窗口读到的值：`STREAM_BASE` 可以不 16 字节对齐（第二帧 `0x0cf7a722`）；`QTABLE_BASE`
+4 KB 对齐（`0x00ce4000`）；PPU 的 luma/chroma 输出在**两块不同缓冲**（`0x0cc61000` /
+`0x0ce5f000`），stride 都是 `0x780`；`0x524 = 0x07800780`。
+
+### 6.3 把 `0x008` 做成开关后跑矩阵
+
+代码里加 `MWV207_JPEG_CLKGATE`（默认 3）、`MWV207_JPEG_TILED`（默认 1）、`MWV207_JPEG_DRM`
+（默认 0），8 种组合 × 三种尺寸（1920×1080 / 320×240 / 64×64）：
+
+**全部 `nz=0`（输出面全零）、`irq state reg 0x00010102`、2 s TDR**（`dmesg` 累计 63 次）。
+
+### 6.4 排除了"JPEG 走另一个核"
+
+厂商 KMD `jmgpu_remote.c:141` 的 `dec_subsys_array[]` 是 `0x930000 / 0x950000 / 0x940000`
+三个 DEC 实例，每个实例的 `HW_DECODER` 窗口 `503*4 = 2012 B`（`0x00..0x7d8`）就是我们对齐的那块；
+本机 `peek 0x930000 = 0x950000 = 0x80018000`、`0x940000 = 0xffffffff`。
+
+### 6.5 结论
+
+寄存器窗口（含 `0x004/0x008`）、544 B 辅助表、ECS 字节、长度、放置域全部对齐厂商后，硬件仍然
+`STRM_CORRUPTED + DEC_ERROR_INT` 并 TDR ⇒ 启动条件在厂商闭源 KMD/UMD 的提交路径里，我们没有
+信息复现。**JPEG baseline 解码不实现**；实现与全部开关放 `~/jpeg-parked/`，取证工具与窗口样本
+已入仓（`tools/vendor-capture/`）。

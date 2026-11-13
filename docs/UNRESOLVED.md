@@ -93,7 +93,7 @@ modinfo /lib/modules/…/updates/dkms/…    -> srcversion 0EFB7F4433EA5311B08E8
 | 5 | KMD | 只剩 N10（决定只文档化） | K9-① 已核实为与厂商一致（非缺陷）；N10 改为只记录 | 本文 §2.3 |
 | 6 | 切换脚本 | **vendor 态端到端已实跑（2026-11-13）** | 两次切栈（`stack vendor` 跑 `tools/perf-suite.sh vendor` 与 kprobe 抓寄存器、`stack oss` 切回）均成功，`/run/mwv207-stack-result` 与 `lsmod` 正确；热切换仍不可行（模块 refcnt 恒 2），脚本会自动走重启释放 | `switch-mwv207.sh` / §5 |
 | 7 | 打包 | **DKMS 一致性警告（2026-11-13 已修）** | 根因是 `kmd stage` 只覆盖 `/lib/modules/$KVER/updates/dkms/mwv207.ko`，而 `dkms status` 拿它和 `/var/lib/dkms/mwv207-oss/1.0.0/$KVER/$arch/module/mwv207.ko` 比较。现在 `kmd_place_module()` 会把同一份字节同步写进 DKMS 构建产物目录（目录不存在时跳过），status 保持干净；`tools/dkms-sync.sh` 仍可用于全量重建 | §2.1、§5 |
-| 8b | 功能/UMD | **JPEG baseline 解码：寄存器/表/流已 100% 对齐厂商，仍 `STRM_CORRUPTED`（2026-11-13 深夜）** | 厂商 `vainfo` 有 `VAProfileJPEGBaseline : VAEntrypointVLD` 且 `ffmpeg -hwaccel vaapi -i t1080.jpg` 成功出图（输出 limited range）；我方实现让 DEC 进 `DEC_ERROR_INT` + 2 s TDR、输出面零字节。寄存器编程细节问题，有厂商输出可做基准 | 本文 §4「JPEG baseline 解码调研」 |
+| 8b | 功能/UMD | **JPEG baseline 解码：厂商 DEC 窗口全文已取到，`0x008` 差异也试完，仍 `STRM_CORRUPTED`（2026-11-13 15:35 收口）** | 厂商 `vainfo` 有 `VAProfileJPEGBaseline : VAEntrypointVLD` 且 `ffmpeg -hwaccel vaapi -i t1080.jpg` 成功出图（输出 limited range）；我方实现让 DEC 进 `DEC_ERROR_INT` + 2 s TDR、输出面零字节。寄存器编程细节问题，有厂商输出可做基准 | 本文 §4「JPEG baseline 解码调研」 |
 | 8c | 性能/UMD | **N19：client-array 的 buffer map 每 draw 强制提交+无限等待（2026-11-13 已修并随 r32 部署验证）** | 改前 VBO 0.45 µs/draw、client arrays 26–44 µs/draw；根因是 `mwv207_transfer_map()` 对 `PERSISTENT`/`UNSYNCHRONIZED` 的写映射也按 `valid_buffer_range` 相交就等待（Mesa 的 1 MB 常量环每帧换区间，恒相交）。改为 CPU 管理的映射不做等待后 **0.42 µs/draw（约 60×）**，`ubosync`/`uborace` 逐帧写读校验 PASS | 本文 §4「每 draw CPU 与 present 拷贝」 |
 | 8 | 性能 | **已量化并关闭（2026-11-13）** | buffer 改放 GTT 后 `glBufferSubData` 4 MB 0.30 ms（12.9 GB/s）、`glMapBufferRange` 读 0.33 ms；create（写入）路径本身有 `mwv207_wait_resource` 等 GPU 吃完，但 glmark2 buffer/build/jellyfish 场景 A/B 无回退（655/655、1526/1522、666/686） | 本文 §4 性能 |
 | 9 | 依赖补丁 | `loader_dri3` buffer age 恒 0 只在本地 mesa 树提交 | 未推厂商镜像；重建 mesa 时需保留 | `ref/oh-mesa` `248659c` |
@@ -1628,6 +1628,35 @@ staging BO 的页面，拿到 ECS/表的确切字节。
 下一步必须拿**厂商自己的 BO 页面内容 + 完整提交序列**：在厂商栈上用 LD_PRELOAD 拦
 `mmap`、退出时 dump 512 B–2 MB 的映射，再配合已入仓的 kprobe 寄存器序列做交叉验证
 （需要切栈重启两次，即 `stack vendor` → 抓 → `stack oss`）。
+
+#### 最后一轮取证（2026-11-13 15:00–15:35）：拿到厂商 DEC 窗口全文，仍未找到启动条件
+
+1. **厂商不是用 ioctl 写寄存器，而是把 16 KB 的 DEC 窗口 mmap 进用户态做普通内存写**
+   —— 这解释了两件事：`strace` 里整次 JPEG 解码只有 69 个 ioctl（31 个在 `/dev/jmgpu`
+   上、都是 8 字节结构，2 个在 DRM 节点上），且拦 `mmap` 也看不到映射（映射是 KMD 在
+   `ioctl(0x650c)` 里建立的，不产生 `mmap` 系统调用，`/proc/self/maps` 里才可见）。
+   新工具 `tools/vendor-capture/vfollow.c`：拦 ioctl，跟它传的用户指针把窗口内容读出，
+   得到 `tools/vendor-capture/vendor-jpeg-window.{bin,txt}`（16 KB，201 个非零字）。
+2. **窗口里唯一与之前 501 条不同的字是 `0x008`**（kprobe 那张表从 `0x00c` 才开始，所以
+   一直没比到它）：
+   | word | 厂商 JPEG | 厂商 H.264 | 我方（r35 前代码） |
+   |---|---|---|---|
+   | `0x004` | `0x00000001` (DEC_E) | `0x1` / `0x1100` | 同 |
+   | `0x008` | **`0x00003400`** = `CLK_GATE_E(4b@12)=3` + `TILED_MODE_LSB(bit10)=1` | `0x00003480`（同上 + `DRM_E(bit7)=1`） | `CLK_GATE_E=1`、TILED 不设 |
+   另外从窗口读出：`STREAM_BASE` 可以**不 16 字节对齐**（第二帧 `0x0cf7a722`）；`QTABLE_BASE`
+   4 KB 对齐；PPU 的 Y/C 输出在**两块独立缓冲**（`0x0cc61000` / `0x0ce5f000`，stride 均 `0x780`）。
+3. **把 `0x008` 做成现场开关并跑完矩阵**（`MWV207_JPEG_CLKGATE` / `MWV207_JPEG_TILED` /
+   `MWV207_JPEG_DRM`，8 种组合、1080p/320×240/64×64 三种尺寸）：
+   **全部 `nz=0`、`irq state reg 0x00010102`、2 s TDR**（`dmesg` 累计 63 次）。
+4. 厂商 KMD 的 `dec_subsys_array[]`（`~/vendor-src/usr/src/mwv207-1.8.0.uos/jmgpu_remote.c:141`）
+   显示 DEC 有三个实例（`0x930000` / `0x950000` / `0x940000`），本机 `peek` 到
+   `0x930000` 与 `0x950000` 都是 `0x80018000`（两个可用 DEC）、`0x940000 = 0xffffffff`；
+   每个实例的 `HW_DECODER` 窗口就是我们已对齐的 `503*4 = 2012 B`（`0x00..0x7d8`），
+   不是"JPEG 走另一个核"。
+5. ⇒ **最终结论：本 SKU 的 JPEG 解码需要在 `DEC_E` 之外由厂商闭源 KMD/UMD 联手做的某个
+   准备动作（寄存器窗口与码流/表内容都已 100% 对齐仍 `STRM_CORRUPTED`），我们没有足够信息
+   复现。不实现**，只在 `~/jpeg-parked/` 保留实现（含 vendor 模式、`0x008` 开关、CTRL1 编码
+   修正），实现细节与证据链留在 `reports/JPEG-VENDOR-TRACE-20261113.md` 与本文件。
 
 
 保留的两处真修复（与 JPEG 无关，随本次提交上）：
