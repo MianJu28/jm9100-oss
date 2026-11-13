@@ -4,64 +4,53 @@
 > 本文档随进度更新；未修问题权威清单在 `docs/UNRESOLVED.md`（含 2026-11-10 的 §0.1 速览）。
 > VP9 专项见 `docs/HANDOVER-VP9.md`。
 
-## 1. 当前状态（一句话）
+## 1. 当前状态（2026-11-13 16:00）
 
-**r33 已部署并验收通过**：活动栈 `oss-24.1.2-fullstack-r33`（`payload-46`，2026-11-13 12:35
-安装，快照 `20261113-123505`，安装目录 219M）；DRI `568baf7f566f3a0b478a59533fd590f4`、
-VA `f26ab271d71ad005b9a0c38a6f0ca780`，与 `payload-46/` 内文件一致。自建 KMD 在跑
+**r35 已部署并验收通过**：活动栈 `oss-24.1.2-fullstack-r35`（`payload-46`，2026-11-13 15:32
+安装，快照 `20261113-153239`，安装目录 219M）；DRI `30a1b18130d4d8a9efa6b28750256e6c`、
+VA `a93bb6af1e75bb0fc7dc48236e129af1`，与 `payload-46/` 内文件一致。自建 KMD 在跑
 （srcversion `C588E9673F984406AF46A2F`，唯一维护内核 `6.6.155-arm64-desktop-hwe`；
-6.6.143 的 headers 残缺，已停止维护）。
+6.6.143 的 headers 残缺，已停止维护）。桌面零 env 下 GL 4.0 / GLES 3.2 / `Video memory: 2048MB`；
+OpenCL/VA-API/VDPAU 全走本栈。
 
-桌面零 env 下 GL 4.0 / GLES 3.2 / `Video memory: 2048MB`；OpenCL/VA-API/VDPAU 全走本栈。
 验收命令（2026-11-13 实跑，全绿）：
 
 | 命令 | 结果 |
 |---|---|
 | `tests/verify-installed.sh C588E9673F984406AF46A2F` | PASS=21 FAIL=0 SKIP=3（SKIP 需 root） |
-| `DRI_DIR=/usr/local/lib/mwv207-oss tools/gl-regression.sh` | pass=7 fail=0（glmark2 1069） |
+| `DRI_DIR=/usr/local/lib/mwv207-oss tools/gl-regression.sh` | pass=7 fail=0（glmark2 1063–1069） |
 | `tools/vp9-regression.sh` | pass=20 fail=0 |
 | `tests/vp9-intraonly/run-vp9-intraonly.sh` | 7/7 IDENTICAL（含 3 个 `show_existing` 重放帧） |
+| `tests/vp9-resize/run-vp9-resize.sh` | 1 IDENTICAL + 1 KNOWN-DIFF（滤波核差异，§1.9） |
 
-**性能基线（r31，同机同口径）**：`glmark2 -b :duration=2` **1039–1046**；
-present 300×300 0.17 ms/帧（≈5900 FPS）、800×600 0.51 ms、1080p 1.54 ms；
-纹理上传 1024²/小块 **0.05 ms/次**（修法 3 前 5–15 ms）；buffer `glBufferSubData` 4 MB
-**0.30 ms（12.9 GB/s）**、`glMapBufferRange` 读 0.33 ms（修法 4 前 2.10 / 24.78 ms）；
-VP9 1080p 解码 **220 fps**、H.264 234 fps、HEVC 269 fps（均不下载帧；修法 1 前 VP9 8 fps）；
-`glReadPixels` 4 MB 4.8 ms（瓶颈是 DMA 引擎约 2 GB/s，见 UNRESOLVED §4）。
+**性能基线（r35，关掉 Firefox 的干净环境，`~/perf-oss-r35-clean.txt`）**：
+`glmark2 -b :duration=2` **1290**；glxgears **6527 FPS**；present 300×300 **0.068 ms/帧**、
+800×600 0.352 ms、1080p 1.388 ms；纹理上传 1024²/小块 **0.02 ms/次**（修法 3 前 5–15 ms）、
+1024² 全张 1.27 ms；buffer `glBufferSubData` 4 MB **0.30 ms（13.2 GB/s）**、`glMapBufferRange`
+读 **0.26 ms（14.9 GB/s）**（修法 4 前 2.10 / 24.78 ms）；`glReadPixels` 4 MB 3.54 ms（DMA 引擎
+约 2 GB/s 的下限）；解码 1080p（不下载帧）**VP9 161 / H.264 304 / HEVC 311 fps**、
+`scale_vaapi` 1080p→720p **145 fps**。同口径厂商（`reports/VENDOR-BASELINE-20261113.md`）：
+glmark2 5075、build 14537 vs 我方 1930、present 0.014 ms（异步口径，不可直接比）、
+H.264 259 / HEVC 270 / VP9 143 —— **解码已持平或反超**，差距集中在 draw 密集场景的
+present 与每帧固定路径（详见下）。
 
-**r33 新增（2026-11-13 深夜）：`show_existing` 重放帧黑图已修**（`80150c5`）。PPU 只有输出
-地址、没有输入 base，关掉 `DEC_E` 的重放帧拿不到画面。改为让不可见帧（`show_frame=0`）
-的 PPU 输出直接写进一份 NV12 `PIPE_USAGE_STAGING` 线性副本（GTT，CPU 读得动），参考槽
-只记映射，重放时 CPU 逐行拷进 surface；`ffmpeg` 这类连不可见帧也输出的客户端，作业完成
-后再把副本拷回。官方 intra-only 向量 7 帧（含 3 个重放帧）与 libvpx 全部逐字节一致，
-`MWV207_VP9_REPLAY_LINEAR=0` 可退回。至此 `docs/UNRESOLVED.md` 里没有已知的、可修的功能缺陷。
+已关闭的实质项（每一项都有提交、探针与文档，细节在 `docs/UNRESOLVED.md`）：
+- 功能：VP9 Profile0/Profile2（含 show_existing 重放帧、跨尺寸参考）、HEVC Main/Main10、
+  H.264 8bit（含 High10 明确拒绝）、VPP（`scale_vaapi` 原生可用）、12bit VP9 明确报错拒绝、
+  JPEG baseline 判定为需闭源 HAL（见 §1.10）。
+- 健壮性：N1/N2/N4/N9/N14/N16/N17/N19、20 处 `BUG_ON` 收敛、K9/K11/K12。
+- 性能：VP9 解码 8.4→220 fps（修法 1）、纹理上传 5–15 ms→0.03 ms（修法 3）、
+  buffer 6–80×（修法 4）、client-array 每 draw 26–44 µs→0.42 µs（N19）、
+  present 1.9–2.1×（glamor blit 补丁）、窗口平铺/线性影子（jellyfish 2.9×）。
+- 判定为硬件/闭源边界、不再投入：2D 引擎（启动位依赖未发布函数）、DE 平铺扫描出
+  （`DCREG_FRAME_BUFFER_CONFIG` 在本机镜像不可达）、JPEG baseline（`DEC_E` 之外还有未公开
+  启动条件）、编码（本 SKU `has_enc=0`）、Vulkan（无驱动无 ICD）、MVC/AVS（Mesa/libva 无
+  profile 可达）、多视口（硬件能力未知）、12bit VP9（P010 路径止于 10bit）、
+  Firefox WebGL 帧时间（WebRender 调度，不在 GL 侧）。
 
-2026-11-13 晚间新增（r32 之后，仅文档与工具，驱动二进制未变）：
-- **N19 已修**（`8822f43`，r32）：`mwv207_transfer_map()` 对
-  `PIPE_MAP_PERSISTENT`/`UNSYNCHRONIZED` 的 buffer 不再做"区间相交就等"，client-array
-  每 draw **26–44 µs → 0.42 µs**；正确性由 `tests/ubo-sync/{ubosync,uborace}.c` 覆盖。
-- **按厂商方案追差距**：`tools/perf-suite.sh` + `reports/VENDOR-BASELINE-20261113.md` 记录了
-  同口径厂商/我方全量对照（glmark2 5075 vs 1039，draw 密集 5–14×，present 0.014 vs 0.19 ms）。
-  结论：present 是结构性差距（厂商 2D 引擎/直接扫描出；我方 2D 死路、DE 平铺不可达），
-  draw 密集差距在 present 与每 draw 的提交/拷贝，**不是 `u_threaded_context`**（试过，崩溃且收益低）。
-- **JPEG 取证大突破**（`077812b`）：用 kprobe 抓厂商 KMD 的 `dec_write_reg.isra.0`，
-  拿到完整的 502 条寄存器序列（`tools/vendor-capture/vendor-jpeg-regs.txt`）。 关键发现：
-  厂商 `DEC_OUT_DIS=1`、不写任何显存输出面，解码走内部通路进 PPU（PPU 半尺寸输入 + 2x2 复制）。
-  按其复刻后仍 `STRM_CORRUPTED` ⇒ 剩下的是缓冲区内容/布局，见
-  `reports/JPEG-VENDOR-TRACE-20261113.md`。profile 不启用。
-
-2026-11-12~13 新增的修复与结论（细节见 `docs/UNRESOLVED.md`）：
-- **修法 1**（`acecc7f`）：VP9 参考槽改成"解码输出直接写参考环 + MV 双缓冲"，360p 63→300–320 fps、
-  1080p 7→53 fps（下载帧口径 220 fps），与软件解码逐字节一致。
-- **修法 3**（`b9aa0d4`）：纹理上传暂存复用，固定开销 5–15 ms → 0.03 ms。
-- **修法 4**（`327b330`）：buffer 从 VRAM 改放 GTT，CPU 侧读写 6–80×（map READ 0.16→12.4 GB/s）。
-- **present 路径**：glamor blit 快速路径补丁 + AIGLX 软链 + 每 draw 指纹脏标记 + 窗口平铺/线性影子
-  （`4bb9755`…`7a1fa9a`），jellyfish 2.9×、buffer 1.5×，全套分数持平。
-- **JPEG baseline 解码**：调研后放弃（`88b9cbe`）——硬件进入 `DEC_ERROR_INT` + 2 s TDR、
-  输出面零字节，厂商 VAAPI 也只有编码侧参数。
-- **不可做项已留证据**（`06ccd5b`/`6d08640`）：H.264 MVC / AVS/AVS2 在 Mesa+libva 里没有 profile
-  可达；4 个扩展 opcode 编译器从不发射；**VPP（`scale_vaapi`）实测已可用**
-  （1080p→720p 171 fps、4× 面积缩放 97 fps），不需要驱动改动。
+**唯一仍在清单上的性能疑点**：VP9 1080p 解码在 r31 记 217 fps、r35 干净环境 165 fps
+（同文件同命令，`REPLAY_LINEAR` A/B 无差别，H.264/HEVC 反而变快）——尚未解释，见
+`reports/VENDOR-BASELINE-20261113.md` 末尾。
 
 ## 2. 系统与仓库布局
 
@@ -70,10 +59,10 @@ VP9 1080p 解码 **220 fps**、H.264 234 fps、HEVC 269 fps（均不下载帧；
 | 机器 | Deepin 25 aarch64，内核 `6.6.155-arm64-desktop-hwe`（143 也装了 DKMS 包，但不是启动内核），GPU `[0731:9100]` PCI 07:00.0，HDMI-1 1920×1080@100Hz，无免密 sudo（用 `printf '666\n' \| sudo -S`） |
 | 仓库 | `/home/admin/jm9100-oss`（git，远端 `git@github.com:MianJu28/jm9100-oss.git`，已推送同步） |
 | 源码 | `src/mwv207-umd/`（UMD，唯一可改处；上游树 `ref/oh-mesa/.../src/gallium/{drivers,winsys}/mwv207` 是指向它的符号链接）、`src/kernel-6.6/`（KMD，已并入本仓库） |
-| 已装栈 | `/usr/local/lib/mwv207-oss/`（运行中 **r20**：DRI md5 `39f38c6f5fd2f5ec64d0b90459f31e89`、VA md5 `fa63148dfb01b97461897106a4591346`、EGL_mwv207 `d038036a…`、vdpau `f10fcec15f26…`、OpenCL `a3fb2f47559b…`；`payload-41`=r16/`payload-42`=r20 可回滚），`/lib/modules/…/updates/dkms/mwv207.ko`（自建 KMD，运行中 `8DFC520FB8FCDECFBC911AA`；2026-11-10 17:55 重启后已验证） |
-| 载荷 | 运行中 `payload-42`（`24.1.2-fullstack-r24`，含 I-1…I-6 + N18 + I-5 + B2 第一版；2026-11-11 14:11 由 `stack oss` 安装，DRI `bdfdb78a8e14…`、VA `f38501b6f8af…`）；B2 的**完整**修复（`21a15db`，参考槽跨解码器实例移交）尚未进载荷，需重打 r25 才进安装栈；安装后 `tests/verify-installed.sh … --bad-submit` → `PASS=25 FAIL=0 SKIP=1`，官方 VP9 intra-only 向量 7 帧与 libvpx 逐字节一致；`payload-41`（r16）为上一份可回滚点，前一版是 r22（DRI `2b62dd7a…`），历史快照在 `/var/lib/mwv207-oss/switch-history` |
-| 快速回归副本 | `/tmp/gd3/`（测试用；`/tmp` 是 7.8G tmpfs，重启即空，记得清理大文件）。实验构建流程：改 `src/mwv207-umd` → `ninja -C ref/oh-mesa/User_source_code/mesa-24.1.2/build-full src/gallium/targets/dri/libmwv207_dri.so` → `cp` 到 `/tmp/gd3/` → 用 `LIBGL_DRIVERS_PATH=/tmp/gd3 MESA_LOADER_DRIVER_OVERRIDE=mwv207` 测 |
-| 出包安装 | `./tools/make-payload.sh -v 24.1.2-fullstack-rN` → `printf '666\n' \| sudo -S ./switch-mwv207.sh umd install --force`（**install 调用常显示 interrupted，实装已完成——必须用 `status` + md5 比对确认，勿盲目重跑**） |
+| 已装栈 | `/usr/local/lib/mwv207-oss/`（运行中 **r35**：DRI md5 `30a1b18130d4d8a9efa6b28750256e6c`、VA md5 `a93bb6af1e75bb0fc7dc48236e129af1`），`/lib/modules/…/updates/dkms/mwv207.ko`（自建 KMD `C588E9673F984406AF46A2F`，`kmd stage` 会同时刷新 `/var/lib/dkms/mwv207-oss/1.0.0/$KVER/$arch/module/mwv207.ko` 以免 `dkms status` 报 Diff）；历次安装快照与 md5 在 `./switch-mwv207.sh status` 与 `/var/lib/mwv207-oss/switch-history` |
+| 载荷 | 运行中 `payload-46`（`VERSION = 24.1.2-fullstack-r35`，DRI `30a1b181…`、VA `a93bb6af…`；含修法 1/3/4、N19、show_existing 线性重放、resize 尺寸防御、12bit 明确拒绝、`mwv207_video_buffer.h` 守卫修复、JPEG 三缓冲 SOI 判定与 DKMS 同步）。`tools/make-payload.sh` 每次会 `rm -rf payload-46` 重建并覆盖同名编号，回滚点只能靠 `switch-history` 里的旧目录 |
+| 快速回归副本 | `~/dev-dri/`（驱动：`mwv207_dri.so`、`libmwv207_drv_video.so`、`mwv207_drv_video.so`，后两个必须 `rm -f` 再 `cp`——原名是指向 `/usr/lib` 的符号链接）与 `~/dev-bin/`（探针：`bufbench`/`texbench`/`rbbench`/`rbscale`/`pbench`/`drawbench`/`peep`）。**不要放 `/tmp`**：重启即空，2026-11-13 已被清空三次。流程：改 `src/mwv207-umd` → `./tools/build-umd.sh` → `cp build-full/.../libmwv207_dri.so ~/dev-dri/mwv207_dri.so` → `LIBGL_DRIVERS_PATH=$HOME/dev-dri MESA_LOADER_DRIVER_OVERRIDE=mwv207 …`；视频侧用 `LIBVA_DRIVERS_PATH=$HOME/dev-dri` |
+| 出包安装 | `./tools/make-payload.sh -v 24.1.2-fullstack-rN` → 用户在自己终端 `sudo ./switch-mwv207.sh umd install`（脚本自动 `systemd-run --scope` 脱离 lightdm，安装过程会重启 lightdm；agent 直接调 sudo 时工具调用常显示 interrupted，**实装可能已成功——必须用 `status` + md5 核对，勿盲目重跑**） |
 | 构建陷阱 | 性能实验必须用 `build-full`（`build-glvnd` 是旧二进制）；`meson setup --wipe` 会把 glvnd 从 auto 变 enabled → 必须显式 `-Dglvnd=false -Dgles1/2=enabled` |
 
 ## 3. 已完成里程碑（提交索引）
@@ -144,7 +133,27 @@ VP9 1080p 解码 **220 fps**、H.264 234 fps、HEVC 269 fps（均不下载帧；
    `/tmp/diagpage.html`、`/tmp/ffp4/user.js`、`/tmp/hist2.py`、`/tmp/ts4.sh`、
    `/tmp/swapbench`、`/tmp/wrshade/`、`/tmp/wrreplay`、`/tmp/tsprobe`。清理时保留。
 
-## 5. 剩余工作（按优先级，2026-11-10 复核）
+## 5. 剩余工作（2026-11-13 16:00 复核）
+
+### 当前清单（只有一条技术疑点 + 若干外部依赖）
+
+1. **VP9 1080p 解码吞吐的口径差异**（唯一未解释项）：r31 记 217 fps，r35 干净环境 165 fps
+   （`~/vp9-assets/p1080.webm`、同一命令、连测三次稳定 164.9/165.9/166.2）。
+   已排除：`MWV207_VP9_REPLAY_LINEAR`（165.9 vs 163.6）、CPU 抢占（H.264/HEVC 同时变快）、
+   12bit 拒绝分支（不在路径上）。360p 仍 393 fps。下一步方向：给 `set_regs`/`end_frame`
+   重新加 `MWV207_DECTIME` 分段计时（临时、提交前删），看是解析、probs 写入还是
+   submit/wait 变慢；若只是测量时段因素则记录并关闭。
+2. **JPEG baseline 解码**：需要厂商闭源 KMD/UMD 的启动条件（`DEC_E` 之外），不做；
+   实现与开关在 `~/jpeg-parked/`，证据在 `reports/JPEG-VENDOR-TRACE-20261113.md`。
+3. **多视口**：`PIPE_CAP_MAX_VIEWPORTS=1`、视口只有一份（`mwv207_draw.c:185`），
+   需要硬件文档确认 0x1F76 是否支持多份，否则保持现状。
+4. **外部依赖项**（需用户/硬件资料）：Vulkan（无驱动、无 ICD；KMD 的 syncobj 字段注释
+   "reserved for vulkan"）、编码（本 SKU `has_enc=0`）、2D 引擎启动位（依赖厂商未发布的
+   `j9_handle_j9m_incumbency()`）。
+5. **可选的交付性工作**：README/报告索引刷新、把 `reports/` 里 11-11~11-13 的 8 份报告
+   串成一条演进线（present→VP9→上传→回读→vendor 对照→JPEG）——不影响功能，属于工程收尾。
+
+### 以下是 2026-11-10 的历史复核内容（保留作索引，结论已并入上一节）
 
 ### 已完成（不再需要做）
 - **VP9 Profile0 8bit 硬解**：单 tile / 多 tile 列 / tile rows / 分段 / show_existing /
