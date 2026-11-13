@@ -1,4 +1,4 @@
-# 交接文档 — JM9100 (MWV207) 开源驱动适配（2026-11-13 更新）
+# 交接文档 — JM9100 (MWV207) 开源驱动适配（2026-11-13 晚间更新）
 
 > 目的：把当前进度、环境、方法学与"下一步做什么"完整交给下一个会话。
 > 本文档随进度更新；未修问题权威清单在 `docs/UNRESOLVED.md`（含 2026-11-10 的 §0.1 速览）。
@@ -6,9 +6,9 @@
 
 ## 1. 当前状态（一句话）
 
-**r31 已部署并验收通过**：活动栈 `oss-24.1.2-fullstack-r31`（`payload-46`，2026-11-13 01:12
-安装，快照 `20261113-011215`，安装目录 219M）；DRI `e909cf0839d5b587ad9395f90ed3b12a`、
-VA `ce204acb2a97c1b96bd46aff07efc728`，与 `payload-46/` 内文件一致。自建 KMD 在跑
+**r32 已部署并验收通过**：活动栈 `oss-24.1.2-fullstack-r32`（`payload-46`，2026-11-13 11:04
+安装，快照 `20261113-110411`，安装目录 219M）；DRI `ef947a5bb24fb65926e2f1314ce3979f`、
+VA `e06fe9b94d3da4a681750c80eb27085b`，与 `payload-46/` 内文件一致。自建 KMD 在跑
 （srcversion `C588E9673F984406AF46A2F`，唯一维护内核 `6.6.155-arm64-desktop-hwe`；
 6.6.143 的 headers 残缺，已停止维护）。
 
@@ -18,8 +18,8 @@ VA `ce204acb2a97c1b96bd46aff07efc728`，与 `payload-46/` 内文件一致。自�
 | 命令 | 结果 |
 |---|---|
 | `tests/verify-installed.sh C588E9673F984406AF46A2F` | PASS=21 FAIL=0 SKIP=3（SKIP 需 root） |
-| `DRI_DIR=/usr/local/lib/mwv207-oss tools/gl-regression.sh` | pass=7 fail=0（glmark2 1039） |
-| `tools/vp9-regression.sh` | pass=19 fail=0 |
+| `DRI_DIR=/usr/local/lib/mwv207-oss tools/gl-regression.sh` | pass=7 fail=0（glmark2 1068） |
+| `tools/vp9-regression.sh` | pass=20 fail=0 |
 
 **性能基线（r31，同机同口径）**：`glmark2 -b :duration=2` **1039–1046**；
 present 300×300 0.17 ms/帧（≈5900 FPS）、800×600 0.51 ms、1080p 1.54 ms；
@@ -27,6 +27,20 @@ present 300×300 0.17 ms/帧（≈5900 FPS）、800×600 0.51 ms、1080p 1.54 ms
 **0.30 ms（12.9 GB/s）**、`glMapBufferRange` 读 0.33 ms（修法 4 前 2.10 / 24.78 ms）；
 VP9 1080p 解码 **220 fps**、H.264 234 fps、HEVC 269 fps（均不下载帧；修法 1 前 VP9 8 fps）；
 `glReadPixels` 4 MB 4.8 ms（瓶颈是 DMA 引擎约 2 GB/s，见 UNRESOLVED §4）。
+
+2026-11-13 晚间新增（r32 之后，仅文档与工具，驱动二进制未变）：
+- **N19 已修**（`8822f43`，r32）：`mwv207_transfer_map()` 对
+  `PIPE_MAP_PERSISTENT`/`UNSYNCHRONIZED` 的 buffer 不再做"区间相交就等"，client-array
+  每 draw **26–44 µs → 0.42 µs**；正确性由 `tests/ubo-sync/{ubosync,uborace}.c` 覆盖。
+- **按厂商方案追差距**：`tools/perf-suite.sh` + `reports/VENDOR-BASELINE-20261113.md` 记录了
+  同口径厂商/我方全量对照（glmark2 5075 vs 1039，draw 密集 5–14×，present 0.014 vs 0.19 ms）。
+  结论：present 是结构性差距（厂商 2D 引擎/直接扫描出；我方 2D 死路、DE 平铺不可达），
+  draw 密集差距在 present 与每 draw 的提交/拷贝，**不是 `u_threaded_context`**（试过，崩溃且收益低）。
+- **JPEG 取证大突破**（`077812b`）：用 kprobe 抓厂商 KMD 的 `dec_write_reg.isra.0`，
+  拿到完整的 502 条寄存器序列（`tools/vendor-capture/vendor-jpeg-regs.txt`）。 descubrimiento：
+  厂商 `DEC_OUT_DIS=1`、不写任何显存输出面，解码走内部通路进 PPU（PPU 半尺寸输入 + 2x2 复制）。
+  按其复刻后仍 `STRM_CORRUPTED` ⇒ 剩下的是缓冲区内容/布局，见
+  `reports/JPEG-VENDOR-TRACE-20261113.md`。profile 不启用。
 
 2026-11-12~13 新增的修复与结论（细节见 `docs/UNRESOLVED.md`）：
 - **修法 1**（`acecc7f`）：VP9 参考槽改成"解码输出直接写参考环 + MV 双缓冲"，360p 63→300–320 fps、
