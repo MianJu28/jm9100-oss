@@ -99,3 +99,37 @@ Mesa VA 前端与 ffmpeg 的 `h264_vaapi`/`hevc_vaapi` 编码通路是通用的�
   ③ 再照解码器的结构写 `mwv207_enc_h264.c`。
 - 在这块板子上继续投入编码，等于给不存在的硬件写驱动 —— 已判定为**不做**，
   并把证据留在本报告，避免以后重复调研。
+
+### 1.6 决定性证据（2026-11-13 补充）：厂商芯片表与产品规格
+
+**厂商内核驱动自己的芯片表就写明 JM9100 没有编码器。**
+`~/vendor-src/usr/src/mwv207-1.8.0.uos/jmgpu_insert.c`：
+
+```c
+static j9_precartilage jmgpu_9200_info = {
+    .has_3d = { 1, 1, }, .has_decg1 = { 1, 0 }, .has_decg2 = { 1, 1 },
+    .has_enc = 1,  ...            /* JM92 / 9200 系列：有编码 */
+};
+static j9_precartilage jmgpu_9100_info = {
+    .has_3d = { 1, },    .has_decg1 = { 1, 0 }, .has_decg2 = { 1, 0 },
+    .has_enc = 0,  ...            /* JM9100：无编码 */
+};
+```
+PCI ID 表把 `0x0731:0x9100` 映射到 `jmgpu_9100_info`；本机 `lspci -nn` 读到的正是
+**`Jingjia Microelectronics Co Ltd JM9100 [0731:9100]`**。编码器初始化整段挂在
+`if (pinfo->has_enc)` 之下（`jmgpu_insert.c:1634`），本卡直接跳过。
+
+这与 1.3 的寄存器探测**逐项吻合**：`.has_3d={1}` ⇒ 3D1(0x910000) 缺席、
+`.has_decg2={1,0}` ⇒ DEC1(0x940000) 缺席、`.has_enc=0` ⇒ ENC(0x920000) 缺席。
+
+**官方产品规格也只写解码**：
+
+| 型号 | 官方"编解码/高清编码"一栏 | 来源 |
+|---|---|---|
+| **JM9100 / JM9100M**（本机） | 只有"高清解码：支持一路 4K@60fps 解码，支持 H.265/264 等常用格式" | [JM9100](https://www.jemoic.com/products_6/381.html)、[JM9100M](https://www.jemoic.com/products_6/723.html) |
+| JM92 系列 | **"高清编码：支持 1 路 4K@60fps H.265、H.264"** | [JM92 系列](https://www.jemoic.com/products_6/569.html) |
+| JM1100 | **"2 路 4K@60fps 硬件编码，支持 YUV444 编码"** | [JM1100](https://www.jemoic.com/products_6/820.html) |
+
+⇒ 景美的产品线里编码是 **JM92 / JM1100 起**才有的能力；JM9100 这一代只做到
+"1 路 4K@60 解码"。先前看到的 `jmgpu_drv_video.so` 里 `hevcencapi.c` / `jmenc/source/hevc`
+字符串，是**同一套驱动给整个家族**（含 JM92/9200）编译进去的代码，不代表本卡有此硬件。
