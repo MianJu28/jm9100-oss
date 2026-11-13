@@ -339,6 +339,32 @@ inter 帧（1/5/6）也 DIFF、且它们的预测来自正确参考，说明问�
 - **逐个刷新位对照**：`refresh = 0x01/0x02/0x04/0x08/0x10/0x80` 各配一个对应的
   `show_existing(idx)` → 六组全部 **IDENTICAL** ⇒ `refresh_frame_flags` 的
   bit i → slot i 映射、以及从参考槽重建输出都正确。
+
+**2026-11-13 晚：show_existing 黑图的技术定性（结论：PPU 无法单独启动）**
+
+把 PPU 的整个寄存器窗口 0x500–0x540 逐字段列出来（python 对齐
+`mwv207_dec_register_array_7020.h` + `mwv207_video_dec_8170table.h`）后确认：
+**PPU 只有输出地址寄存器（`PP_OUT_LU/CH/R/G/B/BOT_BASE`），没有任何输入地址寄存器**
+（`PP_IN_WIDTH/HEIGHT`、`PP_IN_FORMAT`、`PP_IN_Y_STRIDE` 等只是格式/几何），
+输入固定来自解码单元的内部输出通路。这正是"关掉 `DEC_E` 后 PPU 不跑、重放帧全黑"
+的硬件层原因，不是我方编程缺失。
+
+由此，可选的解决路线只有三条（都不便宜）：
+
+1. **重放时重新解码**：show_existing 显示的是参考帧，通常是 inter 帧，
+   单独重解需要它依赖的参考链；要存"关键帧以来的压缩包 + 参考槽映射"，
+   重放时按 GOP 顺序重新提交一遍（正确性最好，但要存包并改造提交路径）。
+2. **保留每个参考槽的线性副本**：PPU 只能写一个目标，所以要么用 PE 引擎在
+   解码完成后把 target（线性）再拷进一份 GTT 线性缓冲（每帧 +3.1 MB 写，
+   约 0.4 ms），要么设法让 PP1 并行输出第二路；重放时就是一次
+   `memcpy(linear_slot, target)`（GTT 缓存，约 0.3 ms）。
+3. **CPU 做 tiled→线性转换**：需要先把解码中间面的 ASIC 平铺 swizzle 逆出来
+   （PPU 输入 960×540 + 2x2 DUP 的语义说明它是 4:2:0 两行并一条 stride 的排布），
+   逆向工作量最大、最容易出错。
+
+三条都超出"改几行"的范围；当前保持"重放帧全黑"的已知限制，等有整块时间再做。
+（B3 的验收判据不依赖这条路径：单帧 intra-only 与官方向量已逐字节一致。）
+
 - **只解 [sub0, sub1, sub2, sub3]（prefix4）→ 只有 1 帧输出（就是这个 inter 的 sub3），
   且 DIFF**；而"自产 intra-only(refresh 0xFF) 后跟一个 inter 帧"是 IDENTICAL。
 - 帧序检查：7 帧输出里 `sw2==hw2`、`sw3==hw3`、`sw4==hw4`（完全为 0），其余两两误差
