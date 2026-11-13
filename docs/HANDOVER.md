@@ -137,12 +137,13 @@ present 与每帧固定路径（详见下）。
 
 ### 当前清单（只有一条技术疑点 + 若干外部依赖）
 
-1. **VP9 1080p 解码吞吐的口径差异**（唯一未解释项）：r31 记 217 fps，r35 干净环境 165 fps
-   （`~/vp9-assets/p1080.webm`、同一命令、连测三次稳定 164.9/165.9/166.2）。
-   已排除：`MWV207_VP9_REPLAY_LINEAR`（165.9 vs 163.6）、CPU 抢占（H.264/HEVC 同时变快）、
-   12bit 拒绝分支（不在路径上）。360p 仍 393 fps。下一步方向：给 `set_regs`/`end_frame`
-   重新加 `MWV207_DECTIME` 分段计时（临时、提交前删），看是解析、probs 写入还是
-   submit/wait 变慢；若只是测量时段因素则记录并关闭。
+1. ~~VP9 1080p 解码吞吐的口径差异~~ **已定性（2026-11-13 16:20）**：加临时
+   `MWV207_DECTIME` 分段计时测得驱动侧每帧 `setregs` **0.03–0.04 ms**、`submit`（含等
+   DEC 完成）**1.88–1.93 ms**（1080p）/ 0.89–0.93 ms（360p），端到端 6.0 ms 里的其余
+   约 4 ms 是 ffmpeg 自己的 VP9 头/tile 解析（user 时间 3.2 ms/帧 @1080p、
+   1.2 ms @360p）。即 217↔165 fps 是客户端解析占比/当次 CPU 状态差异，驱动无变化；
+   硬件上限约 **530 fps @1080p、1080 fps @360p**。详见
+   `reports/VENDOR-BASELINE-20261113.md` 末尾。
 2. **JPEG baseline 解码**：需要厂商闭源 KMD/UMD 的启动条件（`DEC_E` 之外），不做；
    实现与开关在 `~/jpeg-parked/`，证据在 `reports/JPEG-VENDOR-TRACE-20261113.md`。
 3. **多视口**：`PIPE_CAP_MAX_VIEWPORTS=1`、视口只有一份（`mwv207_draw.c:185`），
