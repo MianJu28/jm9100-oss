@@ -478,12 +478,22 @@ mwv207_transfer_map(struct pipe_context *pctx,
        * 如果上一批命令还在流水线里，CPU 的新写入会让在途 draw 用上新矩阵，
        * 表现为某一批图元被缩放/平移到别处（Firefox 标签栏出现"微缩 chrome"）。
        * 只在纯写时等待：读路径本身已有 valid_buffer_range 判断。 */
-      if ((usage & PIPE_MAP_WRITE) && !(usage & PIPE_MAP_UNSYNCHRONIZED))
-         mwv207_wait_resource(pctx, pres);
-      if ((usage & PIPE_MAP_READ) ||
-           util_ranges_intersect(&res->valid_buffer_range,
-                                 box->x,box->x + box->width))
-         mwv207_wait_resource(pctx, pres);
+      /* FIX(jm9100-oss): N19 —— PERSISTENT/UNSYNCHRONIZED 的写映射由调用者自己
+       * 负责顺序：Mesa 的常量/顶点上传用的是 1 MB 环形缓冲，每次 map 的区间都不同
+       * （实测 box.x 每次递增 24 B），环形推进本身避免了与在途 GPU 读写冲突。
+       * 此前这里按 valid_buffer_range 相交就强制提交 + 无限等待，导致
+       * client-array 形态每 draw 2 次 ioctl、26–44 µs/draw（VBO 形态只要 0.5 µs）。
+       * 非 PERSISTENT 的普通写（glBufferSubData / WebRender UBO）仍保留等待，
+       * 那是 P6 修过的场景，不能回退。 */
+      bool cpu_managed = (usage & (PIPE_MAP_PERSISTENT | PIPE_MAP_UNSYNCHRONIZED)) != 0;
+      if (!cpu_managed) {
+         if (usage & PIPE_MAP_WRITE)
+            mwv207_wait_resource(pctx, pres);
+         if ((usage & PIPE_MAP_READ) ||
+              util_ranges_intersect(&res->valid_buffer_range,
+                                    box->x,box->x + box->width))
+            mwv207_wait_resource(pctx, pres);
+      }
 
       ptr = ctx->ws->bo_map(ctx->ws, res->bo);
 

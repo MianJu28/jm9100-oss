@@ -91,7 +91,7 @@ modinfo /lib/modules/…/updates/dkms/…    -> srcversion 0EFB7F4433EA5311B08E8
 | 6 | 切换脚本 | **vendor 态端到端未实跑** | `stack vendor` 会重启，需人工确认；热切换已证不可行（refcnt 恒 2） | `switch-mwv207.sh` / §5 |
 | 7 | 打包 | **DKMS 一致性警告（走 stage 时会复现，已记录处理步骤）** | `tools/dkms-sync.sh` 重建后两个内核都干净；`kmd stage` 直接覆盖仓库构建的 .ko 会让 6.6.155 重新报 `Diff between built and installed module!`，用 `dkms install --force` + `depmod` + `update-initramfs` 恢复即可 | §2.1、§5 |
 | 8b | 性能/UMD | **JPEG baseline 解码：厂商栈可用、我方失败（2026-11-13 重新打开）** | 厂商 `vainfo` 有 `VAProfileJPEGBaseline : VAEntrypointVLD` 且 `ffmpeg -hwaccel vaapi -i t1080.jpg` 成功出图（输出 limited range）；我方实现让 DEC 进 `DEC_ERROR_INT` + 2 s TDR、输出面零字节。寄存器编程细节问题，有厂商输出可做基准 | 本文 §4「JPEG baseline 解码调研」 |
-| 8c | 性能/UMD | **N19：client-array 的 buffer map 每 draw 强制提交+无限等待（待修）** | `tests/draw-bench/drawbench.c`：VBO 0.45–0.53 µs/draw，client arrays 26–44 µs/draw（`MWV207_NOBUFWAIT=1` 时 0.52 µs，**50×**）；约 2 ioctl/draw 来自 `mwv207_transfer_map()` 的 `PIPE_BUFFER` 分支无条件 `mwv207_wait_resource()`。需改成按 BO 在途栅栏判断（P6 的 WebRender 正确性不能回退） | 本文 §4「每 draw CPU 与 present 拷贝」 |
+| 8c | 性能/UMD | **N19：client-array 的 buffer map 每 draw 强制提交+无限等待（2026-11-13 已修，待部署）** | 改前 VBO 0.45 µs/draw、client arrays 26–44 µs/draw；根因是 `mwv207_transfer_map()` 对 `PERSISTENT`/`UNSYNCHRONIZED` 的写映射也按 `valid_buffer_range` 相交就等待（Mesa 的 1 MB 常量环每帧换区间，恒相交）。改为 CPU 管理的映射不做等待后 **0.42 µs/draw（约 60×）**，`ubosync`/`uborace` 逐帧写读校验 PASS | 本文 §4「每 draw CPU 与 present 拷贝」 |
 | 8 | 性能 | **已量化并关闭（2026-11-13）** | buffer 改放 GTT 后 `glBufferSubData` 4 MB 0.30 ms（12.9 GB/s）、`glMapBufferRange` 读 0.33 ms；create（写入）路径本身有 `mwv207_wait_resource` 等 GPU 吃完，但 glmark2 buffer/build/jellyfish 场景 A/B 无回退（655/655、1526/1522、666/686） | 本文 §4 性能 |
 | 9 | 依赖补丁 | `loader_dri3` buffer age 恒 0 只在本地 mesa 树提交 | 未推厂商镜像；重建 mesa 时需保留 | `ref/oh-mesa` `248659c` |
 | 10 | 测试 | **已有自动化 GL 回归（2026-11-13）** | `tools/gl-regression.sh` 串起 query / fbo / texcheck / texbench / bufbench / rbbench / glmark2，`DRI_DIR=` 指定驱动目录即可对开发构建或安装栈跑；与 `tools/vp9-regression.sh` 并列。Firefox/WebGL 侧仍是一次性脚本 | §7 |
@@ -1540,6 +1540,14 @@ Hantro G1 的参考实现（ST 的 `v6.6-stm32mp` 分支，`hantro_g1_jpeg_dec.c
   （强制提交 + 无限 `bo_wait`），`strace` 实测约 2 ioctl/draw；
   `MWV207_NOBUFWAIT=1` 时 0.52 µs/draw（**50×**）。这条等待是为修 WebRender UBO
   覆写（P6）加的，不能直接删——正确修法要按 BO 的在途栅栏判断。**登记为待修项（N19）**。
+- **N19 已修（2026-11-13）**：实测该 map 的 `usage=0x62`（`WRITE | PERSISTENT | 0x20`），
+  Mesa 的上传缓冲是 1 MB 环，每次 map 的 `box.x` 递增 24 B，而 `valid_buffer_range`
+  恒为整块 ⇒ 旧逻辑"区间相交就等"对每次 draw 都成立，纯属误判。
+  改为：`cpu_managed = usage & (PIPE_MAP_PERSISTENT | PIPE_MAP_UNSYNCHRONIZED)`，
+  只有非 CPU 管理的写映射才保留原来的两种等待（`glBufferSubData`、WebRender UBO
+  仍走等待，P6 不回退）。效果：client arrays **26–44 µs → 0.42 µs/draw（60×）**，
+  VBO 0.44 µs 不变；新增 `tests/ubo-sync/ubosync.c`（逐帧写读）与 `uborace.c`
+  （128 帧无同步覆盖竞争）均 **PASS**，`tools/gl-regression.sh` 7/7（glmark2 1672）。
 - **glmark2 build 的每帧构成**：`MWV207_STATS` 计数 `draws=3065 / submits=3073 /
   bufmap_wait=2`（2 秒）⇒ 每帧 1 draw、1 提交，帧内 CPU 不是瓶颈；
   `--off-screen` 3881 FPS（0.258 ms）vs 带 swap 1532 FPS（0.653 ms）

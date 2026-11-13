@@ -2,6 +2,11 @@
 # VP9 硬解回归：把样片目录里每个 <name>.webm 用 VAAPI 硬件解码，再与
 # 同名的 <name>_sw.yuv（ffmpeg 软件解码结果）逐字节比较。
 #
+# 参考文件必须用与下面 decode() 相同的像素格式生成，命令是：
+#   ffmpeg -c:v libvpx-vp9 -i <name>.webm -pix_fmt yuv420p -f rawvideo <name>_sw.yuv
+# （decode() 用的是 -vf hwdownload,format=nv12 -pix_fmt yuv420p，即 I420；
+#  用 -pix_fmt nv12 生成的参考会与 I420 输出逐字节不同，表现为假 FAIL。）
+#
 # 用法:
 #   tools/vp9-regression.sh [样片目录] [额外文件...]
 #
