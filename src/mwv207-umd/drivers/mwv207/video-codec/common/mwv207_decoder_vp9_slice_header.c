@@ -927,8 +927,19 @@ vp9_decode_uncompressed_header(struct mwv207_vp9_slice_header *slice_header,
          ? ((tmp = mwv207_sw_get_bits(&rb, 1)) ? 12 : 10)
          : 8;
       STREAM_TRACE("Bit depth", slice_header->bit_depth);
-      if (slice_header->bit_depth == 12)
+      if (slice_header->bit_depth == 12) {
+         /* 硬件只有 10bit 的 P010 输出通路（Profile 2 10bit 已验证），
+          * 12bit 码流没有对应输出格式；这里明确拒绝，别让调用方只看到
+          * 一个没有上下文的 "header parse failed"。只提示一次，避免
+          * 每帧刷屏。 */
+         static int warned_12bit;
+         if (!warned_12bit) {
+            warned_12bit = 1;
+            fprintf(stderr, "mwv207: VP9 12-bit stream is not supported "
+                    "(hardware P010 path stops at 10-bit); frames are skipped\n");
+         }
          return MWV207_NOK;
+      }
       slice_header->color_space = tmp = mwv207_sw_get_bits(&rb, 3);
       STREAM_TRACE("Color space", slice_header->color_space);
       if (slice_header->color_space != 7) {
