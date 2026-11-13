@@ -108,6 +108,19 @@ struct mwv207_vp9_state {
    uint32_t mv_write_off;
    uint32_t mv_size;
    uint32_t mv_bytes;
+   /* 重放帧的线性副本：不可见帧（show_frame=0）正是会被 show_existing
+    * 重放的画面，PPU 输出直接写进这里（PIPE_USAGE_STAGING -> GTT 缓存，
+    * CPU 读得动），重放时再 CPU 拷进应用 surface，彻底绕开硬件平铺中间面。
+    * lin_of[] 把参考槽映射到具体副本（一帧可能刷新多个槽，共用一张图）。 */
+   struct pipe_video_buffer *lin[8];
+   uint32_t lin_of[8];
+   bool lin_valid[8];
+   uint32_t lin_w[8], lin_h[8];
+   /* 本帧 PPU 输出写进了线性副本时，记下应用 surface：作业完成后要把副本
+    * 拷回去，有些客户端会直接显示不可见帧（见 submit_done）。 */
+   struct pipe_video_buffer *lin_target;
+   uint32_t lin_target_idx;
+
    bool prev_was_inter;
    bool prev_was_shown;
    bool saw_error_resilient;
@@ -412,6 +425,83 @@ vp9_write_ref_regs(struct mwv207_vp9_state *st,
  * allows a later frame of a different size to reference them; the slot pitch
  * grows to the largest picture seen so far and the already stored pictures
  * are relocated when that happens. */
+static struct pipe_video_buffer *
+vp9_lin_create(struct mwv207_video_decoder *decoder, uint32_t w, uint32_t h)
+{
+   enum pipe_format fmts[VL_NUM_COMPONENTS];
+   struct pipe_video_buffer templ;
+
+   memset(&templ, 0, sizeof(templ));
+   templ.width = align(w, 16);
+   templ.height = align(h, 16);
+   templ.buffer_format = PIPE_FORMAT_NV12;
+   mwv207_get_video_buffer_formats(decoder->base.context->screen,
+                                   PIPE_FORMAT_NV12, fmts);
+   return mwv207_video_buffer_create_ex(decoder->base.context, &templ, fmts,
+                                        1, 1, PIPE_USAGE_STAGING);
+}
+
+static struct pipe_video_buffer *
+vp9_lin_slot(struct mwv207_video_decoder *decoder, struct mwv207_vp9_state *st,
+             uint32_t idx, uint32_t w, uint32_t h)
+{
+   if (idx >= 8u)
+      return NULL;
+   if (st->lin[idx] && st->lin_w[idx] == w && st->lin_h[idx] == h)
+      return st->lin[idx];
+   if (st->lin[idx]) {
+      mwv207_video_buffer_destroy(st->lin[idx]);
+      st->lin[idx] = NULL;
+      st->lin_valid[idx] = false;
+   }
+   st->lin[idx] = vp9_lin_create(decoder, w, h);
+   st->lin_w[idx] = w;
+   st->lin_h[idx] = h;
+   return st->lin[idx];
+}
+
+/* 线性副本 -> 应用 surface（NV12 两个平面逐行拷贝）。目标是 VRAM/WC，
+ * 重放帧很少，这点 CPU 写代价可以接受。 */
+static void
+vp9_lin_blit_to_target(struct mwv207_video_decoder *decoder,
+                       struct mwv207_vp9_state *st, uint32_t idx,
+                       struct mwv207_video_buffer *dst, uint32_t w, uint32_t h)
+{
+   struct pipe_video_buffer *src = st->lin[idx];
+   struct pipe_resource *src_res[VL_NUM_COMPONENTS] = {0};
+   unsigned p;
+
+   if (!src)
+      return;
+   src->get_resources(src, src_res);
+   for (p = 0; p < 2; p++) {
+      struct mwv207_resource *s = mwv207_resource(src_res[p]);
+      struct mwv207_resource *d = mwv207_resource(dst->resources[p]);
+      uint32_t ss, ds, rows, rowbytes, r;
+      uint8_t *sp, *dp;
+
+      if (!s || !d)
+         continue;
+      sp = decoder->ws->bo_map(decoder->ws, s->bo);
+      dp = decoder->ws->bo_map(decoder->ws, d->bo);
+      if (!sp || !dp)
+         continue;
+      ss = s->level_infos[0].stride;
+      ds = d->level_infos[0].stride;
+      if (!ss || !ds)
+         continue;
+      /* NV12：色度平面是 U/V 交错的 w 字节/行（h/2 行），不是 w/2。 */
+      rows = p ? (h + 1) / 2 : h;
+      rowbytes = w;
+      if (rowbytes > ss)
+         rowbytes = ss;
+      if (rowbytes > ds)
+         rowbytes = ds;
+      for (r = 0; r < rows; r++)
+         memcpy(dp + (size_t)r * ds, sp + (size_t)r * ss, rowbytes);
+   }
+}
+
 static void
 vp9_program_pp(struct mwv207_video_reg_buf *reg_buf,
                struct mwv207_video_decoder *decoder,
@@ -622,6 +712,13 @@ vp9_destroy_state(struct mwv207_vp9_state *st)
       mwv207_video_buffer_destroy((struct pipe_video_buffer *)st->scratch);
    if (st->ref_store)
       mwv207_video_buffer_destroy((struct pipe_video_buffer *)st->ref_store);
+   {
+      unsigned i;
+
+      for (i = 0; i < 8u; i++)
+         if (st->lin[i])
+            mwv207_video_buffer_destroy(st->lin[i]);
+   }
    FREE(st);
 }
 
@@ -1435,7 +1532,14 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
          uint32_t slot = (uint32_t)sh->ref_frame_map[idx];
          uint32_t need = frame_bytes;
 
-         if (st->ref_store && st->ref_store->res && slot < 16 &&
+         if (slot < 8 && st->lin_of[slot] < 8 &&
+             st->lin_valid[st->lin_of[slot]] && st->lin[st->lin_of[slot]] &&
+             st->lin_w[st->lin_of[slot]] == width &&
+             st->lin_h[st->lin_of[slot]] == height) {
+            vp9_lin_blit_to_target(decoder, st, st->lin_of[slot],
+                                   (struct mwv207_video_buffer *)target,
+                                   width, height);
+         } else if (st->ref_store && st->ref_store->res && slot < 16 &&
              st->ref_slot_bytes[slot] == need && st->ref_stride) {
             uint8_t *src = decoder->ws->bo_map(decoder->ws,
                                                st->ref_store->res->bo);
@@ -1653,7 +1757,37 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
    vp9_set_addr(reg_buf, JMDEC_DEC_BSD_CTRL_BASE_LSB, st->scratch->res->bo,
                 st->filter_offset + (VP9_FILTER_SIZE / 2));
 
-   vp9_program_pp(reg_buf, decoder, target);
+   {
+      struct pipe_video_buffer *pp_target = target;
+
+      if (debug_get_bool_option("MWV207_VP9_REPLAY_LINEAR", true) &&
+          !sh->show_frame && sh->refresh_frame_flags) {
+         uint32_t first = 8u, i;
+
+         for (i = 0; i < 8u; i++)
+            if (sh->refresh_frame_flags & (1u << i)) {
+               first = i;
+               break;
+            }
+         if (first < 8u) {
+            struct pipe_video_buffer *lin =
+               vp9_lin_slot(decoder, st, first, width, height);
+
+            if (lin) {
+               pp_target = lin;
+               st->lin_target = target;
+               st->lin_target_idx = first;
+               for (i = 0; i < 8u; i++) {
+                  if (!(sh->refresh_frame_flags & (1u << i)))
+                     continue;
+                  st->lin_of[i] = first;
+                  st->lin_valid[first] = true;
+               }
+            }
+         }
+      }
+      vp9_program_pp(reg_buf, decoder, pp_target);
+   }
 
    if (sh->log2_tile_columns || sh->log2_tile_rows) {
       reg_buf->set_reg(reg_buf, JMDEC_TILE_ENABLE, 1);
@@ -1721,7 +1855,20 @@ void
 mwv207_dec_vp9_submit_done(struct mwv207_video_decoder *decoder)
 {
    struct mwv207_vp9_state *st = decoder->decoder->vp9_state;
-   if (!st || !st->pending)
+   if (!st)
+      return;
+   /* 不可见帧（show_frame=0）的 PPU 输出走线性副本，供 show_existing 重放；
+    * 但有些客户端（如 ffmpeg -hwaccel vaapi）照样把不可见帧当画面显示，
+    * 所以作业结束后把副本拷回应用 surface，保持这些客户端的输出不变。 */
+   if (st->lin_target && st->lin_target_idx < 8u &&
+       st->lin[st->lin_target_idx]) {
+      vp9_lin_blit_to_target(decoder, st, st->lin_target_idx,
+                             (struct mwv207_video_buffer *)st->lin_target,
+                             st->lin_w[st->lin_target_idx],
+                             st->lin_h[st->lin_target_idx]);
+      st->lin_target = NULL;
+   }
+   if (!st->pending)
       return;
    vp9_adapt_probs(st, &st->sh);
    st->prev_frame_key = st->sh.key_frame;

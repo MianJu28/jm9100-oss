@@ -76,7 +76,7 @@ modinfo /lib/modules/…/updates/dkms/…    -> srcversion 0EFB7F4433EA5311B08E8
 | # | 领域 | 未解决项 | 影响 | 位置 |
 |---|---|---|---|---|
 | 1 | VAAPI/VP9 | **A5：Profile 2（10bit 4:2:0）已支持；4:2:2/4:4:4 定案不可实现** | 2026-11-10 `82e7b02`：Profile 2 与软件解码**逐位一致**（64x64/640x360/720p60/1080p30，含 inter 帧，零 TDR），默认声明，`MWV207_VP9_10BIT_DISABLE=1` 可关。Profile 1/3 与 H.264 422/444 同理不可实现：解码器没有色度采样格式选择字段（§1.5）。**残余**：12bit VP9 未验证（代码只放行 10bit） | 本文 §1.6 |
-| 2 | VAAPI/VP9 | **B3 完成**：官方 intra-only 向量上 7 个真实解码帧全部与 libvpx 逐字节一致（`8f6e964` 修掉 I-5） | 样片与诊断脚本在 `tests/vp9-intraonly/`；只剩 `show_existing` 重放帧仍是黑图（独立限制，不影响 B3 判据） | 本文 §1.7 |
+| 2 | VAAPI/VP9 | **B3 完成**：官方 intra-only 向量上 7 个真实解码帧全部与 libvpx 逐字节一致（`8f6e964` 修掉 I-5） | 样片与诊断脚本在 `tests/vp9-intraonly/`；`show_existing` 重放帧也已逐字节一致（线性副本方案，见本文 §1.7） | 本文 §1.7 |
 | 3 | VAAPI/VP9 | **I-6 已修（`bb5cd9e`）；B2 已完成并实测通过（`21a15db`）** | `vp90-2-14-resize-10frames-fp-tiles-1-2.webm` 硬件与 libvpx **IDENTICAL**；`vp90-2-21-resize_inter_320x180_5_1-2.webm` 此前按设计跳过（跨尺寸参考不支持），I-6 生效后 `vaSyncSurface()` 返回 `VA_STATUS_ERROR_TIMEDOUT`、ffmpeg 报 `Failed to sync surface` 停输出。2026-11-11 `351e6ed` 删掉"参考尺寸必须等于当前帧"的跳过分支并把 staging 缓冲改成可增长；厂商驱动同一向量逐位正确。**尚未实测**（本机处于 vendor 栈），需切回自研栈后跑 `tests/vp9-resize/run-vp9-resize.sh` 确认 `跳过帧=0` 且 IDENTICAL | 本文 §1.8 |
 | 4 | KMD | **N14 已修，重启后已验证生效** | 修复见 §2.1（`22145e9`）；运行中 srcversion 已是 `039F972EFE3279A155EE225`，GL/query/VP9 回归全过；reset 通路已用 `tests/n14-reset/` 探针实测（6 轮 TDR、force_complete 6/6） | 本文 §2.1 |
 | 4b | KMD | **N1/N2/K12/K9-②/N9 已修，重启后已验证生效** | 修复见 §2.2（`6502f19`）；2026-11-10 13:29 重启后 srcversion = `D5EEF36617A4D3FBF4AFD1D`，GL/query 4·4/VP9 18·18/H.264 8bit 逐位一致/N14 探针 6·6 全过，dmesg 无 WARN/BUG；引擎计数用 `tests/engines/` 核对（lite 机型 3d=1 dec=1 enc=0 2d=1 dma=1） | 本文 §2.2 |
@@ -340,30 +340,31 @@ inter 帧（1/5/6）也 DIFF、且它们的预测来自正确参考，说明问�
   `show_existing(idx)` → 六组全部 **IDENTICAL** ⇒ `refresh_frame_flags` 的
   bit i → slot i 映射、以及从参考槽重建输出都正确。
 
-**2026-11-13 晚：show_existing 黑图的技术定性（结论：PPU 无法单独启动）**
+**2026-11-13 晚：show_existing 黑图的技术定性（PPU 无法单独启动）→ 2026-11-13 深夜已修**
 
 把 PPU 的整个寄存器窗口 0x500–0x540 逐字段列出来（python 对齐
 `mwv207_dec_register_array_7020.h` + `mwv207_video_dec_8170table.h`）后确认：
 **PPU 只有输出地址寄存器（`PP_OUT_LU/CH/R/G/B/BOT_BASE`），没有任何输入地址寄存器**
 （`PP_IN_WIDTH/HEIGHT`、`PP_IN_FORMAT`、`PP_IN_Y_STRIDE` 等只是格式/几何），
-输入固定来自解码单元的内部输出通路。这正是"关掉 `DEC_E` 后 PPU 不跑、重放帧全黑"
+输入固定来自解码单元的内部输出通路。这就是"关掉 `DEC_E` 后 PPU 不跑、重放帧全黑"
 的硬件层原因，不是我方编程缺失。
 
-由此，可选的解决路线只有三条（都不便宜）：
+**修法（路线 2 的变体，已落地）**：可见性帧里 `show_frame=0` 的那些正是会被
+`show_existing` 重放的内容，所以让**它们的 PPU 输出直接写进一份线性副本**
+（`vp9_lin_create()` 用 `mwv207_video_buffer_create_ex()` 建 NV12 `PIPE_USAGE_STAGING`，
+GTT 缓存、CPU 读得动），`lin_of[槽]` 记住"这个参考槽的内容在哪份副本里"。
+重放时不再动硬件，直接把副本逐行拷进应用 surface（`vp9_lin_blit_to_target()`）。
+每帧多 3.1 MB 写（1080p，约 0.3 ms），只对不可见帧发生。
 
-1. **重放时重新解码**：show_existing 显示的是参考帧，通常是 inter 帧，
-   单独重解需要它依赖的参考链；要存"关键帧以来的压缩包 + 参考槽映射"，
-   重放时按 GOP 顺序重新提交一遍（正确性最好，但要存包并改造提交路径）。
-2. **保留每个参考槽的线性副本**：PPU 只能写一个目标，所以要么用 PE 引擎在
-   解码完成后把 target（线性）再拷进一份 GTT 线性缓冲（每帧 +3.1 MB 写，
-   约 0.4 ms），要么设法让 PP1 并行输出第二路；重放时就是一次
-   `memcpy(linear_slot, target)`（GTT 缓存，约 0.3 ms）。
-3. **CPU 做 tiled→线性转换**：需要先把解码中间面的 ASIC 平铺 swizzle 逆出来
-   （PPU 输入 960×540 + 2x2 DUP 的语义说明它是 4:2:0 两行并一条 stride 的排布），
-   逆向工作量最大、最容易出错。
+一个额外的坑：`ffmpeg -hwaccel vaapi` 会把**不可见帧也当画面输出**（它按 surface
+顺序出帧，不看 show_frame），所以作业完成后还要把副本拷回应用 surface
+（`mwv207_dec_vp9_submit_done()` 里的 `lin_target` 分支），否则这类客户端的
+前几帧会变黑。NV12 色度平面是 U/V 交错的 **w 字节/行**（h/2 行），不是 w/2
+——第一版按 w/2 拷导致重放帧 Y 完全正确、色度偏 2.6 级，改成 w 后才逐字节一致。
 
-三条都超出"改几行"的范围；当前保持"重放帧全黑"的已知限制，等有整块时间再做。
-（B3 的验收判据不依赖这条路径：单帧 intra-only 与官方向量已逐字节一致。）
+验收：`tests/vp9-intraonly/run-vp9-intraonly.sh` 的 7 帧（含 3 个 show_existing
+重放帧）与 libvpx **全部 IDENTICAL**；`tools/vp9-regression.sh` 20/20；
+`tools/gl-regression.sh` 7/7。可用 `MWV207_VP9_REPLAY_LINEAR=0` 退回旧行为。
 
 - **只解 [sub0, sub1, sub2, sub3]（prefix4）→ 只有 1 帧输出（就是这个 inter 的 sub3），
   且 DIFF**；而"自产 intra-only(refresh 0xFF) 后跟一个 inter 帧"是 IDENTICAL。
