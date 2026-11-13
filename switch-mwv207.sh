@@ -284,6 +284,9 @@ KOBJ="/lib/modules/$KVER/build"
 # 内建 (内核自带) 与自建 (放 updates) 两个位置
 IN_TREE_REL="kernel/drivers/gpu/drm/mwv207/mwv207.ko"
 DKMS_REL="updates/dkms/mwv207.ko"
+# 与 tools/dkms-sync.sh 里的包名/版本一致；用于同步 DKMS 构建产物目录。
+DKMS_KMD_NAME="mwv207-oss"
+DKMS_KMD_VER="1.0.0"
 
 # 路径统一经过 rp(): 假根演练时前缀 $R
 rp() { if [ -n "$R" ]; then echo "$R$1"; else echo "$1"; fi; }
@@ -1225,13 +1228,16 @@ kmd_place_module() {
     [ -n "$backup_md5" ] || die "备份失败"
 
     # 装到 updates（depmod 顺序里优先）
-    # 注意：这里覆盖的是 DKMS 管理的路径，而 DKMS 自己安装的副本带 MOK 签名、
-    # 构建方式也略有差异，因此 dkms status 随后会报
-    # "Diff between built and installed module!"（功能等价）。需要恢复干净状态时：
-    #   dkms install -m mwv207-oss -v 1.0.0 -k $KVER --force
-    #   depmod -a $KVER && update-initramfs -u -k $KVER
-    # 详见 docs/UNRESOLVED.md §2.1。
     run install -D -m 0644 "$src" "$dk"
+    # 同时把同一份字节写进 DKMS 的构建产物目录，让 `dkms status` 不再报
+    # "Diff between built and installed module!"（它比的就是这两份）。
+    # 这一步是尽力而为：目录不存在说明这台机器没走 dkms install，跳过即可。
+    local dkmod arch
+    arch=$(uname -m)
+    dkmod="/var/lib/dkms/mwv207-oss/$DKMS_KMD_VER/$KVER/$arch/module/mwv207.ko"
+    if [ -f "$dkmod" ]; then
+        run install -D -m 0644 "$src" "$dkmod" && log "  已同步 DKMS 构建产物: $dkmod"
+    fi
     run depmod -a "$KVER"
     # initramfs 里也有 mwv207.ko，必须一起刷新
     refresh_initramfs
@@ -1445,8 +1451,8 @@ kmd_stage() {
     log "  重启后生效，期望 srcversion: $KMD_PLACED_SRCVER"
     log ""
     log "验证:  cat /sys/module/mwv207/srcversion"
-    log "提示:  stage 直接覆盖 DKMS 路径, dkms status 可能报 Diff between built and installed module"
-    log "       (签名差异, 功能等价); 恢复命令见 docs/UNRESOLVED.md §2.1"
+    log "提示:  stage 会同时同步 DKMS 构建产物目录, dkms status 保持干净"
+    log "       (旧版本只覆盖 /lib/.../updates/dkms 时会报 Diff between built and installed module)"
     log "回滚:  ${0##*/} kmd rollback    # 删掉暂存副本, 下次仍用内建"
     log "前提:  重启前确认 SSH 通道可用（本机 admin 口令登录已验证）"
 }
