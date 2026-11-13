@@ -1506,13 +1506,34 @@ Hantro G1 的参考实现（ST 的 `v6.6-stm32mp` 分支，`hantro_g1_jpeg_dec.c
    是因为解码参数走 `jmo_HD_*` HAL（`libdrm_jmgpu.so` 提供）而非字符串常量。
    对照见 `reports/VENDOR-BASELINE-20261113.md`。
 
-结论（2026-11-13 修正）：**JPEG baseline 解码在本 SKU 上硬件可用、厂商栈可用，我方实现失败**。
-失败点是寄存器编程细节（硬件进入 `DEC_ERROR_INT` 并 TDR，输出面零字节），不是硬件缺失。
-当前状态：**重新打开，待解决**；厂商栈的输出（limited range）可直接作为逐字节基准。
-重开时建议先做的三件事：① 用厂商输出反推 NV12 范围/stride；② 逐帧对比 `DEC_MODE`、
-`PIC_MB_*`、`JPEG_MODE` 与厂商寄存器值（厂商 KMD 的 `J9_UNDERCELLARER` 写口只能写单个寄存器，
-但可用 `jmo_HD_ReadEncReg` 同族思路……注意这是编码核）；③ 重点怀疑 `JMDEC_JPG_CH_OUT_BASE`
-的语义（实测只落了 luma 偏移、没有 BO 基址）与 `DEC_OUT_Y_STRIDE` 的单位。
+结论（2026-11-13 晚上再修正）：**硬件可用、厂商栈可用；我方已把厂商 502 条寄存器写入
+完整对齐，仍报 `STRM_CORRUPTED`，缺的是厂商的缓冲内容/布局**，不是寄存器。
+
+取证方法（成果已入仓）：厂商 `jmgpu.ko` 未 strip，在 `dec_write_reg.isra.0` 上挂 kprobe
+（5 个参数 `a1=jdev a2=id a3=type a4=offset a5=value`），跑一帧 JPEG 即可拿到整个 DEC 窗口
+0x000–0x7d0 的写入序列 → `tools/vendor-capture/vendor-jpeg-regs.txt`（502 行）。
+用 LD_PRELOAD 拦 ioctl 抓不到，因为寄存器数组在 `struct core_desc` 的指针里。
+
+厂商序列的三个反直觉点（详见 `reports/JPEG-VENDOR-TRACE-20261113.md`）：
+
+1. **`DEC_OUT_DIS=1`（0x00c bit15），且完全不写 `0x104`/`0x108`/`0x10c`/`0x18c`**
+   —— JPEG 解码不落显存面，经内部通路进 PPU。我方一直是"给解码器指显存面"，所以
+   输出面永远零字节。
+2. `PIC_MB_WIDTH=(w+127)/128`（1920→15，不是 120）、高度 `(h+15)/16`；
+   `HUFFMAN_E=0`（码长走 0x40..0x68 寄存器）、`STREAM_LEN`/`STRM_BUFFER_LEN` 都等于 ECS 长度。
+3. PPU 输入按 **960×540（宽高各一半）** 配，`PP0_DUP_HOR/VER=1` 做 2x2 复制，
+   输出（1920×1080）直接写应用 surface 的 Y/C 面（`PP_OUT_LU/CH_BASE`）。
+
+按上表复刻后：帧能提交，但仍 `irq state 0x00010102`（`STRM_CORRUPTED`+`DEC_IRQ`+`DEC_ERROR_INT`）
++ 2 s TDR。已排除：`DEC_MODE` 取值、表字节序（`AUXSWAB`×`TABSWAP` 4 组）、流字节序
+（`STRMSWAP` 0/1/2/3/8）、整段 JPEG 上传 + ST 的页/位偏移公式、`STREAM_ALL=0`；
+寄存器写入本身已用 KMD `peek` 验证生效。⇒ 剩余差异只在**缓冲区内容/布局**
+（ECS 是否带填充、544 B 表的 QP zigzag 方向与 AC/DC 交换条件、stream/qtable 的放置域）。
+
+当前处置：**不启用 `PIPE_VIDEO_PROFILE_JPEG_BASELINE`**（否则客户端会拿到零帧或 2 s 卡顿），
+取证产物与抓取脚本保留在仓库，实现代码搁置在 `~/jpeg-parked/`。重开这项时的下一步是
+在厂商栈上用 kprobe 抓 `DecWriteRegs` 的 `core->regs` 指向的内容，或直接 dump 厂商
+staging BO 的页面，拿到 ECS/表的确切字节。
 
 保留的两处真修复（与 JPEG 无关，随本次提交上）：
 
