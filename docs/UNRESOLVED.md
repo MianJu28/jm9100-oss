@@ -90,6 +90,8 @@ modinfo /lib/modules/…/updates/dkms/…    -> srcversion 0EFB7F4433EA5311B08E8
 | 5 | KMD | 只剩 N10（决定只文档化） | K9-① 已核实为与厂商一致（非缺陷）；N10 改为只记录 | 本文 §2.3 |
 | 6 | 切换脚本 | **vendor 态端到端未实跑** | `stack vendor` 会重启，需人工确认；热切换已证不可行（refcnt 恒 2） | `switch-mwv207.sh` / §5 |
 | 7 | 打包 | **DKMS 一致性警告（走 stage 时会复现，已记录处理步骤）** | `tools/dkms-sync.sh` 重建后两个内核都干净；`kmd stage` 直接覆盖仓库构建的 .ko 会让 6.6.155 重新报 `Diff between built and installed module!`，用 `dkms install --force` + `depmod` + `update-initramfs` 恢复即可 | §2.1、§5 |
+| 8b | 性能/UMD | **JPEG baseline 解码：厂商栈可用、我方失败（2026-11-13 重新打开）** | 厂商 `vainfo` 有 `VAProfileJPEGBaseline : VAEntrypointVLD` 且 `ffmpeg -hwaccel vaapi -i t1080.jpg` 成功出图（输出 limited range）；我方实现让 DEC 进 `DEC_ERROR_INT` + 2 s TDR、输出面零字节。寄存器编程细节问题，有厂商输出可做基准 | 本文 §4「JPEG baseline 解码调研」 |
+| 8c | 性能/UMD | **N19：client-array 的 buffer map 每 draw 强制提交+无限等待（待修）** | `tests/draw-bench/drawbench.c`：VBO 0.45–0.53 µs/draw，client arrays 26–44 µs/draw（`MWV207_NOBUFWAIT=1` 时 0.52 µs，**50×**）；约 2 ioctl/draw 来自 `mwv207_transfer_map()` 的 `PIPE_BUFFER` 分支无条件 `mwv207_wait_resource()`。需改成按 BO 在途栅栏判断（P6 的 WebRender 正确性不能回退） | 本文 §4「每 draw CPU 与 present 拷贝」 |
 | 8 | 性能 | **已量化并关闭（2026-11-13）** | buffer 改放 GTT 后 `glBufferSubData` 4 MB 0.30 ms（12.9 GB/s）、`glMapBufferRange` 读 0.33 ms；create（写入）路径本身有 `mwv207_wait_resource` 等 GPU 吃完，但 glmark2 buffer/build/jellyfish 场景 A/B 无回退（655/655、1526/1522、666/686） | 本文 §4 性能 |
 | 9 | 依赖补丁 | `loader_dri3` buffer age 恒 0 只在本地 mesa 树提交 | 未推厂商镜像；重建 mesa 时需保留 | `ref/oh-mesa` `248659c` |
 | 10 | 测试 | **已有自动化 GL 回归（2026-11-13）** | `tools/gl-regression.sh` 串起 query / fbo / texcheck / texbench / bufbench / rbbench / glmark2，`DRI_DIR=` 指定驱动目录即可对开发构建或安装栈跑；与 `tools/vp9-regression.sh` 并列。Firefox/WebGL 侧仍是一次性脚本 | §7 |
@@ -1495,13 +1497,22 @@ Hantro G1 的参考实现（ST 的 `v6.6-stm32mp` 分支，`hantro_g1_jpeg_dec.c
 4. **试过的变体全部同样报错**：① `PJPEG_E`/`PJPEG_LAST_SCAN_E`/`JPEG_INTERLEAVED_E`
    + `PJPEG_SS/SE/AH/AL`；② 输出改线性 NV12 直接写目标面（跳过 PPU）；③ 平铺输出
    （vp9 的 7680 stride 几何）+ PPU；④ ECS 单独拷进 256 B 对齐缓冲、`STRM_START_BIT=0`。
-5. **厂商侧没有解码参照**：`jmgpu_drv_video.so` 里所有 JPEG 字符串都是**编码器**参数
-   （`Encoded jpeg width. jpgLumWidth`、`JPEG CodingMode 0:420 1:422 2:lumaonly`、
-   `JPEG encoder supported by HW`），没有解码侧字段 ⇒ 能力表的 `jpeg_support` 很可能
-   只覆盖编码块，解码需要厂商未公开的东西（与 high10p 位流预转换同类）。
+5. **当时的"厂商也没有解码参照"判断已被推翻（同日下半天）**：切到厂商栈后
+   `vainfo` 显示 `VAProfileJPEGBaseline : VAEntrypointVLD`，且
+   `ffmpeg -hwaccel vaapi -vaapi_device /dev/dri/renderD128 -i t1080.jpg -f rawvideo -pix_fmt nv12`
+   **成功出图**（3,110,400 B）。与软解 `libjpeg` 的输出逐字节不同，但差异只是范围映射：
+   `(76-16)*255/219 ≈ 70`、`(41-16)*255/219 ≈ 29` 与厂商输出实测的 70/29 完全吻合，
+   即厂商输出是 limited range。我们先前在 `jmgpu_drv_video.so` 里只找到编码器字符串，
+   是因为解码参数走 `jmo_HD_*` HAL（`libdrm_jmgpu.so` 提供）而非字符串常量。
+   对照见 `reports/VENDOR-BASELINE-20261113.md`。
 
-结论：**JPEG baseline 解码在当前 SKU 上不可实现（缺厂商未公开的启动条件）**，
-收回 profile 声明、删除实现，避免留一条"每次尝试都会让 DEC 管道卡 2 s 再复位"的路径。
+结论（2026-11-13 修正）：**JPEG baseline 解码在本 SKU 上硬件可用、厂商栈可用，我方实现失败**。
+失败点是寄存器编程细节（硬件进入 `DEC_ERROR_INT` 并 TDR，输出面零字节），不是硬件缺失。
+当前状态：**重新打开，待解决**；厂商栈的输出（limited range）可直接作为逐字节基准。
+重开时建议先做的三件事：① 用厂商输出反推 NV12 范围/stride；② 逐帧对比 `DEC_MODE`、
+`PIC_MB_*`、`JPEG_MODE` 与厂商寄存器值（厂商 KMD 的 `J9_UNDERCELLARER` 写口只能写单个寄存器，
+但可用 `jmo_HD_ReadEncReg` 同族思路……注意这是编码核）；③ 重点怀疑 `JMDEC_JPG_CH_OUT_BASE`
+的语义（实测只落了 luma 偏移、没有 BO 基址）与 `DEC_OUT_Y_STRIDE` 的单位。
 
 保留的两处真修复（与 JPEG 无关，随本次提交上）：
 
@@ -1514,6 +1525,32 @@ Hantro G1 的参考实现（ST 的 `v6.6-stm32mp` 分支，`hantro_g1_jpeg_dec.c
   改为只在 buffer 0 **不以 `FF D8` 开头**时才跳过（对 H.264/HEVC 行为不变）。
 
 回归：`tools/vp9-regression.sh` **pass=19 fail=0**、`tests/query` **PASS=4 FAIL=0**。
+
+### 每 draw CPU 与 present 拷贝的实测（2026-11-13 下午）：差距在 present，不在每 draw
+
+针对"draw 密集场景比厂商慢 5–14×"的说法，做了三组实验后修正归因（详见
+`reports/VENDOR-GAP-20261113.md` §7）：
+
+- **每 draw CPU**（新探针 `tests/draw-bench/drawbench.c`，8×8 视口）：VBO 形态
+  **0.45–0.53 µs/draw**（~200 万 draws/s），与厂商同级；驱动内部插桩也只有
+  `config=0.92 µs + submit=0.04 µs`。**所以 `u_threaded_context` 不是主要答案**
+  （试接过，`glmark2 build` 堆损坏崩溃，收益预期也低，已回退）。
+- **真正的 CPU 异常**：client-array（客户端内存指针）形态 **26–44 µs/draw**，根因是
+  `mwv207_transfer_map()` 的 `PIPE_BUFFER` 分支每次 map 都 `mwv207_wait_resource()`
+  （强制提交 + 无限 `bo_wait`），`strace` 实测约 2 ioctl/draw；
+  `MWV207_NOBUFWAIT=1` 时 0.52 µs/draw（**50×**）。这条等待是为修 WebRender UBO
+  覆写（P6）加的，不能直接删——正确修法要按 BO 的在途栅栏判断。**登记为待修项（N19）**。
+- **glmark2 build 的每帧构成**：`MWV207_STATS` 计数 `draws=3065 / submits=3073 /
+  bufmap_wait=2`（2 秒）⇒ 每帧 1 draw、1 提交，帧内 CPU 不是瓶颈；
+  `--off-screen` 3881 FPS（0.258 ms）vs 带 swap 1532 FPS（0.653 ms）
+  ⇒ **present 约 0.4 ms**。
+- **present 拷贝上限**：`glBlitFramebuffer`（同格式 RGBA8，走 PE `mwv207_copy_image`）
+  800×600 批量提交 **0.215 ms（8.9 GB/s）**、1080p **0.881 ms（9.4 GB/s）**；
+  present 实测 800×600 **0.476 ms/帧**、300×300 0.172 ms，每帧约 1.5 次拷贝。
+  厂商 present 0.014 ms ⇒ **它根本不做这份拷贝**（2D 引擎或客户端缓冲直接扫描出）。
+- 结论：廉价场景的差距是**结构性**的——我方 2D 引擎启动位依赖厂商未发布函数、
+  DC 平铺扫描出不可达，present 必然要把窗口内容用 PE 拷进线性屏幕（约 9 GB/s 上限）。
+  该项不再作为优化目标；只有 client-array 的 map 等待是真正可修的性能缺陷。
 
 ### 回读路径（glReadPixels / VAAPI 下载）分析（2026-11-13 更正）：瓶颈是 DMA 引擎本身
 

@@ -86,3 +86,62 @@
 - 重像素场景（实际游戏/3D 应用的主力）已经只差 1.2–1.7×，接近同代 ISA 的合理范围。
 - 若要继续投入，优先级：① 线程化上下文实验（A/B，环境变量门控）② 同日厂商对照补齐
   解码/上传/回读的数字。
+
+## 7. 后续定位：每 draw 与 present 的真实构成（2026-11-13 下午追加）
+
+厂商栈对照（`~/perf-vendor.txt`）显示 draw 密集场景差 5–14×，当时归因为"未启用
+`u_threaded_context`"。实际做了三组实验后，这个归因**需要修正**。
+
+### 7.1 每 draw 的 CPU 开销（`tests/draw-bench/drawbench.c`）
+
+| 形态 | 每 draw | 吞吐 |
+|---|---|---|
+| VBO（真实应用形态） | **0.45–0.53 µs** | ~200 万 draws/s |
+| client arrays | **26–44 µs** | ~2.5 万 draws/s |
+| client arrays + `MWV207_NOBUFWAIT=1` | 0.52 µs | ~190 万 draws/s |
+
+驱动内部插桩（`mwv207_draw_vbo()` 分段计时）：`config_render_pipeline=0.92 µs`、`submit=0.04 µs`，
+说明 pipe 层本身没有问题。client-array 的 50 倍差距来自
+`mwv207_transfer_map()` 的 `PIPE_BUFFER` 分支：每次 map 都调用
+`mwv207_wait_resource()`（内部 `mwv207_submit(ctx,NULL,true)` + 无限 `bo_wait`），
+`strace` 实测约 **2 次 ioctl/draw**。这条等待是为修 WebRender UBO 覆写（P6）加的，
+不能简单删除，正确做法是按 BO 的在途栅栏判断。
+
+### 7.2 `u_threaded_context` 试验（已回退）
+
+按标准接法试过（资源结构用 `pipe_resource`/`threaded_resource` 的 union +
+`threaded_resource_init/deinit` + `threaded_context_create`，`MWV207_THREADED` 门控）。
+`glmark2 -b build` 在 `glDrawArrays` 里堆损坏崩溃（`malloc(): invalid size`，
+gdb 停在 `calloc ← _mesa_bufferobj_alloc`，即更早的越界写）。结合 7.3 的结论——
+GL 场景的 CPU 不是瓶颈——该项收益有限，已回退，diff 存档 `~/work-note-tc-diff.txt`。
+
+### 7.3 glmark2 build 的每帧构成
+
+`MWV207_STATS=1` 计数（2 秒）：`draws=3065 / submits=3073 / bufmap_wait=2`，
+即**每帧 1 次 draw、1 次提交**，帧内 CPU 不是瓶颈。同场景 `--off-screen` 3881 FPS（0.258 ms）
+vs 带 swap 1532 FPS（0.653 ms）⇒ **present 约 0.4 ms，占大头**。
+
+### 7.4 present 拷贝的带宽上限
+
+`glBlitFramebuffer`（FBO→FBO，同格式 RGBA8，走 PE 的 `mwv207_copy_image`）：
+
+| 尺寸 | 每次 `glFinish` | 批量提交后一次 `glFinish` |
+|---|---|---|
+| 800×600（1.92 MB） | 0.372 ms（5.2 GB/s） | **0.215 ms（8.9 GB/s）** |
+| 1920×1080（8.29 MB） | 1.084 ms（7.7 GB/s） | **0.881 ms（9.4 GB/s）** |
+
+present 实测（`vblank_mode=0`）：800×600 **0.476 ms/帧**、300×300 **0.172 ms/帧**；
+`MWV207_COPYSTATS` 显示每帧约 **1.5 次** `mwv207_copy_image`（800×600 时约 2.9 MB/帧）。
+去掉拷贝后的强制提交（`MWV207_COPY_NOFORCE=1`）几乎无变化（0.484 ms）⇒ 瓶颈是拷贝带宽本身，
+不是提交次数。
+
+### 7.5 修正后的结论
+
+- **每 draw 的 CPU 开销不是差距来源**（VBO 0.5 µs/draw），因此 `u_threaded_context` 不是主要答案；
+  唯一真实的 CPU 异常是 client-array 路径的 buffer-map 等待（50×），已登记待修。
+- 廉价场景的 5–14× 差距主要落在 **present**：我们把窗口内容用 PE 拷进线性屏幕，
+  上限约 9 GB/s（800×600 约 0.2 ms、1080p 约 0.9 ms）；厂商 0.014 ms 说明它**根本不做这份拷贝**
+  （2D 引擎或客户端缓冲直接扫描出）。
+- 我方 2D 引擎启动位依赖厂商未发布函数（b163 已判死路）、DC 平铺扫描出在本机不可达
+  （`3262506`/`3c0d296`）⇒ 在不改变"客户端缓冲可直接扫描出"这一前提下，present 不可能追平厂商，
+  这项归为**结构性差距**，不再作为优化目标。
