@@ -52,7 +52,9 @@ MODULE_PARM_DESC(diag, "2D 引擎诊断：提交后 dump 环内容与完成序�
 
 struct mwv207_pipe_2d {
 	struct mwv207_pipe base;
+
 	struct mwv207_bo *ring_bo;
+	struct mwv207_bo *pt_bo;
 	struct mwv207_device *jdev;
 	u32 *ring_start;
 	u32 *ring_end;
@@ -75,9 +77,20 @@ struct pipe_2d_fence {
 	struct dma_fence base;
 	struct mwv207_pipe_2d *pipe;
 	u32 *rpos;
+	u32 sync_reg;
+	u32 sync_val;
 
 	struct list_head q;
 };
+
+#define PIPE_2D_SYNC_REG_BASE	0x6004
+#define PIPE_2D_SYNC_REG_NR	16
+
+static u32 pipe_2d_sync_val(u32 seqno)
+{
+	return (((seqno & 0xffff) ^ 0x5555) | 0x1) & 0xffff;
+}
+
 
 #define to_pipe_2d(p) container_of(p, struct mwv207_pipe_2d, base)
 #define to_pipe_2d_fence(f) container_of(f, struct pipe_2d_fence, base)
@@ -189,7 +202,7 @@ static void pipe_2d_probe(struct mwv207_pipe_2d *pipe)
 
 	buf[0] = 0x80000000;
 	buf[1] = 3;			/* (64 / 16) - 1 */
-	buf[2] = 0x40006000;
+	buf[2] = 0x40000000 | PIPE_2D_SYNC_REG_BASE;
 	buf[3] = magic;
 	for (i = 4; i < 16; i++)
 		buf[i] = 0x80000000;
@@ -212,12 +225,123 @@ static void pipe_2d_probe(struct mwv207_pipe_2d *pipe)
 		pipe_2d_write(pipe, pipe_2d_trig_cand[i], 1);
 		pipe_2d_barrier(pipe);
 		msleep(50);
-		seq = pipe_2d_read(pipe, 0x6000);
+		seq = pipe_2d_read(pipe, PIPE_2D_SYNC_REG_BASE);
 		self = pipe_2d_read(pipe, pipe_2d_trig_cand[i]);
 		pr_info("mwv207: %s probe: trig %04x=1 -> seq=%08x%s self=%08x",
 			pipe->base.fname, pipe_2d_trig_cand[i], seq,
 			seq == magic ? " [HIT]" : "", self);
 	}
+}
+
+/*
+ * 2D 引擎有自己的 MMU（厂商 jmgpu_define.c 的 j9_handle_prebendate() 与
+ * j9_handle_trinketing()），命令流和算图数据都必须经过它。没有这一步，
+ * 引擎取不到命令：表现正是"提交成功、sync 寄存器永远不写、2 s 后 TDR"。
+ *
+ * 页表是两级结构：
+ *   主表 4 KB（1024 项，每项指向一张从表、覆盖 4 MB）
+ *   从表 4 KB（1024 项 × 4 KB 页）
+ *   主表项 = 从表物理地址(31:6) | 1
+ *   从表项 = 物理地址(31:12) | 0x85  （valid | 0x80 | 0x4，见厂商原始位域）
+ *   0x9E83B4 = (主表地址 >> 12) << 4（MODE=4K、SHARABLE=0、SECURE=0）
+ *   0x9E8388 = ENABLE | OUTOFBOUND_EXC | SETUP_FROM_REG = 0x25
+ *
+ * 我们按"虚拟地址 == VRAM 偏移"恒等映射整个 VRAM，这样 BO 的 gpu_phys
+ * 可以直接当 2D 命令里的地址用，不需要额外的 VA 分配器。
+ */
+#define PIPE_2D_MMU_PD_REG	0x9E83B4
+#define PIPE_2D_MMU_CTRL_REG	0x9E8388
+#define PIPE_2D_MMU_PTE_FLAGS	0x85
+#define PIPE_2D_MMU_COVER	(1024ULL * 4096)
+
+static int pipe_2d_mmu_init(struct mwv207_pipe_2d *pipe)
+{
+	struct mwv207_device *jdev = pipe->jdev;
+	struct mwv207_bo *ptbo;
+	u32 slaves, pt_size, i, j, *pt, *stlb;
+	u64 gpu;
+	int ret;
+
+	/* 备用路径：恒等映射 VRAM（VA == VRAM 偏移）。waitlink 模式不会
+	 * 使能这套页表，见 mwv207_pipe_2d_reset() 里的说明。 */
+	slaves = (u32)DIV_ROUND_UP(jdev->vram_size, PIPE_2D_MMU_COVER);
+	if (!slaves)
+		slaves = 1;
+	pt_size = 4096 + slaves * 4096;
+
+	ret = mwv207_bo_create(jdev, pt_size, 0x1000, ttm_bo_type_kernel,
+			       0x2, (1 << 0), &ptbo);
+	if (ret) {
+		pr_err("mwv207: %s failed to alloc page table", pipe->base.fname);
+		return ret;
+	}
+	ret = mwv207_bo_reserve(ptbo, true);
+	if (ret)
+		goto free_bo;
+	ret = mwv207_bo_pin_reserved(ptbo, 0x2);
+	if (ret)
+		goto unreserve_bo;
+	ret = mwv207_bo_kmap_reserved(ptbo, (void **)&pt);
+	if (ret)
+		goto unpin_bo;
+
+	gpu = mwv207_bo_gpu_phys(ptbo);
+
+	/* 主表：每项指向一张 4 KB 从表，覆盖 4 MB */
+	for (i = 0; i < 1024; i++)
+		pt[i] = 0;
+	for (i = 0; i < slaves; i++) {
+		u32 addr = (u32)gpu + 4096 + i * 4096;
+
+		pt[i] = (addr & ~0x3fU) | 1;
+	}
+
+	/* 从表：恒等映射 VRAM 偏移 */
+	stlb = pt + 1024;
+	for (i = 0; i < slaves; i++)
+		for (j = 0; j < 1024; j++)
+			stlb[i * 1024 + j] =
+				((i * 1024 + j) * 4096) | PIPE_2D_MMU_PTE_FLAGS;
+
+	pipe->pt_bo = ptbo;
+	pr_info("mwv207: %s 2D MMU 页表已建(未使能): pt@0x%llx %u 张从表, 恒等映射 %llu MB",
+		pipe->base.fname, (unsigned long long)gpu, slaves,
+		(unsigned long long)(jdev->vram_size >> 20));
+	return 0;
+
+unpin_bo:
+	mwv207_bo_unpin_reserved(ptbo);
+unreserve_bo:
+	mwv207_bo_unreserve(ptbo);
+free_bo:
+	mwv207_bo_unref(ptbo);
+	return ret;
+}
+
+/*
+ * 2D 硬件的软复位（pipe_2d_hw_init 里的 0x9B0048/0x9B0014）会把 2D 私有
+ * MMU 的 PD/CTRL 清零，所以使能必须放在每次 HW_INIT 之后。厂商
+ * j9_incorporality() 的顺序也是「复位 → 写页表 → j9_handle_trinketing()
+ * 使能」；旧代码只在 create() 里写一次、紧接着被 reset 清掉，于是引擎
+ * 从头到尾都取不到命令（j2dtest 永远 poll=0、2s 后 TDR）。
+ */
+static void pipe_2d_mmu_enable(struct mwv207_pipe_2d *pipe)
+{
+	struct mwv207_device *jdev = pipe->jdev;
+	u32 gpu;
+
+	if (!pipe->pt_bo)
+		return;
+	gpu = (u32)mwv207_bo_gpu_phys(pipe->pt_bo);
+
+	mb();
+	jdev_write(jdev, PIPE_2D_MMU_PD_REG, (gpu >> 12) << 4);
+	mb();
+	jdev_write(jdev, PIPE_2D_MMU_CTRL_REG, 0x25);
+	msleep(1);
+	pr_info("mwv207: %s 2D MMU 已使能: PD=0x%08x CTRL=0x%08x",
+		pipe->base.fname, jdev_read(jdev, PIPE_2D_MMU_PD_REG),
+		jdev_read(jdev, PIPE_2D_MMU_CTRL_REG));
 }
 
 static int pipe_2d_hw_init(struct mwv207_pipe_2d *pipe)
@@ -295,35 +419,70 @@ static void pipe_2d_reset_ring(struct mwv207_pipe_2d *pipe)
 	pipe->tail = pipe->ring_start;
 }
 
+/*
+ * 尾部描述符，与厂商 jmu_wl_tail 的 wait 形态一致：
+ *   { 0x88000000 (wait), 0x80000000 (nop), 0x80000000 (nop), 0x80000000 (nop) }
+ * 引擎执行到这里会挂住轮询；下一次提交时由 pipe_2d_wtol() 就地改写成
+ *   { 0x89000000 (link), 下一段 gpu 地址, ... }
+ * 引擎随之跳到下一段继续执行。旧实现多写了两个字（0x89000000 + 自指
+ * 地址），与厂商布局不符，已按厂商形态收敛。
+ */
 static u32 *pipe_2d_append_wl(struct mwv207_pipe_2d *pipe)
 {
 	u32 *wait = pipe->tail;
 
 	*pipe->tail++ = 0x88000000;
 	*pipe->tail++ = 0x80000000;
-	*pipe->tail++ = 0x89000000;
-	*pipe->tail++ = pipe_2d_gpu_addr(pipe, wait);;
+	*pipe->tail++ = 0x80000000;
+	*pipe->tail++ = 0x80000000;
 
 	return wait;
 }
 
+/*
+ * 启动等待链，逐字对齐厂商 j9_nipas()（jmgpu_accessible.c）：
+ *
+ *   header { nop, byte16_cnt, nop, nop }
+ *   write 0x40000000|sync_reg, sync_val      <- 让引擎能回写完成值
+ *   tail   { 0x88000000, nop, nop, nop }     <- 挂住，等下一次 link
+ *
+ * 然后写 0x4200 = MODE_WAITLINK(bit29) | FROM_MEM(bit31=0) | cmdaddr>>4，
+ * 再写 0x4c00 = 1（GROUNDWAVE）踢引擎。厂商在这里是 12 个字 / 48 字节，
+ * byte16_cnt = 2。
+ */
 static void pipe_2d_start(struct mwv207_pipe_2d *pipe)
 {
-	u32 regval = pipe->ring_start_addr >> 4 | 1 << 29;
+	u32 *p = pipe->tail;
+	u32 regval;
 
-	pipe_2d_write(pipe, 0x4200, regval);
+	*p++ = 0x80000000;
+	*p++ = 2;			/* 48 字节 / 16 - 1 */
+	*p++ = 0x80000000;
+	*p++ = 0x80000000;
+	*p++ = 0x40000000 | PIPE_2D_SYNC_REG_BASE;
+	*p++ = pipe_2d_sync_val(0);
+	/* 补两个 NOP 把 sync 段抬到 16 字节边界：厂商 j9_nipas() 在这里写
+	 * sync(8B) + 2×NOP(8B)，整条链才是 12 字 = 48 字节、byte16_cnt = 2。
+	 * 少了这两个字链只有 40 字节，start() 的 48 字节断言会命中 WARN 并
+	 * 直接 return，于是 0x4200/0x4C00 永远不写、引擎从不启动。 */
+	*p++ = 0x80000000;
+	*p++ = 0x80000000;
+	pipe->last_wait = p;
+	*p++ = 0x88000000;
+	*p++ = 0x80000000;
+	*p++ = 0x80000000;
+	*p++ = 0x80000000;
+	pipe->tail = p;
 
-	*pipe->tail++ = 0x80000000;
-	*pipe->tail++ = 1;
-	*pipe->tail++ = 0x80000000;
-	*pipe->tail++ = 0x80000000;
-
-	pipe->last_wait = pipe_2d_append_wl(pipe);
-	/* 环形缓冲刚被重置：起点到 tail 必须正好 32 字节（8 条描述符）。
+	/* 环形缓冲刚被重置：起点到 tail 必须正好 48 字节（12 个字）。
 	 * 不成立说明 ring 状态已被破坏，此时继续写下去会越界，直接停在这里；
 	 * 之后的 job 会由 2 s TDR 回收（N14 保证在飞 fence 会被 signal）。 */
-	if (WARN_ON_ONCE(pipe_2d_ptr_span(pipe->tail, pipe->ring_start) != 32))
+	if (WARN_ON_ONCE(pipe_2d_ptr_span(pipe->tail, pipe->ring_start) != 48))
 		return;
+
+	regval = pipe->ring_start_addr >> 4 | 1 << 29;
+	pipe_2d_barrier(pipe);
+	pipe_2d_write(pipe, 0x4200, regval);
 	pipe_2d_barrier(pipe);
 	pipe_2d_write(pipe, 0x4C00, 1);
 
@@ -348,6 +507,13 @@ static void mwv207_pipe_2d_reset(struct mwv207_pipe *mpipe)
 
 	if (pipe_2d_hw_init(pipe))
 		return;
+	/*
+	 * 不使能 2D 私有 MMU：厂商 waitlink 模式（j2dmode=1，默认）从不用它，
+	 * 只有 ringbuffer 模式才通过 j9_handle_prebendate() 建表并使能
+	 * （日志 "cmd mmu(@0x3b4)"）。命令行里的面地址是 VRAM 偏移，由引擎
+	 * 数据通路直接解释；若把 MMU 打开并恒等映射，取指地址会被再翻译一次，
+	 * 引擎读到的就是垃圾。
+	 */
 	pipe_2d_reset_ring(pipe);
 	pipe_2d_start(pipe);
 }
@@ -373,11 +539,23 @@ static u32 *pipe_2d_wait_for_space(struct mwv207_pipe_2d *pipe, u32 size)
 	return NULL;
 }
 
+/*
+ * 完成信号与厂商 waitlink 引擎一致（jmgpu_accessible.c 的 j9_gelatinizable /
+ * j9_disavowedly）：
+ *
+ *   命令流末尾追加一条 "写寄存器" 命令  0x40000000 | sync_reg, sync_val
+ *   引擎执行到这条命令时把 sync_val 写进 sync_reg，内核读回来比对，相等
+ *   即这一帧已完成。sync_val 先按 J9_METERSTICK 变换（^0x5555 | 1，取低
+ *   16 位），保证 0 不会被当成"未提交"，也避免 0 初值误判为完成。
+ *
+ * 旧代码把 seqno 裸写进 0x6000 并用 16 位回绕比较，引擎不执行时会误判，
+ * 执行了又依赖 0x6000 的共享槽；现在每个 fence 占一个独立 sync 寄存器，
+ * 由 IRQ 里逐个比对，语义与厂商一致。
+ */
 static struct dma_fence *pipe_2d_append_fence(struct mwv207_pipe_2d *pipe)
 {
 	struct pipe_2d_fence *fence;
 	unsigned long flags;
-	u32 regno;
 
 	fence = kzalloc(sizeof(struct pipe_2d_fence), GFP_KERNEL);
 	if (!fence) {
@@ -387,25 +565,39 @@ static struct dma_fence *pipe_2d_append_fence(struct mwv207_pipe_2d *pipe)
 	}
 	dma_fence_init(&fence->base, &pipe_2d_fence_ops, &pipe->fence_lock,
 		       pipe->fence_ctx, ++pipe->next_fence);
-	fence->pipe  = pipe;
-	fence->rpos  = pipe->tail;
-	regno = (pipe->next_fence & 0x1f) + 1;
+	fence->pipe = pipe;
+	fence->rpos = pipe->tail;
+	fence->sync_reg = PIPE_2D_SYNC_REG_BASE +
+			  (fence->base.seqno & (PIPE_2D_SYNC_REG_NR - 1)) * 4;
+	fence->sync_val = pipe_2d_sync_val(fence->base.seqno);
 
 	spin_lock_irqsave(&pipe->fence_queue_lock, flags);
 	list_add_tail(&fence->q, &pipe->fence_queue);
 	spin_unlock_irqrestore(&pipe->fence_queue_lock, flags);
 
-	*pipe->tail++ = (0x40000000 | 0x6000 | (0) << 2);
-	*pipe->tail++ = (u32)(fence->base.seqno & 0xffff);
-	*pipe->tail++ = (0x40000000 | 0x6000 | (regno) << 2);
-	*pipe->tail++ = regno;
-
-	pipe_2d_write(pipe, 0x6000 + regno * 4, regno);
+	*pipe->tail++ = 0x40000000 | fence->sync_reg;
+	*pipe->tail++ = fence->sync_val;
+	/*
+	 * 同步写命令只有 8 字节，后面必须补两个 NOP 才能让整段（header +
+	 * payload + sync + wait 尾）保持 16 字节对齐——厂商 j9_gelatinizable()
+	 * 也是先 sync 写、再按 16 对齐补 J9_EMBASSADRESS，然后才放 wait 尾。
+	 * 少这两个字会让 header.byte16_cnt 与真实长度不符，引擎把 wait 尾当
+	 * 载荷的一部分解析。
+	 */
+	*pipe->tail++ = 0x80000000;
+	*pipe->tail++ = 0x80000000;
 
 	dma_fence_get(&fence->base);
 	return &fence->base;
 }
 
+/*
+ * 把上一段末尾的 wait 就地改写成 link 指向本段，然后踢引擎。
+ *
+ * 厂商 j9_gelatinizable() 的顺序：先写 link.addr、barrier、再写 link.link，
+ * 最后 engine_write_reg(GROUNDWAVE=0x4c00, 1)。**每一次提交都要踢一次**，
+ * 只改 link 不踢是旧实现最大的问题：引擎在 wait 上停住后不会自己醒。
+ */
 static void pipe_2d_wtol(struct mwv207_pipe_2d *pipe, u32 *start, u32 *new_wait)
 {
 	u32 *pos = pipe->last_wait;
@@ -416,6 +608,8 @@ static void pipe_2d_wtol(struct mwv207_pipe_2d *pipe, u32 *start, u32 *new_wait)
 	pipe_2d_barrier(pipe);
 
 	pipe->last_wait = new_wait;
+
+	pipe_2d_write(pipe, 0x4C00, 1);
 }
 
 static void mwv207_pipe_2d_dump_state(struct mwv207_pipe *mpipe)
@@ -430,7 +624,7 @@ mwv207_pipe_2d_submit(struct mwv207_pipe *mpipe, struct mwv207_job *mjob)
 {
 	struct mwv207_pipe_2d *pipe = to_pipe_2d(mpipe);
 	u32 size = ALIGN(mjob->cmd_size, 16) + 128;
-	u32 *start, *wait, *last_tail, nop_cnt;
+	u32 *start, *wait, *last_tail, *payload, nop_cnt, i;
 	struct dma_fence *fence;
 
 	start = pipe_2d_wait_for_space(pipe, size);
@@ -446,8 +640,30 @@ mwv207_pipe_2d_submit(struct mwv207_pipe *mpipe, struct mwv207_job *mjob)
 	*pipe->tail++ = 0x80000000;
 	*pipe->tail++ = 0x80000000;
 
+	payload = pipe->tail;
 	memcpy_toio(pipe->tail, mjob->cmds, mjob->cmd_size);
 	pipe->tail += mjob->cmd_size >> 2;
+
+	/* mjob->cmds 是 char *（字节缓冲），必须按 32 位字解释。用户命令流
+	 * 通常以 0x81000000（END）结尾，2D 引擎执行到 END 就停止，其后的
+	 * fence sync 写与 wait 尾永远不会执行，于是 fence 永不完成、提交按
+	 * 超时失败（j2dtest 全零的根因）。把尾部 END 换成 NOP，让控制流落到
+	 * fence sync 上；尾部的零填字一并跳过。 */
+	{
+		const u32 *cmds = (const u32 *)mjob->cmds;
+
+		for (i = mjob->cmd_size >> 2; i > 0; i--) {
+			u32 w = cmds[i - 1];
+
+			if (w == 0x81000000u) {
+				WRITE_ONCE(payload[i - 1], 0x80000000u);
+				break;
+			}
+			if (w != 0x00000000u)
+				break;
+		}
+	}
+
 	for (nop_cnt = (ALIGN(mjob->cmd_size, 16) - mjob->cmd_size);
 	     nop_cnt > 0; nop_cnt -= 4)
 		*pipe->tail++ = 0x80000000;
@@ -476,7 +692,7 @@ mwv207_pipe_2d_submit(struct mwv207_pipe *mpipe, struct mwv207_job *mjob)
 		u32 i, n;
 
 		if (diag) {
-			u32 seq_pre = pipe_2d_read(pipe, 0x6000);
+			u32 seq_pre = pipe_2d_read(pipe, PIPE_2D_SYNC_REG_BASE);
 			char buf[128];
 
 			pr_info("mwv207: %s diag arm: start=%px gpu=%llx seqno=%08x nwords=%u",
@@ -506,7 +722,7 @@ mwv207_pipe_2d_submit(struct mwv207_pipe *mpipe, struct mwv207_job *mjob)
 
 		if (diag)
 			pr_info("mwv207: %s diag armed: seqno=%08x cmdaddr=%08x trig=%08x stat=%08x noc=%08x/%08x",
-				mpipe->fname, pipe_2d_read(pipe, 0x6000),
+				mpipe->fname, pipe_2d_read(pipe, PIPE_2D_SYNC_REG_BASE),
 				pipe_2d_read(pipe, 0x4200), pipe_2d_read(pipe, 0x4C00),
 				pipe_2d_read(pipe, 0x4800),
 				jdev_read(mpipe->jdev, 0x9B0194),
@@ -520,16 +736,18 @@ static irqreturn_t mwv207_pipe_2d_isr(int irq_unused, void *data)
 {
 	struct mwv207_pipe_2d *pipe = data;
 	struct pipe_2d_fence *fence, *p;
-	u32 seqno;
 
 	pipe_2d_write(pipe, 0x4308, 0xFFFFFFFF);
-	seqno = pipe_2d_read(pipe, 0x6000);
-	if (diag)
-		pr_info("mwv207: %s diag isr seqno=%08x", pipe->base.fname, seqno);
 
 	spin_lock(&pipe->fence_queue_lock);
 	list_for_each_entry_safe(fence, p, &pipe->fence_queue, q) {
-		if (fence16_after(fence->base.seqno & 0xffff, seqno & 0xffff))
+		u32 val = pipe_2d_read(pipe, fence->sync_reg) & 0xffff;
+
+		if (diag)
+			pr_info("mwv207: %s diag isr reg=%04x val=%08x want=%08x",
+				pipe->base.fname, fence->sync_reg, val,
+				fence->sync_val);
+		if (val != fence->sync_val)
 			break;
 		list_del(&fence->q);
 		pipe->completed_fence = fence->base.seqno;
@@ -558,15 +776,29 @@ static void mwv207_pipe_2d_destroy(struct mwv207_pipe *mpipe)
 	 */
 	pipe_2d_force_complete(pipe);
 
-	ret = mwv207_bo_reserve(mbo, true);
-	if (ret) {
-		pr_err("mwv207: failed to reserve bo");
-		return;
+	if (pipe->ring_bo) {
+		struct mwv207_bo *mbo = pipe->ring_bo;
+
+		ret = mwv207_bo_reserve(mbo, true);
+		if (!ret) {
+			mwv207_bo_kunmap_reserved(mbo);
+			mwv207_bo_unpin_reserved(mbo);
+			mwv207_bo_unreserve(mbo);
+		}
+		mwv207_bo_unref(mbo);
 	}
-	mwv207_bo_kunmap_reserved(mbo);
-	mwv207_bo_unpin_reserved(mbo);
-	mwv207_bo_unreserve(mbo);
-	mwv207_bo_unref(mbo);
+
+	if (pipe->pt_bo) {
+		struct mwv207_bo *ptbo = pipe->pt_bo;
+
+		if (!mwv207_bo_reserve(ptbo, true)) {
+			mwv207_bo_kunmap_reserved(ptbo);
+			mwv207_bo_unpin_reserved(ptbo);
+			mwv207_bo_unreserve(ptbo);
+		}
+		mwv207_bo_unref(ptbo);
+		pipe->pt_bo = NULL;
+	}
 
 	mwv207_devfreq_unregister(mpipe);
 }
@@ -615,7 +847,7 @@ struct mwv207_pipe *mwv207_pipe_2d_create(struct mwv207_device *jdev,
 					  const char *fname)
 {
 	struct mwv207_pipe_2d *pipe;
-	struct mwv207_bo *mbo;
+	struct mwv207_bo *mbo = NULL;
 	void *addr;
 	int ret;
 
@@ -643,6 +875,12 @@ struct mwv207_pipe *mwv207_pipe_2d_create(struct mwv207_device *jdev,
 	if (ret)
 		pipe->base.devfreq = NULL;
 
+	/*
+	 * ring 放 VRAM：厂商 waitlink 模式（默认 j2dmode=1）的命令内存来自
+	 * jmkKERNEL_AllocateVideoMemory()，cmem_gpu_addr 就是 VRAM 偏移，
+	 * 直接写进 CMDADDR。2D 私有 MMU（日志里的 "cmd mmu"）只在
+	 * ringbuffer 模式下用来翻译取指地址，waitlink 模式根本不使能它。
+	 */
 	ret = mwv207_bo_create(jdev, 0x40000, 0x1000,
 			       ttm_bo_type_kernel, 0x2,
 			       (1<<0), &mbo);
@@ -663,6 +901,10 @@ struct mwv207_pipe *mwv207_pipe_2d_create(struct mwv207_device *jdev,
 	pipe->ring_start = (u32 *)addr;
 	pipe->ring_start_addr = mwv207_bo_gpu_phys(mbo);
 	pipe->ring_end = pipe->ring_start + (0x40000 >> 2);
+
+	ret = pipe_2d_mmu_init(pipe);
+	if (ret)
+		goto unmap_bo;
 
 	mwv207_pipe_2d_reset(&pipe->base);
 	if (diag >= 4)
