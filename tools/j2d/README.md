@@ -294,3 +294,48 @@ drm_jmgpu_j2d_send_cmd
 `~/dev-bin/`（`barmap` 读写 BAR1、`vdump` 读 VRAM、`vw.py` 写 VRAM），
 每次试验前必须做完整厂商复位（`0x96C200=FROM_AHB` → NOC idle → `0x9B0048`/`0x9B0014`
 清置 → `0x96C800` CUREMASTER 握手），否则引擎不响应。
+
+## 厂商 DDX 的填充/拷贝编码（反汇编 `mwv207_drv.so`，2026-11-16）
+
+`~/vendor-src/usr/lib/xorg/modules/drivers/mwv207_drv.so` 里的相关符号：
+`jmgpu2dCopyAreaHW 0x14ad0`、`jmgpu2dFillRectHW 0x14e60`、`jmgpu2dComposite 0x16920`、
+`jmgpu2dRotation 0x17584`、`jmgpu2dCopyArea 0x17900`、`jmgpu2dFillRectQuick 0x17be0`、
+`jmgpu2dFillRectRop 0x17d60`、`jmgpu2dFillRect 0x17f20`。
+
+Quick 填充（26 字）：
+
+```
+0x40001008, 0
+0x4000100c, depth_table[depth-8] << 3
+0x40001014, depth_table[depth-8]
+0x40001020, color
+0x40001054, dst_addr          # 提交时由 reloc 填低 32 位
+0x82000054, 0, (pitch/16)<<16 | off, x | y<<16, w<<16 | h
+0x81000000                    # END
+```
+
+Rop 填充：同上，opcode 换成 `0x8200001c`，紧跟一个字是 rop（`.rodata 0x1f760` 按 op 索引）。
+
+拷贝（26 字）：
+
+```
+0x40001008, 0
+0x4000100c, fmt << 3
+0x40001014, fmt
+0x40001010, dst_addr
+0x40001018, src_addr
+0x40001054, off
+0x8200001c, fmt|0x20000, (dst_pitch/16)<<16|lo, x|y<<16, w<<16|h,
+            (src_pitch/16)<<16|lo, x|y<<16, w<<16|h
+0x81000000
+```
+
+`depth_table`（`.rodata 0x1f6f8`）：8bpp→2、24bpp→1，其余 `0xffffffff`。
+
+链格式的硬性规则（手工实验确认）：
+1. 链头必须 4 个字 `{0x80000000, byte16_cnt, 0x80000000, 0x80000000}`；
+2. `byte16_cnt = 字数/4 - 1`，整链必须 16 字节对齐，否则引擎静默不执行；
+3. `0x81000000` 之后不再执行，KMD 已把用户流尾部 END 换成 NOP；
+4. link 目标必须在环内（`0x40000–0x7ffff`）。
+
+`j2dtest` 的 `vendor_fill` / `vendor_copy` 模式即按上述编码实现（`j2dtest w h 6|7`）。

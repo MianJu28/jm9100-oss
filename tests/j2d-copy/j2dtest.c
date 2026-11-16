@@ -72,7 +72,11 @@ static int submit(uint32_t *cmds, uint32_t nwords, uint32_t *bos, int nbos,
 	if ((int)fd_out >= 0) {
 		struct pollfd pfd = { .fd = (int)fd_out, .events = POLLIN };
 		int pr = poll(&pfd, 1, 5000);
-		if (pr <= 0) fprintf(stderr, "  等待 2D fence 超时 (poll=%d)\n", pr);
+		if (pr <= 0) {
+			fprintf(stderr, "  等待 2D fence 超时 (poll=%d)：引擎没有执行本提交\n", pr);
+			close((int)fd_out);
+			return 1;
+		}
 		close((int)fd_out);
 	}
 	return 0;
@@ -127,6 +131,99 @@ static int fill_once(uint32_t w, uint32_t h, uint32_t pitch, uint32_t desc)
 	for (uint32_t i = 0; i < size / 4; i++)
 		if (dst[i] != 0x00ff00ffu) bad++;
 	return bad;
+}
+
+
+/* 按厂商 DDX 反汇编得到的"快速填充"编码（jmgpu2dFillRectQuick）：
+ * 目标地址落在寄存器 0x01054，操作数为 0 / 描述字 / 起点 / 宽高。 */
+static int vendor_fill(uint32_t w, uint32_t h, uint32_t pitch, uint32_t fmt)
+{
+	uint32_t size = pitch * h, hd;
+	uint32_t *dst = bo_new(size, &hd);
+	uint32_t cmds[32], n = 0;
+
+	memset(dst, 0, size);
+	cmds[n++] = 0x40001008; cmds[n++] = 0;
+	cmds[n++] = 0x4000100c; cmds[n++] = fmt << 3;
+	cmds[n++] = 0x40001014; cmds[n++] = fmt;
+	cmds[n++] = 0x40001020; cmds[n++] = 0x00ff00ff;
+	cmds[n++] = 0x40001054;
+	uint32_t da = n * 4; cmds[n++] = 0;		/* 目标地址，由 reloc 填 */
+	cmds[n++] = 0x82000054; cmds[n++] = 0;
+	cmds[n++] = ((pitch / 16) << 16) | 0;
+	cmds[n++] = 0;					/* x | y<<16 */
+	cmds[n++] = (w << 16) | h;
+	cmds[n++] = 0x81000000;
+
+	uint32_t bos[1] = { hd };
+	struct reloc rl[1] = { { 0, da, 0, 1, 0 } };
+	if (submit(cmds, n, bos, 1, rl, 1)) return -1;
+
+	int bad = 0;
+	for (uint32_t i = 0; i < size / 4; i++)
+		if (dst[i] != 0x00ff00ffu) bad++;
+	printf("vendor_fill %ux%u pitch=%u fmt=%u: %s (%d bad)\n", w, h, pitch, fmt,
+	       bad ? "FAIL" : "OK", bad);
+	return bad;
+}
+
+/* 按厂商 jmgpu2dCopyArea 的 26 字编码：源/目标地址走 0x01010/0x01018。 */
+static int vendor_copy(uint32_t w, uint32_t h, uint32_t pitch)
+{
+	uint32_t size = pitch * h, hs, hd;
+	uint32_t *src = bo_new(size, &hs), *dst = bo_new(size, &hd);
+	uint32_t cmds[40], n = 0;
+	const uint32_t fmt = 2, desc = fmt | 0x20000;
+
+	for (uint32_t i = 0; i < size / 4; i++) src[i] = 0x00112233u + i;
+	memset(dst, 0, size);
+
+	cmds[n++] = 0x40001008; cmds[n++] = 0;
+	cmds[n++] = 0x4000100c; cmds[n++] = fmt << 3;
+	cmds[n++] = 0x40001014; cmds[n++] = fmt;
+	cmds[n++] = 0x40001010;
+	uint32_t da = n * 4; cmds[n++] = 0;		/* 目标地址 */
+	cmds[n++] = 0x40001018;
+	uint32_t sa = n * 4; cmds[n++] = 0;		/* 源地址 */
+	cmds[n++] = 0x40001054; cmds[n++] = 0xffffffff;
+	cmds[n++] = 0x8200001c; cmds[n++] = desc;
+	cmds[n++] = (pitch / 16) << 16;
+	cmds[n++] = 0;
+	cmds[n++] = (w << 16) | h;
+	cmds[n++] = (pitch / 16) << 16;
+	cmds[n++] = 0;
+	cmds[n++] = (w << 16) | h;
+	cmds[n++] = 0; cmds[n++] = 0; cmds[n++] = 0; cmds[n++] = 0;
+	cmds[n++] = 0;
+	cmds[n++] = 0x81000000;
+
+	uint32_t bos[2] = { hd, hs };
+	struct reloc rl[2] = { { 0, da, 0, 1, 0 }, { 1, sa, 0, 1, 0 } };
+	if (submit(cmds, n, bos, 2, rl, 2)) return -1;
+
+	int bad = 0;
+	for (uint32_t i = 0; i < size / 4; i++)
+		if (dst[i] != src[i]) bad++;
+	printf("vendor_copy %ux%u pitch=%u: %s (%d bad)\n", w, h, pitch,
+	       bad ? "FAIL" : "OK", bad);
+	return bad;
+}
+
+
+/* 对照组：只发一条 END（驱动会把它换成 NOP 再追加 fence 同步 + wait），
+ * 用来验证"link + 踢引擎"这条通路本身是否工作。 */
+static int vendor_ping(void)
+{
+	uint32_t cmds[4];
+	uint32_t n = 0;
+
+	cmds[n++] = 0x81000000;
+	if (submit(cmds, n, NULL, 0, NULL, 0)) {
+		printf("vendor_ping: 提交失败\n");
+		return -1;
+	}
+	printf("vendor_ping: fence 完成（link/踢引擎通路正常）\n");
+	return 0;
 }
 
 /* 描述字扫描：假设 desc = (格式/标志 << 16) | (pitch/8)，
@@ -252,6 +349,16 @@ int main(int argc, char **argv)
 		if (ioctl(fd, IOCTL_CTX, &cc)) { perror("CTX"); return 1; }
 		ctx = cc.handle;
 		return sweep_desc(w, h);
+	}
+	if ((mode >= 6 && mode <= 9) || mode == 11) {
+		struct mwv207_ctx cc; memset(&cc, 0, sizeof(cc)); cc.op = 0;
+		if (ioctl(fd, IOCTL_CTX, &cc)) { perror("CTX"); return 1; }
+		ctx = cc.handle;
+		if (mode == 6) return vendor_fill(w, h, pitch, 2) ? 2 : 0;
+		if (mode == 7) return vendor_fill(w, h, pitch, 1) ? 2 : 0;
+		if (mode == 8) return vendor_copy(w, h, pitch) ? 2 : 0;
+		if (mode == 11) return vendor_ping() ? 2 : 0;
+		return vendor_copy(w, h, pitch) ? 2 : 0;
 	}
 
 	uint32_t *src = bo_new(size, &hs);
