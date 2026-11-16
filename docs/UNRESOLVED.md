@@ -247,7 +247,7 @@ Profile 1/3（4:2:2 / 4:4:4）与 H.264 422/444 同理**不可实现**——解�
 `tests/verify-installed.sh`（dev 驱动）PASS；载荷 r20 的 `libmwv207_dri.so`/`_drv_video.so`
 直接参与上述比对（`/tmp/p42` 复核 glxinfo + query 4/4 + 10bit 逐位一致）。
 
-**残余缺口**：12bit VP9（Profile 2 语法允许）未验证，代码只放行 10bit；Profile 1/3 永久拒绝。
+**残余缺口**：12bit VP9（Profile 2 语法允许）**已验证为"优雅拒绝"**（2026-11-16，见 §1.11），Profile 1/3 永久拒绝。
 
 **装到 r20 后的实机复核（2026-11-10 16:21 重启后，运行中的 UMD 即 r20）**：
 
@@ -2033,3 +2033,17 @@ DE 不可达之后，换了个不依赖显示侧的做法：**窗口缓冲在驱
 
 结论：2D 的"命令编码 + 环格式 + 提交通路"三项都已确认，唯独 **draw 数据面寻址**
 仍是闭源知识；present 走 2D 不可行，该项到此封档。
+
+### 1.11 VP9 12-bit 行为验证（2026-11-16）
+
+自建样片：`tests/vp9-12bit/make-samples.sh` 用 `vpxenc --profile=2 --bit-depth=10/12`
+生成 `~/vp9-assets/t10.webm` / `t12.webm`（320×180，各 12 帧）。
+
+| 样片 | 结果 |
+|---|---|
+| `t10.webm`（10bit） | `ffmpeg -hwaccel vaapi` 正常出 1,036,800 B（12 × NV12 320×180），166–191 ms |
+| `t12.webm`（12bit） | rc=251、输出 0 B、126–144 ms；stderr 一条 `mwv207: VP9 12-bit stream is not supported`，随后 libva `Failed to sync surface`、ffmpeg 正常报错退出；**无 TDR、无脏图、无挂死** |
+
+顺带修了刷屏：12bit 的关键帧被拒后，后续每一帧都会命中"reference has no decoded
+picture"检查；该日志改为**只播报一次**（`mwv207_dec_vp9.c` 的 `warned_no_ref`），
+避免掩盖真正的首因。复跑入口 `tests/vp9-12bit/run-vp9-12bit.sh`。

@@ -1341,9 +1341,16 @@ mwv207_dec_vp9_set_regs(struct mwv207_video_decoder *decoder,
           * (e.g. a client that recreated its VA context) would hand the
           * decode unit empty reference addresses and wedge it, so skip it. */
          if (!st->ref_slot_w[slot]) {
-            MWV207_LOG(MWV207_LEVEL_ERROR,
-                       "vp9: reference %u (slot %u) has no decoded picture;"
-                       " frame skipped\n", k, slot);
+            /* 整条流都不支持的场景（比如 12bit 的关键帧被解析层拒掉）会让
+             * 后续每一帧都命中这里；只播报一次，避免刷屏掩盖真正的首因。 */
+            static int warned_no_ref;
+            if (!warned_no_ref) {
+               warned_no_ref = 1;
+               MWV207_LOG(MWV207_LEVEL_ERROR,
+                          "vp9: reference %u (slot %u) has no decoded picture;"
+                          " frame skipped (subsequent skips are silent)\n",
+                          k, slot);
+            }
             reg_buf->set_reg(reg_buf, JMDEC_DEC_E, 0); decoder->frame_skipped = true;
             return;
          }
