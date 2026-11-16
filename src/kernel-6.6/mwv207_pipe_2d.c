@@ -116,6 +116,20 @@ static inline void pipe_2d_barrier(struct mwv207_pipe_2d *pipe)
 	mb();
 }
 
+/*
+ * 踢 2D 引擎（GROUNDWAVE = 1）。
+ *
+ * pipe_write() 是 writel_relaxed()，不保证这一下写排在之前对显存的所有
+ * 写之后（link 的两个字、链内容都在显存里）；厂商 engine_write_reg() 用的
+ * 是带屏障的 writel()。这里改成 writel() 并回读 0x4100（AD_STATUS）强制
+ * 事务在总线上完成，确保引擎被踢时能看到已经改好的 wait/link 描述符。
+ */
+static inline void pipe_2d_kick(struct mwv207_pipe_2d *pipe)
+{
+	writel(1, pipe->base.regbase + 0x4C00);
+	(void)readl(pipe->base.regbase + 0x4100);
+}
+
 static inline bool fence16_after(u16 a, u16 b)
 {
 	return (s16)(a - b) > 0;
@@ -499,7 +513,7 @@ static void pipe_2d_start(struct mwv207_pipe_2d *pipe)
 	pipe_2d_barrier(pipe);
 	pipe_2d_write(pipe, 0x4200, regval);
 	pipe_2d_barrier(pipe);
-	pipe_2d_write(pipe, 0x4C00, 1);
+	pipe_2d_kick(pipe);
 
 	dev_dbg(pipe->base.jdev->dev, "start 2d wait link at 0x%llx",
 		pipe->ring_start_addr);
@@ -637,7 +651,7 @@ static void pipe_2d_wtol(struct mwv207_pipe_2d *pipe, u32 *start, u32 *new_wait)
 
 	pipe->last_wait = new_wait;
 
-	pipe_2d_write(pipe, 0x4C00, 1);
+	pipe_2d_kick(pipe);
 }
 
 static void mwv207_pipe_2d_dump_state(struct mwv207_pipe *mpipe)
@@ -716,6 +730,23 @@ mwv207_pipe_2d_submit(struct mwv207_pipe *mpipe, struct mwv207_job *mjob)
 	}
 	start[1] = pipe_2d_ptr_span(pipe->tail, start) / 16 - 1;
 
+	/*
+	 * 链内容先写在 ring 的 write-combined 直映射里（memcpy_toio/普通 store），
+	 * 这些写进入写合并缓冲后并不保证在随后的 MMIO 踢之前对设备可见——引擎
+	 * 会读到半条链（表现为执行到某条命令就停住、fence 永不完成）。这里在
+	 * 武装之前把这条链再经 Device 映射（pipe->ring_mmio，nGnRnE）逐字重写
+	 * 一遍：强序、立即落到显存，之后紧接的 link patch 与踢才一定看到完整链。
+	 */
+	if (pipe->ring_mmio) {
+		u32 off = (u32)((u8 *)start - (u8 *)pipe->ring_start);
+		u32 n = (u32)(pipe->tail - start);
+		u32 k;
+
+		for (k = 0; k < n; k++)
+			writel(start[k], pipe->ring_mmio + off + k * 4);
+		wmb();
+	}
+
 	{
 		u32 i, n;
 
@@ -743,7 +774,7 @@ mwv207_pipe_2d_submit(struct mwv207_pipe *mpipe, struct mwv207_job *mjob)
 			pipe_2d_barrier(pipe);
 			pipe_2d_write(pipe, 0x4200,
 				      pipe_2d_gpu_addr(pipe, start) >> 4);
-			pipe_2d_write(pipe, 0x4C00, 1);
+			pipe_2d_kick(pipe);
 		} else {
 			pipe_2d_wtol(pipe, start, wait);
 		}
