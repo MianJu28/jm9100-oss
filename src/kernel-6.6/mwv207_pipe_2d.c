@@ -57,6 +57,7 @@ struct mwv207_pipe_2d {
 	struct mwv207_bo *pt_bo;
 	struct mwv207_device *jdev;
 	u32 *ring_start;
+	void __iomem *ring_mmio;	/* ring 的 Device 映射，用来写 wait link */
 	u32 *ring_end;
 	u32 *head;
 	u32 *tail;
@@ -65,6 +66,7 @@ struct mwv207_pipe_2d {
 	int id;
 	unsigned int irq;
 
+	bool cold_reset_done;
 	u64 fence_ctx;
 	u32 next_fence;
 	u32 completed_fence;
@@ -349,6 +351,19 @@ static int pipe_2d_hw_init(struct mwv207_pipe_2d *pipe)
 	int ret;
 	u32 val;
 
+	/*
+	 * 厂商 j9_unexpressively() 在清/置 NOC 与 GU2D 复位位之前，先把 2D 的
+	 * 命令取指切到 AHB（0x96C200 = FROM_AHB），让引擎停止从内存取流，再等
+	 * NOC 静默。缺这一步时软复位不完整：引擎把启动链跑完后会停在 wait 上，
+	 * 之后驱动 patch link + 写 0x4C00 都唤不醒它（手工实验里只有刚被 TDR
+	 * 复位过的短暂窗口能唤醒）。冷复位只在 probe（X 尚未起来）时做一次，
+	 * 避免运行期切换取指路径影响正在扫描出的显示。
+	 */
+	if (!pipe->cold_reset_done) {
+		pipe_2d_write(pipe, 0x96C200, 0x80000000);
+		pipe->cold_reset_done = true;
+	}
+
 	ret = wait_for(pipe_2d_idle_on_noc(pipe), 5000);
 	if (ret) {
 		pr_err("mwv207: failed to wait %s idle, %#x %#x",
@@ -601,11 +616,24 @@ static struct dma_fence *pipe_2d_append_fence(struct mwv207_pipe_2d *pipe)
 static void pipe_2d_wtol(struct mwv207_pipe_2d *pipe, u32 *start, u32 *new_wait)
 {
 	u32 *pos = pipe->last_wait;
+	u32 off = (u32)((u8 *)pos - (u8 *)pipe->ring_start);
 
-	pos[1] = pipe_2d_gpu_addr(pipe, start);
-	pipe_2d_barrier(pipe);
-	pos[0] = 0x89000000;
-	pipe_2d_barrier(pipe);
+	/*
+	 * link 的两个字必须真到内存之后才能踢引擎，否则引擎读到的还是
+	 * 0x88000000（wait），会继续原地等下一次世代。走 Device 映射写，
+	 * 顺序由 nGnRnE 保证；映射不可用时退回 CPU 直写 + barrier。
+	 */
+	if (pipe->ring_mmio) {
+		writel(pipe_2d_gpu_addr(pipe, start), pipe->ring_mmio + off + 4);
+		wmb();
+		writel(0x89000000, pipe->ring_mmio + off);
+		wmb();
+	} else {
+		pos[1] = pipe_2d_gpu_addr(pipe, start);
+		pipe_2d_barrier(pipe);
+		pos[0] = 0x89000000;
+		pipe_2d_barrier(pipe);
+	}
 
 	pipe->last_wait = new_wait;
 
@@ -769,6 +797,8 @@ static void mwv207_pipe_2d_destroy(struct mwv207_pipe *mpipe)
 
 	free_irq(pipe->irq, pipe);
 	pipe_2d_stop(pipe);
+	if (pipe->ring_mmio)
+		iounmap(pipe->ring_mmio);
 
 	/*
 	 * N14: free_irq() 之后不会再有 ISR 推进 fence，残留节点必须在这里
@@ -901,6 +931,19 @@ struct mwv207_pipe *mwv207_pipe_2d_create(struct mwv207_device *jdev,
 	pipe->ring_start = (u32 *)addr;
 	pipe->ring_start_addr = mwv207_bo_gpu_phys(mbo);
 	pipe->ring_end = pipe->ring_start + (0x40000 >> 2);
+
+	/*
+	 * ring 的 CPU 直映射经 TTM 走 ttm_write_combined（Normal-NC）：普通
+	 * store 进写合并缓冲后不保证在随后的 MMIO "踢引擎"之前对设备可见，
+	 * 于是引擎可能读到还没改写的 wait 描述符、停在原地。这里再建一份
+	 * Device 映射（ioremap，nGnRnE、强序），link 的两个字通过它写，
+	 * 与厂商 DDX 用 BAR mmap 写世代的语义一致。
+	 */
+	pipe->ring_mmio = ioremap(jdev->vram_bar_base + pipe->ring_start_addr,
+				  0x40000);
+	if (!pipe->ring_mmio)
+		pr_warn("mwv207: %s cannot ioremap ring for doorbell, fallback\n",
+			fname);
 
 	ret = pipe_2d_mmu_init(pipe);
 	if (ret)
