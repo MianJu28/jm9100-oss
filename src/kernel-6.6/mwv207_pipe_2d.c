@@ -651,7 +651,20 @@ static void pipe_2d_wtol(struct mwv207_pipe_2d *pipe, u32 *start, u32 *new_wait)
 
 	pipe->last_wait = new_wait;
 
+	if (diag)
+		pr_info("mwv207: %s wtol off=%#x gpu=%#x mmio=%d cpu=%08x/%08x mmio_rd=%08x/%08x",
+			pipe->base.fname, off, pipe_2d_gpu_addr(pipe, start),
+			pipe->ring_mmio != NULL, pos[0], pos[1],
+			pipe->ring_mmio ? readl(pipe->ring_mmio + off) : 0,
+			pipe->ring_mmio ? readl(pipe->ring_mmio + off + 4) : 0);
+
 	pipe_2d_kick(pipe);
+
+	if (diag)
+		pr_info("mwv207: %s kick: globals=%08x adstat=%08x sync=%08x",
+			pipe->base.fname, pipe_2d_read(pipe, 0x4200),
+			pipe_2d_read(pipe, 0x4100),
+			pipe_2d_read(pipe, PIPE_2D_SYNC_REG_BASE));
 }
 
 static void mwv207_pipe_2d_dump_state(struct mwv207_pipe *mpipe)
