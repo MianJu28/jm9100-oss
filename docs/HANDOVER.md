@@ -149,8 +149,10 @@ present 与每帧固定路径（详见下）。
 3. **多视口**：`PIPE_CAP_MAX_VIEWPORTS=1`、视口只有一份（`mwv207_draw.c:185`），
    需要硬件文档确认 0x1F76 是否支持多份，否则保持现状。
 4. **外部依赖项**（需用户/硬件资料）：Vulkan（无驱动、无 ICD；KMD 的 syncobj 字段注释
-   "reserved for vulkan"）、编码（本 SKU `has_enc=0`）、2D 引擎启动位（依赖厂商未发布的
-   `j9_handle_j9m_incumbency()`）。
+   "reserved for vulkan"）、编码（本 SKU `has_enc=0`）、**2D 引擎**（2026-11-16 收口：
+   命令语义已由厂商 DDX 反汇编 100% 解出、手工链能被引擎完整执行到最后一个同步写，
+   但 draw op 的数据通路不写显存，与 JPEG 同型缺闭源门控；`docs/UNRESOLVED.md` 的
+   "2D 引擎"两节记录了全部证据与 `tools/j2d/README.md` 里的编码表）。
 5. **可选的交付性工作**：README/报告索引刷新、把 `reports/` 里 11-11~11-13 的 8 份报告
    串成一条演进线（present→VP9→上传→回读→vendor 对照→JPEG）——不影响功能，属于工程收尾。
 
