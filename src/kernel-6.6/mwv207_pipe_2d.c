@@ -547,20 +547,49 @@ static void mwv207_pipe_2d_reset(struct mwv207_pipe *mpipe)
 	pipe_2d_start(pipe);
 }
 
+/*
+ * 硬件要求 link 的目标（以及链的起始地址）落在 4 KB 边界上：手工实验里
+ * 把 wait 改成链接到 0x40600/0x40500 这类 16 字节对齐但非 4K 对齐的链，
+ * 引擎一律静默不执行；改成 0x41000（4K 对齐）后立刻执行完整条链。所以
+ * 每条提交都放进一个 4K 槽，槽基址就是 link 目标。
+ */
+#define PIPE_2D_SLOT_SIZE	0x1000u
+#define PIPE_2D_SLOT_WORDS	(PIPE_2D_SLOT_SIZE / 4)
+
+static u32 *pipe_2d_slot_align(struct mwv207_pipe_2d *pipe, u32 *pos, u32 size)
+{
+	u32 off = (u32)((u8 *)pos - (u8 *)pipe->ring_start);
+	u32 pad = (PIPE_2D_SLOT_SIZE - (off & (PIPE_2D_SLOT_SIZE - 1))) &
+		  (PIPE_2D_SLOT_SIZE - 1);
+
+	if (pipe_2d_ptr_span(pipe->ring_end, pos) < pad + size)
+		return NULL;
+
+	return pos + pad / 4;
+}
+
 static u32 *pipe_2d_wait_for_space(struct mwv207_pipe_2d *pipe, u32 size)
 {
 	int i;
 
+	if (size > PIPE_2D_SLOT_SIZE)
+		return NULL;
+
 	for (i = 0; i < 10000; i++) {
 		u32 *head = READ_ONCE(pipe->head);
+		u32 *pos = NULL;
+
 		if (head <= pipe->tail) {
-			if (pipe_2d_ptr_span(pipe->ring_end, pipe->tail) >= size)
-				return pipe->tail;
-			if (pipe_2d_ptr_span(head, pipe->ring_start) >= size)
+			pos = pipe_2d_slot_align(pipe, pipe->tail, size);
+			if (pos)
+				return pos;
+			if (pipe_2d_ptr_span(head, pipe->ring_start) >=
+			    PIPE_2D_SLOT_SIZE + size)
 				return pipe->ring_start;
 		} else {
-			if (pipe_2d_ptr_span(head, pipe->tail) >= size)
-				return pipe->tail;
+			pos = pipe_2d_slot_align(pipe, pipe->tail, size);
+			if (pos)
+				return pos;
 		}
 		usleep_range(200, 200);
 	}
