@@ -1292,6 +1292,16 @@ initramfs 已刷并解包核对（`modinfo -F srcversion` 均为 `8DFC52…`）�
 
 ---
 
+### u_threaded_context 尝试（2026-11-16）：接入契约补齐后仍崩溃，收益也小于 present 开销，回退
+
+试过的四层改动（`threaded_resource`/`threaded_transfer`/`threaded_query` 子类化、
+`threaded_context_create`、Mesa 侧补 `set_hw_atomic_buffers` 包装）与两处崩溃
+（`malloc(): invalid size` → `slab_alloc: magic` 断言）记录在
+`reports/THREADED-CONTEXT-20261116.md`。放弃的决定性理由是量化结果：build 带 swap
+0.653 ms 里 **present 占 0.395 ms**，TC 最多把渲染部分从 0.258 压到约 0.20 ms，
+最好情况让 build 从 1532 升到约 1700 fps，而厂商的 14537 fps 主要来自"根本不拷贝
+整帧就上屏"。present 的拷贝是结构性差异（2D/DE 两条路都已收口），所以不再投入。
+
 ## 4. 信息 / 硬件边界（不该承诺修好）
 
 | # | 条目 | 判定 | 可做的最优动作 |
