@@ -1858,6 +1858,22 @@ link 确实写进了显存（两侧一致）、globals 正确（CMDADDR=0x40000�
 
 
 
+### 2026-11-16 收尾：present 去重的 A/B 结论（不做）
+
+2D 收口后，present 只剩"两次整帧拷贝"这条线索：客户端 `flush_resource` 把平铺面拷到
+线性影子、Xorg 再拷到屏幕 pixmap。为了判断"消掉影子这一次拷贝"是否值得，直接做了
+A/B（同一构建，`MWV207_SCANOUT_TILE` 控制客户端是否平铺；关掉即完全线性、没有影子拷贝）：
+
+| 配置 | present 800×600（clear+swap） | glmark2 build |
+|---|---|---|
+| `MWV207_SCANOUT_TILE=1`（平铺 + 影子拷贝） | **0.399 ms/帧（2503 FPS）** | 1523 |
+| `MWV207_SCANOUT_TILE=0`（全线性、无影子拷贝） | 0.483 ms/帧（2070 FPS） | 1564 |
+
+⇒ 影子拷贝并不"白花"：平铺渲染省下的写带宽（PE 写平铺 38 GB/s vs 线性 6.7 GB/s）
+比影子拷贝的代价更大，两套配置的 build 分数也在噪声内。**因此不做"去重"**；present 与
+厂商的差距（0.014 ms）是架构级的——厂商走的是"客户端缓冲直接翻转、零拷贝异步 present"，
+要做等价物得改 Xorg present/DRI3 通路，超出驱动可改范围。该项到此关闭。
+
 ### 回读路径（glReadPixels / VAAPI 下载）分析（2026-11-13 更正）：瓶颈是 DMA 引擎本身
 
 `glReadPixels` 4 MB（1024×1024 RGBA8，r31 安装栈）稳定约 **4.7–4.9 ms**（≈0.87 GB/s）。
