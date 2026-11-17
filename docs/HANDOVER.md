@@ -1,20 +1,21 @@
-# 交接文档 — JM9100 (MWV207) 开源驱动适配（2026-11-17 14:40 更新）
+# 交接文档 — JM9100 (MWV207) 开源驱动适配（2026-11-17 15:30 更新）
 
 > 目的：把当前进度、环境、方法学与"下一步做什么"完整交给下一个会话。
 > 本文档随进度更新；未修问题权威清单在 `docs/UNRESOLVED.md`（含 2026-11-10 的 §0.1 速览）。
 > VP9 专项见 `docs/HANDOVER-VP9.md`。
 
-## 1. 当前状态（2026-11-17 14:40）
+## 1. 当前状态（2026-11-17 15:30）
 
-**r37 已部署并验收通过**：活动栈 `oss-24.1.2-fullstack-r37`（`payload-46`，2026-11-17 12:46
-安装，快照 `20261117-124651`，安装目录 219M）；DRI `0f0851ed955c312f592a3892a017b0e0`、
-VA `6c455b9a2160…`，与 `payload-46/` 内文件一致。自建 KMD 在跑
+**r38 已部署并验收通过**：活动栈 `oss-24.1.2-fullstack-r38`（`payload-48`，2026-11-17 15:22
+安装，快照 `20261117-152237`，安装目录 219M）；DRI `fed71d54deb79d6e6944f0f8e3abd2a7`、
+VA `667937d55e9e1ed346804c79fa2546db`，与 `payload-48/` 内文件一致；安装后实测
+`gl-regression` **pass=9 fail=0**、`vp9-regression` **pass=20 fail=0**、
+`verify-installed` **PASS=21 FAIL=0 SKIP=3**；用户实机确认火狐不再崩溃、文字正常。自建 KMD 在跑
 （srcversion `BABA169D1C80304D666559D`，含 2026-11-16 的 2D 提交链 4 KB 对齐修复与
 2D `diag` 日志；**运行内核已升到 `6.6.159-arm64-desktop-hwe`**，6.6.155 的 headers 只能编
 旧版，DKMS 已为 155/159 各建一份，6.6.143 停止维护）。
 
-**r38 已打好（`payload-48`，DRI `fed71d54deb79d6e6944f0f8e3abd2a7`、VA `667937d55e9e1ed346804c79fa2546db`），待安装**：
-仅 UMD 变化，两条：
+**r38 内容（仅 UMD 变化，两条）**：
 1. 补 `pipe_screen::is_dmabuf_modifier_supported` / `get_dmabuf_modifier_planes`，让"导出的
    dmabuf 能被导回"（此前必然 `EGL_BAD_MATCH`；Firefox 的 dmabuf 传递依赖它）；
 2. **修着色器 arena 只放得下 8 个变体**（越界写显存 + `assert` abort = 火狐"打开网页就
