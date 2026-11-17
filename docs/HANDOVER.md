@@ -1,24 +1,32 @@
-# 交接文档 — JM9100 (MWV207) 开源驱动适配（2026-11-16 16:30 更新）
+# 交接文档 — JM9100 (MWV207) 开源驱动适配（2026-11-17 14:40 更新）
 
 > 目的：把当前进度、环境、方法学与"下一步做什么"完整交给下一个会话。
 > 本文档随进度更新；未修问题权威清单在 `docs/UNRESOLVED.md`（含 2026-11-10 的 §0.1 速览）。
 > VP9 专项见 `docs/HANDOVER-VP9.md`。
 
-## 1. 当前状态（2026-11-16 16:30）
+## 1. 当前状态（2026-11-17 14:40）
 
 **r37 已部署并验收通过**：活动栈 `oss-24.1.2-fullstack-r37`（`payload-46`，2026-11-17 12:46
-安装，快照 `20261117-091541`，安装目录 219M）；DRI `78eb18044645d6084f4be4f373a15b1d`、
-VA `d847624c2dd9c21048853f536b59fd4a`，与 `payload-46/` 内文件一致。自建 KMD 在跑
+安装，快照 `20261117-124651`，安装目录 219M）；DRI `0f0851ed955c312f592a3892a017b0e0`、
+VA `6c455b9a2160…`，与 `payload-46/` 内文件一致。自建 KMD 在跑
 （srcversion `BABA169D1C80304D666559D`，含 2026-11-16 的 2D 提交链 4 KB 对齐修复与
-2D `diag` 日志；唯一维护内核 `6.6.155-arm64-desktop-hwe`，6.6.143 的 headers 残缺，已停止维护）。桌面零 env 下 GL 4.0 / GLES 3.2 / `Video memory: 2048MB`；
+2D `diag` 日志；**运行内核已升到 `6.6.159-arm64-desktop-hwe`**，6.6.155 的 headers 只能编
+旧版，DKMS 已为 155/159 各建一份，6.6.143 停止维护）。
+
+**r38 已打好（`payload-47`，DRI `e86d3cc911d170493192b95da2686640`、VA `21800f9fb5af…`），待安装**：
+仅 UMD 变化 —— 补上 `pipe_screen::is_dmabuf_modifier_supported`/`get_dmabuf_modifier_planes`，
+让"导出的 dmabuf 能被导回来"（此前必然 `EGL_BAD_MATCH`；Firefox 的 dmabuf 传递依赖它），
+新增 `tests/gl-probe/dmabuf.c` 与回归第 7 项。详见 `docs/UNRESOLVED.md` 同名小节。
+
+桌面零 env 下 GL 4.0 / GLES 3.2 / `Video memory: 2048MB`；
 OpenCL/VA-API/VDPAU 全走本栈。
 
 验收命令（2026-11-13 实跑，全绿）：
 
 | 命令 | 结果 |
 |---|---|
-| `tests/verify-installed.sh C588E9673F984406AF46A2F` | PASS=21 FAIL=0 SKIP=3（SKIP 需 root） |
-| `DRI_DIR=/usr/local/lib/mwv207-oss tools/gl-regression.sh` | pass=7 fail=0（glmark2 1063–1069） |
+| `tests/verify-installed.sh BABA169D1C80304D666559D` | PASS=21 FAIL=0 SKIP=3（SKIP 需 root） |
+| `DRI_DIR=/usr/local/lib/mwv207-oss tools/gl-regression.sh` | pass=8 fail=0（glmark2 793–1077；第 7 项是 dmabuf 往返） |
 | `tools/vp9-regression.sh` | pass=20 fail=0 |
 | `tests/vp9-intraonly/run-vp9-intraonly.sh` | 7/7 IDENTICAL（含 3 个 `show_existing` 重放帧） |
 | `tests/vp9-resize/run-vp9-resize.sh` | 1 IDENTICAL + 1 KNOWN-DIFF（滤波核差异，§1.9） |
