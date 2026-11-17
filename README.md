@@ -81,6 +81,7 @@ r36 实测：`verify-installed` **PASS=21 FAIL=0 SKIP=3**、`gl-regression` **pa
 | `tests/` | 硬件验收套件（解码逐字节比对、present/上传/回读基准、健壮性、VAAPI 逐位一致） |
 | `docs/` | 交付说明 `DELIVERY.md`、未解问题总账 `UNRESOLVED.md`、交接 `HANDOVER.md`、寄存器参考 |
 - [docs/HANDOVER-2D.md](docs/HANDOVER-2D.md)：2D 引擎数据通路的完整交接（协议/寄存器/命令编码/未解缺口/工具）
+- [docs/HANDOVER-ZEROCOPY-PRESENT.md](docs/HANDOVER-ZEROCOPY-PRESENT.md)：厂商"零拷贝异步翻转"present 架构的移植方案（对照/证据/三条路线/止损）
 | `reports/` | 各项分析与对照报告 |
 | `payload-46/` | 当前载荷（r36） |
 

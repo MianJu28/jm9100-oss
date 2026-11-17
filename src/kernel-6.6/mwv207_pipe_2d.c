@@ -374,7 +374,13 @@ static int pipe_2d_hw_init(struct mwv207_pipe_2d *pipe)
 	 * 避免运行期切换取指路径影响正在扫描出的显示。
 	 */
 	if (!pipe->cold_reset_done) {
-		pipe_2d_write(pipe, 0x96C200, 0x80000000);
+		/* 0x96C200 是 BAR1 里的绝对寄存器地址（J9MATHS_BANDCUTTER
+		 * 0x968000 + SPECIAL_GLOBALS 0x4200）。pipe_2d_write() 会再
+		 * 加一次 regbase 0x968000，写出的其实是 0xFE4200 —— 这条
+		 * FROM_AHB 切换从未生效，软复位时引擎仍在从旧 CMDADDR 取指，
+		 * 复位不完整，表现为启动链跑完停在 wait 后 link+踢唤不醒。
+		 * 必须用 jdev_write() 按 BAR1 绝对地址写。 */
+		jdev_write(pipe->jdev, 0x96C200, 0x80000000);
 		pipe->cold_reset_done = true;
 	}
 
