@@ -6,9 +6,9 @@
 
 ## 1. 当前状态（2026-11-16 16:30）
 
-**r35 已部署并验收通过**：活动栈 `oss-24.1.2-fullstack-r35`（`payload-46`，2026-11-13 15:32
-安装，快照 `20261113-153239`，安装目录 219M）；DRI `30a1b18130d4d8a9efa6b28750256e6c`、
-VA `a93bb6af1e75bb0fc7dc48236e129af1`，与 `payload-46/` 内文件一致。自建 KMD 在跑
+**r36 已部署并验收通过**：活动栈 `oss-24.1.2-fullstack-r36`（`payload-46`，2026-11-17 09:15
+安装，快照 `20261117-091541`，安装目录 219M）；DRI `78eb18044645d6084f4be4f373a15b1d`、
+VA `d847624c2dd9c21048853f536b59fd4a`，与 `payload-46/` 内文件一致。自建 KMD 在跑
 （srcversion `BABA169D1C80304D666559D`，含 2026-11-16 的 2D 提交链 4 KB 对齐修复与
 2D `diag` 日志；唯一维护内核 `6.6.155-arm64-desktop-hwe`，6.6.143 的 headers 残缺，已停止维护）。桌面零 env 下 GL 4.0 / GLES 3.2 / `Video memory: 2048MB`；
 OpenCL/VA-API/VDPAU 全走本栈。
@@ -59,8 +59,8 @@ present 与每帧固定路径（详见下）。
 | 机器 | Deepin 25 aarch64，内核 `6.6.155-arm64-desktop-hwe`（143 也装了 DKMS 包，但不是启动内核），GPU `[0731:9100]` PCI 07:00.0，HDMI-1 1920×1080@100Hz，无免密 sudo（用 `printf '666\n' \| sudo -S`） |
 | 仓库 | `/home/admin/jm9100-oss`（git，远端 `git@github.com:MianJu28/jm9100-oss.git`，已推送同步） |
 | 源码 | `src/mwv207-umd/`（UMD，唯一可改处；上游树 `ref/oh-mesa/.../src/gallium/{drivers,winsys}/mwv207` 是指向它的符号链接）、`src/kernel-6.6/`（KMD，已并入本仓库） |
-| 已装栈 | `/usr/local/lib/mwv207-oss/`（运行中 **r35**：DRI md5 `30a1b18130d4d8a9efa6b28750256e6c`、VA md5 `a93bb6af1e75bb0fc7dc48236e129af1`），`/lib/modules/…/updates/dkms/mwv207.ko`（自建 KMD `C588E9673F984406AF46A2F`，`kmd stage` 会同时刷新 `/var/lib/dkms/mwv207-oss/1.0.0/$KVER/$arch/module/mwv207.ko` 以免 `dkms status` 报 Diff）；历次安装快照与 md5 在 `./switch-mwv207.sh status` 与 `/var/lib/mwv207-oss/switch-history` |
-| 载荷 | 运行中 `payload-46`（`VERSION = 24.1.2-fullstack-r35`，DRI `30a1b181…`、VA `a93bb6af…`；含修法 1/3/4、N19、show_existing 线性重放、resize 尺寸防御、12bit 明确拒绝、`mwv207_video_buffer.h` 守卫修复、JPEG 三缓冲 SOI 判定与 DKMS 同步）。`tools/make-payload.sh` 每次会 `rm -rf payload-46` 重建并覆盖同名编号，回滚点只能靠 `switch-history` 里的旧目录 |
+| 已装栈 | `/usr/local/lib/mwv207-oss/`（运行中 **r36**：DRI md5 `78eb18044645d6084f4be4f373a15b1d`、VA md5 `d847624c2dd9c21048853f536b59fd4a`），`/lib/modules/…/updates/dkms/mwv207.ko`（自建 KMD `C588E9673F984406AF46A2F`，`kmd stage` 会同时刷新 `/var/lib/dkms/mwv207-oss/1.0.0/$KVER/$arch/module/mwv207.ko` 以免 `dkms status` 报 Diff）；历次安装快照与 md5 在 `./switch-mwv207.sh status` 与 `/var/lib/mwv207-oss/switch-history` |
+| 载荷 | 运行中 `payload-46`（`VERSION = 24.1.2-fullstack-r36`，DRI `78eb18…`、VA `d84762…`；含修法 1/3/4、N19、show_existing 线性重放、resize 尺寸防御、12bit 明确拒绝、`mwv207_video_buffer.h` 守卫修复、JPEG 三缓冲 SOI 判定与 DKMS 同步）。`tools/make-payload.sh` 每次会 `rm -rf payload-46` 重建并覆盖同名编号，回滚点只能靠 `switch-history` 里的旧目录 |
 | 快速回归副本 | `~/dev-dri/`（驱动：`mwv207_dri.so`、`libmwv207_drv_video.so`、`mwv207_drv_video.so`，后两个必须 `rm -f` 再 `cp`——原名是指向 `/usr/lib` 的符号链接）与 `~/dev-bin/`（探针：`bufbench`/`texbench`/`rbbench`/`rbscale`/`pbench`/`drawbench`/`peep`）。**不要放 `/tmp`**：重启即空，2026-11-13 已被清空三次。流程：改 `src/mwv207-umd` → `./tools/build-umd.sh` → `cp build-full/.../libmwv207_dri.so ~/dev-dri/mwv207_dri.so` → `LIBGL_DRIVERS_PATH=$HOME/dev-dri MESA_LOADER_DRIVER_OVERRIDE=mwv207 …`；视频侧用 `LIBVA_DRIVERS_PATH=$HOME/dev-dri` |
 | 出包安装 | `./tools/make-payload.sh -v 24.1.2-fullstack-rN` → 用户在自己终端 `sudo ./switch-mwv207.sh umd install`（脚本自动 `systemd-run --scope` 脱离 lightdm，安装过程会重启 lightdm；agent 直接调 sudo 时工具调用常显示 interrupted，**实装可能已成功——必须用 `status` + md5 核对，勿盲目重跑**） |
 | 构建陷阱 | 性能实验必须用 `build-full`（`build-glvnd` 是旧二进制）；`meson setup --wipe` 会把 glvnd 从 auto 变 enabled → 必须显式 `-Dglvnd=false -Dgles1/2=enabled` |
