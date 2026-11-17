@@ -272,7 +272,15 @@ mwv207_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
       return 400;
 
    case PIPE_CAP_MAX_DUAL_SOURCE_RENDER_TARGETS:
-      return 1;
+      /* FIX(jm9100-oss): 双源混合（WebRender 的 LCD 次像素文字
+       * ps_text_run ALPHA_PASS,DUAL_SOURCE_BLENDING 用 GL_SRC1_COLOR/SRC1_ALPHA）
+       * 在我们的实现里依赖 nir/mwv207_lower_dual.c 的手工 lower —— 把混合搬进
+       * 片元着色器、并按编译期烘焙的 blend_state 计算因子。火狐出现"文字被
+       * 彩色竖条覆盖"的页面，用软件渲染（llvmpipe）正常，用我们驱动必然复现，
+       * 其余 GL 用例全通过；双源 mixed 是我们唯一没做过端到端验证的路径，
+       * 因此默认关闭（Mesa 就不再启用 GL_ARB_blend_func_extended，火狐退回
+       * 灰度抗锯齿文字）。想做实验时 MWV207_DUALSRC=1 打开。 */
+      return debug_get_bool_option("MWV207_DUALSRC", false) ? 1 : 0;
    case PIPE_CAP_QUERY_TIMESTAMP:
       return 1;
 
