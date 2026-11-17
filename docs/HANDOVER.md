@@ -13,10 +13,14 @@ VA `6c455b9a2160…`，与 `payload-46/` 内文件一致。自建 KMD 在跑
 2D `diag` 日志；**运行内核已升到 `6.6.159-arm64-desktop-hwe`**，6.6.155 的 headers 只能编
 旧版，DKMS 已为 155/159 各建一份，6.6.143 停止维护）。
 
-**r38 已打好（`payload-47`，DRI `e86d3cc911d170493192b95da2686640`、VA `21800f9fb5af…`），待安装**：
-仅 UMD 变化 —— 补上 `pipe_screen::is_dmabuf_modifier_supported`/`get_dmabuf_modifier_planes`，
-让"导出的 dmabuf 能被导回来"（此前必然 `EGL_BAD_MATCH`；Firefox 的 dmabuf 传递依赖它），
-新增 `tests/gl-probe/dmabuf.c` 与回归第 7 项。详见 `docs/UNRESOLVED.md` 同名小节。
+**r38 已打好（`payload-48`，DRI `fed71d54deb79d6e6944f0f8e3abd2a7`、VA `667937d55e9e1ed346804c79fa2546db`），待安装**：
+仅 UMD 变化，两条：
+1. 补 `pipe_screen::is_dmabuf_modifier_supported` / `get_dmabuf_modifier_planes`，让"导出的
+   dmabuf 能被导回"（此前必然 `EGL_BAD_MATCH`；Firefox 的 dmabuf 传递依赖它）；
+2. **修着色器 arena 只放得下 8 个变体**（越界写显存 + `assert` abort = 火狐"打开网页就
+   崩溃 / 文字整页乱码"的根因），起步 2 MB 并把越界改成一次性告警。
+新增探针 `tests/gl-probe/{dmabuf,dualtex,dualarena}.c`，回归扩到 9 项。详见
+`docs/UNRESOLVED.md` 的 dmabuf 与"着色器 arena"两节。
 
 桌面零 env 下 GL 4.0 / GLES 3.2 / `Video memory: 2048MB`；
 OpenCL/VA-API/VDPAU 全走本栈。
@@ -80,6 +84,16 @@ present 与每帧固定路径（详见下）。
 - 修法：混合参数进 `fp_dual_blend` 指纹；只写一条最终颜色（并摘 src use_link）；`texop_txf` + `floor(gl_FragCoord)`；因子统一 vec4；发射器新增 `nir_op_fsub`（复用 fadd + 源取负，否则 `nir_opt_algebraic_late` 折叠后 assert）；RT 拷贝按 scissor 裁剪并按尺寸缓存。
 - 实测：`dualblend` 7/7 PASS；`gl-regression` 8/8；`vp9-regression` 20/20；`verify-installed` PASS=21；用户实机确认文字恢复正常；`dualbench` 每 dual draw 0.079（basline 0.053）ms。
 - 提交：`a219e03`、`5c50b46`、`72c056a`、`4d1f9b9`。
+
+## 2.10 火狐"打开网页就崩溃 / 文字整页乱码"（2026-11-17 15:00）：着色器 arena 太小
+
+- 症状：Firefox 159 打开 `https://cnb.cool/...` 3.6 s 内崩溃（排障模式正常）；不崩时整页文字被裁边/串字，几何与图标正常。
+- 崩溃取证：崩溃报告里的 `StackTraces` JSON → 按模块基址算偏移 → `addr2line` 到 r37 的 `libmwv207_dri.so`：
+  `SIGABRT` 落在 `mwv207_record_code`（`nir/mwv207_compiler.c:405` 的 `assert(state->bo_offset < bo->size)`），调用链 `mwv207_set_current_shader ← mwv207_update_shader ← _mesa_DrawElements…`；另有 `SIGSEGV` 落在 `src/mesa/main/get.c:find_value`（堆已坏的次生现象）。
+- 根因：着色器变体的 GPU 二进制放在 context 的 arena BO 里，容量 `code_size*4*16` 而每变体占 `code_size*4*2` ⇒ **只放得下 8 个变体**。双源混合把混合状态烘焙进着色器后变体暴涨，第 9 个变体 `memcpy` 越界（先污染别的显存 → 文字乱码）随后 `assert` abort。
+- 修法：arena 起步 2 MB；越界改一次性告警不再 abort；顺带把 lower_dual 用到的"渲染目标读回槽号"并进 `fp_dual_blend` 指纹。
+- 复现：`tests/gl-probe/dualarena.c`（每 draw 换 `glBlendColor`）在修复前驱动上 **abort 于同一条断言**（rc=134），修复后 PASS；`tools/gl-regression.sh` 增为 9 项，dev 上 **pass=9 fail=0**。
+- 实机：开发驱动打开原崩溃页渲染完全正常、无崩溃、无 arena 告警。提交 `90ebc12`。
 
 ## 3. 已完成里程碑（提交索引）
 
