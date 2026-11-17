@@ -456,6 +456,7 @@ mwv207_compile_shader(struct mwv207_context *ctx, struct mwv207_shader_state *st
    }
    shader->built_fp_pixel_128bit = ctx->fp_pixel_128bit;
    shader->built_fp_is_dual      = ctx->fp_is_dual;
+   shader->built_fp_dual_blend   = ctx->fp_dual_blend;
    /* PIPE_CAP_ROBUST_BUFFER_ACCESS_BEHAVIOR is advertised (see
     * mwv207_screen.c), so the guarantee has to actually hold: clamp every
     * SSBO access offset to an in-bounds value before it reaches the hardware.

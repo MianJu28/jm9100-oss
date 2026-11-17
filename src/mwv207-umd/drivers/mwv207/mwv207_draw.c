@@ -1162,6 +1162,24 @@ mwv207_update_shader(struct mwv207_context *ctx)
       ctx->fp_pixel_128bit = fp;
 
       ctx->fp_is_dual = ctx->info.dsbi.is_dual ? 1u : 0u;
+
+      /* FIX(jm9100-oss): 双源混合的因子/方程/blend color 会被 lower_dual
+       * 烘焙进着色器二进制，必须参与缓存键。 */
+      {
+         const struct pipe_rt_blend_state *rbs = &ctx->info.dsbi.blend_state;
+         uint32_t fp = 2166136261u;
+         fp = (fp ^ (uint32_t)rbs->rgb_src_factor) * 16777619u;
+         fp = (fp ^ (uint32_t)rbs->rgb_dst_factor) * 16777619u;
+         fp = (fp ^ (uint32_t)rbs->alpha_src_factor) * 16777619u;
+         fp = (fp ^ (uint32_t)rbs->alpha_dst_factor) * 16777619u;
+         fp = (fp ^ (uint32_t)rbs->rgb_func) * 16777619u;
+         fp = (fp ^ (uint32_t)rbs->alpha_func) * 16777619u;
+         for (unsigned i = 0; i < 4; i++) {
+            union { float f; uint32_t u; } v = { ctx->blend_color.color[i] };
+            fp = (fp ^ v.u) * 16777619u;
+         }
+         ctx->fp_dual_blend = fp;
+      }
       ctx->fp_dirty = false;
    }
 

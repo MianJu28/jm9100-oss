@@ -155,6 +155,7 @@ struct mwv207_shader {
    uint32_t built_fp_pixel_128bit;
    uint32_t built_fp_z32_shadow;
    uint32_t built_fp_is_dual;
+   uint32_t built_fp_dual_blend;
    bool z32_shadow[PIPE_SHADER_TYPES][PIPE_MAX_SHADER_SAMPLER_VIEWS];
 
    uint32_t bo_offset;

@@ -996,7 +996,8 @@ mwv207_set_current_shader(struct mwv207_context *ctx,
           shader->built_fp_tex_128bit == fp_tex &&
           (!key.pixel_128bit || shader->built_fp_pixel_128bit == ctx->fp_pixel_128bit) &&
           shader->built_fp_z32_shadow == fp_z32 &&
-          shader->built_fp_is_dual == ctx->fp_is_dual)
+          shader->built_fp_is_dual == ctx->fp_is_dual &&
+          shader->built_fp_dual_blend == ctx->fp_dual_blend)
          break;
 
    if (shader) {

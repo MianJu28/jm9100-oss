@@ -26,263 +26,272 @@
 */
 #include "mwv207_lower.h"
 
+/* FIX(jm9100-oss): 双源混合(dual source blending)的硬件支持说明
+ *
+ * 硬件混合单元没有 SRC1 因子: mwv207_blend.c 的 alpha_func[] 表在
+ * SRC1_COLOR(9)/SRC1_ALPHA(10)/INV_SRC1_*(25/26) 处是 ~0U。因此驱动只能把
+ * 双源混合降级进片元着色器: 读回当前渲染目标(拷贝成纹理)作为 dst, 用
+ * src(第一个输出) 与 src1(第二个输出, GL 的 index=1) 计算最终颜色。
+ *
+ * 之前的实现有几个让结果直接错掉的问题, 这里一并修掉:
+ *   1. 混合因子/方程/blend color 在编译期被烘焙进二进制, 但它们没有进
+ *      着色器缓存键 —— 先编译出来的一份会被后面所有不同的混合状态复用。
+ *      (已由 fp_dual_blend 指纹解决, 见 mwv207_draw.c/mwv207_shader.c)
+ *   2. 原来新加了一个 driver_location=2 的 FRAG_RESULT_DATA0 输出, 但保留了
+ *      原来的两个 store —— 结果着色器实际写 3 个输出, 最终颜色落不到 RT0。
+ *      现在直接改写第一个 store 的值, 并删掉 index=1 的 store (硬件只有
+ *      一个 RT, 双源的第二个输出本来就不该写出去)。
+ *   3. 原来用 nir_texop_txb + 归一化坐标采样 dst, 带三线性过滤与 LOD 偏移,
+ *      会把相邻像素混进来(文字边缘因此糊成彩色条纹)。现在用 texelFetch
+ *      (nir_texop_txf) 精确取整数坐标的像素。
+ *   4. 因子/方程计算里对 1 分量/3 分量 def 取 channel 3 是未定义行为;
+ *      现在因子统一规约成 vec4, alpha 取它的 .a。
+ */
+
+static nir_def *
+splat_vec4(nir_builder *b, nir_def *v)
+{
+   if (v->num_components == 4)
+      return v;
+   if (v->num_components == 1)
+      return nir_replicate(b, v, 4);
+   /* vec3 等: 用第 3 个分量补 alpha, 只用于 rgb 因子, alpha 取 .a 时另有来源 */
+   return nir_vec4(b, nir_channel(b, v, 0), nir_channel(b, v, 1),
+                   nir_channel(b, v, 2), nir_channel(b, v, 2));
+}
+
 static nir_def *
 get_factor_def(struct mwv207_context *ctx, nir_builder *b, unsigned int factor,
                nir_def *blend_src, nir_def *blend_src1, nir_def *blend_dst)
 {
-   nir_def *factorDef = NULL;
-   nir_def *const_zero = nir_imm_float(b, 0);
    nir_def *const_one = nir_imm_float(b, 1);
-   nir_def *const_minus_one = nir_imm_float(b, -1);
-   nir_def *const_minus = NULL;
+   nir_def *one_vec = nir_imm_vec4(b, 1, 1, 1, 1);
+   nir_def *zero_vec = nir_imm_vec4(b, 0, 0, 0, 0);
+
    switch (factor) {
    case PIPE_BLENDFACTOR_ZERO:
-      factorDef = const_zero;
-      break;
-   case PIPE_BLENDFACTOR_SRC_COLOR:
-      factorDef = blend_src;
-      break;
-   case PIPE_BLENDFACTOR_SRC_ALPHA:
-      factorDef = nir_channel(b, blend_src, 3);
-      break;
-   case PIPE_BLENDFACTOR_DST_COLOR:
-      factorDef = blend_dst;
-      break;
-   case PIPE_BLENDFACTOR_DST_ALPHA:
-      factorDef = nir_channel(b, blend_dst, 3);
-      break;
-   case PIPE_BLENDFACTOR_SRC_ALPHA_SATURATE:
-
-      const_minus = nir_fadd(b, nir_fmul(b, nir_channels(b, blend_dst, 0x8), const_minus_one), const_one);
-      factorDef = nir_fmin(b, nir_channels(b, blend_src, 0x8), const_minus);
-      factorDef = nir_vec4(b, nir_channels(b, factorDef, 1), nir_channels(b, factorDef, 1),
-                           nir_channels(b, factorDef, 1), const_one);
-      break;
-   case PIPE_BLENDFACTOR_CONST_COLOR:
-      factorDef = nir_vec4(b, nir_imm_float(b, ctx->blend_color.color[0]),
-                           nir_imm_float(b, ctx->blend_color.color[1]),
-                           nir_imm_float(b, ctx->blend_color.color[2]),
-                           nir_imm_float(b, ctx->blend_color.color[3]));
-      break;
-   case PIPE_BLENDFACTOR_CONST_ALPHA:
-      factorDef = nir_imm_float(b, ctx->blend_color.color[3]);
-      break;
-   case PIPE_BLENDFACTOR_SRC1_COLOR:
-      factorDef = nir_channels(b, blend_src1, 0xf );
-      break;
-   case PIPE_BLENDFACTOR_SRC1_ALPHA:
-      factorDef = nir_channels(b, blend_src1, 0x8);
-      break;
+      return zero_vec;
    case PIPE_BLENDFACTOR_ONE:
-      factorDef = const_one;
-      break;
+      return one_vec;
+   case PIPE_BLENDFACTOR_SRC_COLOR:
+      return blend_src;
+   case PIPE_BLENDFACTOR_SRC_ALPHA:
+      return nir_replicate(b, nir_channel(b, blend_src, 3), 4);
+   case PIPE_BLENDFACTOR_DST_COLOR:
+      return blend_dst;
+   case PIPE_BLENDFACTOR_DST_ALPHA:
+      return nir_replicate(b, nir_channel(b, blend_dst, 3), 4);
+   case PIPE_BLENDFACTOR_SRC_ALPHA_SATURATE: {
+      /* min(src.a, 1 - dst.a), rgb 三分量相同, alpha 为 1 */
+      nir_def *sa = nir_channel(b, blend_src, 3);
+      nir_def *inv_da = nir_fsub(b, const_one, nir_channel(b, blend_dst, 3));
+      nir_def *f = nir_fmin(b, sa, inv_da);
+      return nir_vec4(b, f, f, f, const_one);
+   }
+   case PIPE_BLENDFACTOR_CONST_COLOR:
+      return nir_imm_vec4(b, ctx->blend_color.color[0], ctx->blend_color.color[1],
+                             ctx->blend_color.color[2], ctx->blend_color.color[3]);
+   case PIPE_BLENDFACTOR_CONST_ALPHA:
+      return nir_replicate(b, nir_imm_float(b, ctx->blend_color.color[3]), 4);
+   case PIPE_BLENDFACTOR_SRC1_COLOR:
+      return blend_src1;
+   case PIPE_BLENDFACTOR_SRC1_ALPHA:
+      return nir_replicate(b, nir_channel(b, blend_src1, 3), 4);
    case PIPE_BLENDFACTOR_INV_SRC_COLOR:
-      factorDef = nir_fadd(b, nir_fmul(b, nir_channels(b, blend_src, 0xf), const_minus_one), const_one);
-      break;
+      return nir_fsub(b, one_vec, blend_src);
    case PIPE_BLENDFACTOR_INV_SRC_ALPHA:
-      factorDef = nir_fadd(b, nir_fmul(b, nir_channels(b, blend_src, 0x8), const_minus_one), const_one);
-      break;
-   case PIPE_BLENDFACTOR_INV_DST_ALPHA:
-      factorDef = nir_fadd(b, nir_fmul(b, nir_channels(b, blend_dst, 0x8), const_minus_one), const_one);
-      break;
+      return nir_replicate(b, nir_fsub(b, const_one, nir_channel(b, blend_src, 3)), 4);
    case PIPE_BLENDFACTOR_INV_DST_COLOR:
-      factorDef = nir_fadd(b, nir_fmul(b, nir_channels(b, blend_dst, 0x7), const_minus_one), const_one);
-      break;
+      return nir_fsub(b, one_vec, blend_dst);
+   case PIPE_BLENDFACTOR_INV_DST_ALPHA:
+      return nir_replicate(b, nir_fsub(b, const_one, nir_channel(b, blend_dst, 3)), 4);
    case PIPE_BLENDFACTOR_INV_CONST_COLOR:
-      factorDef = nir_vec3(b, nir_imm_float(b, 1 - ctx->blend_color.color[0]),
-                           nir_imm_float(b, 1 - ctx->blend_color.color[1]),
-                           nir_imm_float(b, 1 - ctx->blend_color.color[2]));
-      break;
+      return nir_imm_vec4(b, 1.0f - ctx->blend_color.color[0],
+                             1.0f - ctx->blend_color.color[1],
+                             1.0f - ctx->blend_color.color[2],
+                             1.0f - ctx->blend_color.color[3]);
    case PIPE_BLENDFACTOR_INV_CONST_ALPHA:
-      factorDef = nir_imm_float(b, 1 - ctx->blend_color.color[3]);
-      break;
+      return nir_replicate(b, nir_imm_float(b, 1.0f - ctx->blend_color.color[3]), 4);
    case PIPE_BLENDFACTOR_INV_SRC1_COLOR:
-      factorDef = nir_fadd(b, nir_fmul(b, nir_channels(b, blend_src1, 0x7), const_minus_one), const_one);
-      break;
+      return nir_fsub(b, one_vec, blend_src1);
    case PIPE_BLENDFACTOR_INV_SRC1_ALPHA:
-      factorDef = nir_fadd(b, nir_fmul(b, nir_channels(b, blend_src1, 0x8), const_minus_one), const_one);
-      break;
+      return nir_replicate(b, nir_fsub(b, const_one, nir_channel(b, blend_src1, 3)), 4);
+   default:
+      /* 未知因子按 ZERO 处理, 不要返回未初始化指针 */
+      return zero_vec;
    }
-   return factorDef;
 }
 
+/* 取整数坐标的 dst 像素: 拷贝纹理与渲染目标同尺寸同朝向, 所以 texel 坐标
+ * 就是 floor(gl_FragCoord.xy)。用 texelFetch 避免任何过滤。 */
 static nir_def *
-get_rt_texture_coord(struct mwv207_context *ctx, nir_builder *b)
+load_dst_texel(struct mwv207_context *ctx, nir_builder *b, nir_shader *nir)
 {
-   /* FIX(jm9100-oss): Firefox/GitHub 崩溃 (SIGSEGV / SEGV_MAPERR 0x48)。
-    * 这里原来无条件解引用 sampler_views[4][dsbi.sampler_index]->texture；
-    * 0x48 正是 pipe_sampler_view::texture 的偏移，即槽上视图为 NULL。
-    * 视图槽在 set_sampler_views 里随时可能被解绑/回缩，编译期必须判空：
-    * 没有视图就退回帧缓冲尺寸（lower_dual 只需要把 fragcoord 归一化到
-    * [0,1]，用渲染目标尺寸与 RT blit 拷贝视图等价）。 */
-   struct pipe_sampler_view *rt_view =
-      ctx->sampler_views[4][ctx->info.dsbi.sampler_index];
-   unsigned rt_width, rt_height;
-   if (rt_view && rt_view->texture) {
-      rt_width = rt_view->texture->width0;
-      rt_height = rt_view->texture->height0;
-   } else if (ctx->fb_state.cbufs[0]) {
-      rt_width = ctx->fb_state.cbufs[0]->width;
-      rt_height = ctx->fb_state.cbufs[0]->height;
-   } else {
-      rt_width = ctx->fb_state.width;
-      rt_height = ctx->fb_state.height;
-   }
    nir_def *coord = nir_load_frag_coord(b);
-   nir_def *fragcoord_x = nir_channel(b, coord, 0);
-   nir_def *fragcoord_y = nir_channel(b, coord, 1);
-   nir_def *width = nir_imm_float(b, rt_width);
-   nir_def *height = nir_imm_float(b, rt_height);
-   nir_def *y_invert = nir_imm_float(b, ctx->info.dsbi.y_invert);
-   nir_def *const_one = nir_imm_float(b, 1);
-   nir_def *const_two = nir_imm_float(b, 2);
-   nir_def *const_minus_one = nir_imm_float(b, -1);
-   nir_def *tmp1 = nir_fmul(b, height, y_invert);
-   nir_def *tmp2 = nir_fadd(b, const_one, nir_fmul(b, const_minus_one, nir_fmul(b, y_invert, const_two)));
-   nir_def *tmp3 = nir_fmul(b, tmp2, fragcoord_y);
-   nir_def *tmp4 = nir_fadd(b, tmp1, tmp3);
-   nir_def *src0 = nir_vec2(b, fragcoord_x, tmp4);
-   nir_def *src1 = nir_vec2(b, width, height);
-   nir_def *tex_coord = nir_fdiv(b, src0, src1);
-   return tex_coord;
-}
+   nir_def *xy = nir_vec2(b, nir_channel(b, coord, 0), nir_channel(b, coord, 1));
+   nir_def *ij = nir_f2i32(b, xy);
 
-static nir_tex_instr *
-create_rt_texture(struct mwv207_context *ctx, nir_shader *nir, nir_def *tex_coord)
-{
-   nir_tex_instr *rt_tex = nir_tex_instr_create(nir, 1);
-   rt_tex->src[0].src_type = nir_tex_src_coord;
-   rt_tex->src[0].src = nir_src_for_ssa(tex_coord);
-   rt_tex->op = nir_texop_txb;
-   rt_tex->sampler_dim = GLSL_SAMPLER_DIM_2D;
-   rt_tex->dest_type = nir_type_float;
-   rt_tex->num_srcs = 1;
-   rt_tex->component = 0;
-   rt_tex->coord_components = 2;
-   rt_tex->is_array = false;
-   rt_tex->is_shadow = false;
-   rt_tex->is_new_style_shadow = false;
-   rt_tex->texture_index = ctx->info.dsbi.sampler_index;
-   rt_tex->texture_non_uniform = false;
-   rt_tex->sampler_index = ctx->info.dsbi.sampler_index;
-   rt_tex->sampler_non_uniform = false;
-   return rt_tex;
+   nir_tex_instr *tex = nir_tex_instr_create(nir, 1);
+   tex->src[0].src_type = nir_tex_src_coord;
+   tex->src[0].src = nir_src_for_ssa(ij);
+   tex->op = nir_texop_txf;
+   tex->sampler_dim = GLSL_SAMPLER_DIM_2D;
+   tex->dest_type = nir_type_float32;
+   tex->num_srcs = 1;
+   tex->component = 0;
+   tex->coord_components = 2;
+   tex->is_array = false;
+   tex->is_shadow = false;
+   tex->is_new_style_shadow = false;
+   tex->texture_index = ctx->info.dsbi.sampler_index;
+   tex->texture_non_uniform = false;
+   tex->sampler_index = ctx->info.dsbi.sampler_index;
+   tex->sampler_non_uniform = false;
+   nir_def_init(&tex->instr, &tex->def, 4, 32);
+   nir_builder_instr_insert(b, &tex->instr);
+   return &tex->def;
 }
 
 static nir_def *
-handle_blend_func(unsigned int func, nir_builder *b, nir_def *src, nir_def *dst)
+blend_func_apply(nir_builder *b, unsigned func, nir_def *src, nir_def *dst)
 {
-   nir_def *blend_dst = NULL;
-   nir_def *const_minus_one = nir_imm_float(b, -1);
    switch (func) {
    case PIPE_BLEND_ADD:
-      blend_dst = nir_fadd(b, src, dst);
-      break;
+      return nir_fadd(b, src, dst);
    case PIPE_BLEND_SUBTRACT:
-      blend_dst = nir_fadd(b, src, nir_fmul(b, dst, const_minus_one));
-      break;
+      return nir_fsub(b, src, dst);
    case PIPE_BLEND_REVERSE_SUBTRACT:
-      blend_dst = nir_fadd(b, dst, nir_fmul(b, src, const_minus_one));
-      break;
+      return nir_fsub(b, dst, src);
    case PIPE_BLEND_MIN:
-      blend_dst = nir_fmin(b, dst, src);
-      break;
+      return nir_fmin(b, src, dst);
    case PIPE_BLEND_MAX:
-      blend_dst = nir_fmax(b, dst, src);
-      break;
+      return nir_fmax(b, src, dst);
    default:
-      printf("rgb_func error!!\n");
-      break;
+      return nir_fadd(b, src, dst);
    }
-   return blend_dst;
 }
+
+/* 摘掉一个 nir_src 在 def->uses 链表里的链接。直接给 src 赋新值而不先摘链
+ * 会把目标 def 的 uses 链表写坏(nir_validate 在 list_validate 里断言失败)。 */
 static void
-mwv207_lower_dual_blend_impl(nir_function_impl *impl, struct mwv207_context *ctx, struct mwv207_shader *shader)
+drop_src_use(nir_src *src)
+{
+   if (src->ssa)
+      list_delinit(&src->use_link);
+}
+
+static void
+mwv207_lower_dual_blend_impl(nir_function_impl *impl, struct mwv207_context *ctx,
+                             struct mwv207_shader *shader)
 {
    nir_shader *nir = impl->function->shader;
-   nir_builder b = nir_builder_create(impl);
-   uint32_t count = 0;
-   nir_def *blend_src;
-   nir_def *blend_src1;
-   nir_def *blend_dst;
-   nir_def *sfactor_rgb;
-   nir_def *dfactor_rgb;
-   nir_def *sfactor_alpha;
-   nir_def *dfactor_alpha;
-   nir_def *blend_src_rgb;
-   nir_def *blend_dst_rgb;
-   nir_def *blend_src_alpha;
-   nir_def *blend_dst_alpha;
-   struct pipe_rt_blend_state blend_state;
+   nir_intrinsic_instr *store_color = NULL;
+   nir_intrinsic_instr *store_src1 = NULL;
+
+   /* 找双源的两条输出: location=FRAG_RESULT_DATA0, index 0 / 1 */
    nir_foreach_block(block, impl) {
-      nir_foreach_instr_safe(instr, block) {
+      nir_foreach_instr(instr, block) {
          if (instr->type != nir_instr_type_intrinsic)
             continue;
          nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
          if (intr->intrinsic != nir_intrinsic_store_deref)
             continue;
-         count++;
-         if (count == 1)
-            blend_src = intr->src[1].ssa;
-         if (count != 2)
+         nir_deref_instr *deref = nir_src_as_deref(intr->src[0]);
+         if (!deref || deref->deref_type != nir_deref_type_var)
             continue;
-
-         if (count == 2)
-            blend_src1 = intr->src[1].ssa;
-         shader->useFragCoord = true;
-
-         b.cursor = nir_after_instr(instr);
-         nir_def *tex_coord = get_rt_texture_coord(ctx, &b);
-
-         nir_tex_instr *rt_tex = create_rt_texture(ctx, nir, tex_coord);
-         nir_def_init(&rt_tex->instr, &rt_tex->def, 4, 32);
-         nir_builder_instr_insert(&b, &rt_tex->instr);
-         blend_dst = &rt_tex->def;
-         blend_state = ctx->info.dsbi.blend_state;
-         sfactor_rgb = get_factor_def(ctx, &b, blend_state.rgb_src_factor, blend_src, blend_src1, blend_dst);
-         dfactor_rgb = get_factor_def(ctx, &b, blend_state.rgb_dst_factor, blend_src, blend_src1, blend_dst);
-         sfactor_alpha = get_factor_def(ctx, &b, blend_state.alpha_src_factor, blend_src, blend_src1, blend_dst);
-         dfactor_alpha = get_factor_def(ctx, &b, blend_state.alpha_dst_factor, blend_src, blend_src1, blend_dst);
-
-         nir_variable *var = nir_variable_create(nir, nir_var_shader_out,
-                                                 glsl_vec4_type(), "final_out");
-         var->data.location = FRAG_RESULT_DATA0;
-         var->data.driver_location = 2;
-         nir->num_outputs++;
-         blend_src_rgb = nir_fmul(&b, blend_src, sfactor_rgb);
-         blend_dst_rgb = nir_fmul(&b, blend_dst, dfactor_rgb);
-         blend_src_alpha = nir_fmul(&b, blend_src, sfactor_alpha);
-         blend_dst_alpha = nir_fmul(&b, blend_dst, dfactor_alpha);
-
-         blend_dst_rgb = handle_blend_func(blend_state.rgb_func, &b, blend_src_rgb, blend_dst_rgb);
-         blend_dst_alpha = handle_blend_func(blend_state.alpha_func, &b, blend_src_alpha, blend_dst_alpha);
-         nir_alu_instr *mov = nir_alu_instr_create(nir, nir_op_vec4);
-
-         mov->src[0].src = nir_src_for_ssa(nir_channel(&b, blend_dst_rgb, 0));
-         mov->src[1].src = nir_src_for_ssa(nir_channel(&b, blend_dst_rgb, 1));
-         mov->src[2].src = nir_src_for_ssa(nir_channel(&b, blend_dst_rgb, 2));
-         mov->src[3].src = nir_src_for_ssa(nir_channel(&b, blend_dst_alpha, 3));
-         nir_def_init(&mov->instr, &mov->def, 4, 32);
-         nir_builder_instr_insert(&b, &mov->instr);
-         nir_intrinsic_instr *store =
-            nir_intrinsic_instr_create(nir, nir_intrinsic_store_deref);
-         store->num_components = 4;
-         store->src[0] = nir_src_for_ssa(&nir_build_deref_var(&b, var)->def);
-         store->src[1] = nir_src_for_ssa(&mov->def);
-         nir_intrinsic_set_write_mask(store, 0xf);
-         nir_builder_instr_insert(&b, &store->instr);
-         break;
+         nir_variable *var = deref->var;
+         if (!var || var->data.mode != nir_var_shader_out)
+            continue;
+         if (var->data.location != FRAG_RESULT_DATA0)
+            continue;
+         if (var->data.index == 1)
+            store_src1 = intr;
+         else
+            store_color = intr;
       }
    }
+
+   /* 没有双源输出形态(或只有单输出)就什么都不做 */
+   if (!store_color || !store_src1)
+      return;
+
+   shader->useFragCoord = true;
+
+   nir_deref_instr *color_deref = nir_src_as_deref(store_color->src[0]);
+   nir_variable *color_var = color_deref ? color_deref->var : NULL;
+   if (!color_var)
+      return;
+
+   nir_def *src_ssa = store_color->src[1].ssa;
+   nir_def *src1_ssa = store_src1->src[1].ssa;
+   nir_instr *anchor = nir_instr_next(&store_color->instr);
+   nir_block *blk = store_color->instr.block;
+
+   const struct pipe_rt_blend_state *rbs = &ctx->info.dsbi.blend_state;
+   nir_builder b = nir_builder_create(impl);
+   b.cursor = nir_before_instr(&store_color->instr);
+
+   nir_def *src = nir_channels(&b, src_ssa, 0xf);
+   nir_def *src1 = nir_channels(&b, src1_ssa, 0xf);
+   nir_def *dst = load_dst_texel(ctx, &b, nir);
+
+   nir_def *sf_rgb = get_factor_def(ctx, &b, rbs->rgb_src_factor, src, src1, dst);
+   nir_def *df_rgb = get_factor_def(ctx, &b, rbs->rgb_dst_factor, src, src1, dst);
+   nir_def *sf_a   = get_factor_def(ctx, &b, rbs->alpha_src_factor, src, src1, dst);
+   nir_def *df_a   = get_factor_def(ctx, &b, rbs->alpha_dst_factor, src, src1, dst);
+
+   nir_def *src_rgb = nir_channels(&b, src, 0x7);
+   nir_def *dst_rgb = nir_channels(&b, dst, 0x7);
+   nir_def *rgb;
+   if (rbs->rgb_func == PIPE_BLEND_MIN || rbs->rgb_func == PIPE_BLEND_MAX) {
+      rgb = blend_func_apply(&b, rbs->rgb_func, src_rgb, dst_rgb);
+   } else {
+      nir_def *t1 = nir_fmul(&b, src_rgb, nir_channels(&b, sf_rgb, 0x7));
+      nir_def *t2 = nir_fmul(&b, dst_rgb, nir_channels(&b, df_rgb, 0x7));
+      rgb = blend_func_apply(&b, rbs->rgb_func, t1, t2);
+   }
+
+   nir_def *src_a = nir_channel(&b, src, 3);
+   nir_def *dst_a = nir_channel(&b, dst, 3);
+   nir_def *a;
+   if (rbs->alpha_func == PIPE_BLEND_MIN || rbs->alpha_func == PIPE_BLEND_MAX) {
+      a = blend_func_apply(&b, rbs->alpha_func, src_a, dst_a);
+   } else {
+      nir_def *t1 = nir_fmul(&b, src_a, nir_channel(&b, sf_a, 3));
+      nir_def *t2 = nir_fmul(&b, dst_a, nir_channel(&b, df_a, 3));
+      a = blend_func_apply(&b, rbs->alpha_func, t1, t2);
+   }
+
+   nir_def *final = nir_vec4(&b, nir_channel(&b, rgb, 0), nir_channel(&b, rgb, 1),
+                             nir_channel(&b, rgb, 2), a);
+
+   /* 删掉原来的两条输出 store (双源的第二个输出硬件写不出去), 用一条写
+    * 最终颜色的 store 取代它们。src 的 uses 链必须显式摘掉, 否则
+    * nir_validate 会在 list_validate / nir_src_parent_instr 上断言失败。 */
+   drop_src_use(&store_color->src[0]);
+   drop_src_use(&store_color->src[1]);
+   drop_src_use(&store_src1->src[0]);
+   drop_src_use(&store_src1->src[1]);
+   nir_instr_remove(&store_color->instr);
+   nir_instr_remove(&store_src1->instr);
+
+   if (anchor)
+      b.cursor = nir_before_instr(anchor);
+   else
+      b.cursor = nir_after_block(blk);
+
+   nir_store_deref(&b, nir_build_deref_var(&b, color_var), final, 0xf);
 }
 
 void
-mwv207_lower_dual_blend(nir_shader *nir, struct mwv207_context *ctx, struct mwv207_shader *shader)
+mwv207_lower_dual_blend(nir_shader *nir, struct mwv207_context *ctx,
+                        struct mwv207_shader *shader)
 {
-   if (ctx->info.dsbi.is_dual) {
-      nir_foreach_function(function, nir) {
-         if (function->impl)
-            mwv207_lower_dual_blend_impl(function->impl, ctx, shader);
-      }
+   if (!ctx->info.dsbi.is_dual)
+      return;
+
+   nir_foreach_function(function, nir) {
+      if (function->impl)
+         mwv207_lower_dual_blend_impl(function->impl, ctx, shader);
    }
 }

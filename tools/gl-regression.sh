@@ -90,6 +90,17 @@ else
 fi
 
 # 6. 回读（像素值与错码；带宽受内存限制，只查正确性）
+# 双源混合正确性（火狐 LCD 次像素文字走这条路；硬件无 SRC1 因子，靠
+# lower_dual 把混合降级进片元着色器，必须逐例与 GL 规格一致）
+if [ -x "$BIN/dualblend" ]; then
+   out=$("$BIN/dualblend" 2>&1 | grep -E "RESULT|FAIL" | tail -3)
+   if echo "$out" | grep -q "RESULT: PASS"; then report "dualblend" 0;
+   else echo "$out"; report "dualblend" 1; fi
+else
+   echo "SKIP dualblend（未构建: cc -O2 -o ~/dev-bin/dualblend tests/gl-probe/dualblend.c -lEGL -lGLESv2 -lm）"
+   SKIP=$((SKIP+1))
+fi
+
 if [ -x "$BIN/rbbench" ]; then
    out=$("$BIN/rbbench" 10 2>&1 | grep "1024x1024" | tail -1)
    echo "$out"

@@ -278,9 +278,11 @@ mwv207_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
        * 片元着色器、并按编译期烘焙的 blend_state 计算因子。火狐出现"文字被
        * 彩色竖条覆盖"的页面，用软件渲染（llvmpipe）正常，用我们驱动必然复现，
        * 其余 GL 用例全通过；双源 mixed 是我们唯一没做过端到端验证的路径，
-       * 因此默认关闭（Mesa 就不再启用 GL_ARB_blend_func_extended，火狐退回
-       * 灰度抗锯齿文字）。想做实验时 MWV207_DUALSRC=1 打开。 */
-      return debug_get_bool_option("MWV207_DUALSRC", false) ? 1 : 0;
+       * 现在 lower_dual 已按下面这些点修正(见 nir/mwv207_lower_dual.c 的文件
+       * 注释): 混合参数进着色器缓存键、改写唯一输出而不是新增输出、
+       * 用 texelFetch 精确取 dst、因子/方程按 GL 规格算。tests/gl-probe/
+       * dualblend.c 7/7 通过, 因此默认开启; MWV207_DUALSRC=0 可关掉。 */
+      return debug_get_bool_option("MWV207_DUALSRC", true) ? 1 : 0;
    case PIPE_CAP_QUERY_TIMESTAMP:
       return 1;
 

@@ -346,6 +346,8 @@ mwv207_bind_blend_state(struct pipe_context *pctx, void *state)
       }
    }
    ctx->dirty |= MWV207_DIRTY_BLEND;
+   /* 双源混合开关/因子/方程变了 -> lower_dual 烘焙进去的着色器要重新选 */
+   ctx->fp_dirty = true;
 }
 
 static void
@@ -357,6 +359,7 @@ mwv207_set_blend_color(struct pipe_context *pctx,
    ctx->blend_color = *color;
 
    ctx->dirty |= MWV207_DIRTY_BLEND_COLOR;
+   ctx->fp_dirty = true;   /* blend color 被烘焙进 lower_dual -> 指纹要重算 */
 }
 
 void

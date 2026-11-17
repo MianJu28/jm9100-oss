@@ -178,7 +178,13 @@ struct mwv207_context {
    uint32_t fp_tex_128bit[PIPE_SHADER_TYPES];   /* 各 stage 视图 128 位取样模式的指纹 */
    uint32_t fp_pixel_128bit; /* 颜色附件 128 位模式的指纹 */
    uint32_t fp_z32_shadow[PIPE_SHADER_TYPES];   /* 各 stage 采样器比较模式的指纹 */
-   uint32_t fp_is_dual;      /* 双源混合指纹 */
+   uint32_t fp_is_dual;      /* 双源混合开关指纹 */
+   /* FIX(jm9100-oss): 双源混合在硬件上没有 SRC1 因子(见 mwv207_blend.c 的
+    * alpha_func[] 表), 只能把混合降级进片元着色器, 而 lower_dual 会把
+    * 因子/方程/blend color 直接烘焙进二进制。因此这些内容也必须进缓存键,
+    * 否则先编译出来的那一份会被后面的不同混合状态复用 -> 颜色全错
+    * (火狐 LCD 文字被彩色竖条覆盖的根因)。 */
+   uint32_t fp_dual_blend;   /* 双源混合参数(因子/方程/blend color)的指纹 */
    /* 指纹只在相关状态（采样视图/采样器/颜色附件）真的变动时重算：
     * 每次绘制都重扫 PIPE_MAX_SHADER_SAMPLER_VIEWS × stage 约 200 次哈希，
     * 实测占每个 draw 的 0.76 us（占 config 阶段 70%）。FIX(jm9100-oss) */
