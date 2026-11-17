@@ -48,6 +48,15 @@
  *      现在因子统一规约成 vec4, alpha 取它的 .a。
  */
 
+/* 本驱动的发射器没有 fsub（只有 fadd/fmul/ffma 与 fneg），减法一律写成
+ * a + (-b)。写 nir_fsub 会在 mwv207_emit_alu 里命中 "not support nir opcode"
+ * 并 assert（火狐启动即崩）。 */
+static nir_def *
+fsub_(nir_builder *b, nir_def *a, nir_def *c)
+{
+   return nir_fadd(b, a, nir_fneg(b, c));
+}
+
 static nir_def *
 splat_vec4(nir_builder *b, nir_def *v)
 {
@@ -84,7 +93,7 @@ get_factor_def(struct mwv207_context *ctx, nir_builder *b, unsigned int factor,
    case PIPE_BLENDFACTOR_SRC_ALPHA_SATURATE: {
       /* min(src.a, 1 - dst.a), rgb 三分量相同, alpha 为 1 */
       nir_def *sa = nir_channel(b, blend_src, 3);
-      nir_def *inv_da = nir_fsub(b, const_one, nir_channel(b, blend_dst, 3));
+      nir_def *inv_da = fsub_(b, const_one, nir_channel(b, blend_dst, 3));
       nir_def *f = nir_fmin(b, sa, inv_da);
       return nir_vec4(b, f, f, f, const_one);
    }
@@ -98,13 +107,13 @@ get_factor_def(struct mwv207_context *ctx, nir_builder *b, unsigned int factor,
    case PIPE_BLENDFACTOR_SRC1_ALPHA:
       return nir_replicate(b, nir_channel(b, blend_src1, 3), 4);
    case PIPE_BLENDFACTOR_INV_SRC_COLOR:
-      return nir_fsub(b, one_vec, blend_src);
+      return fsub_(b, one_vec, blend_src);
    case PIPE_BLENDFACTOR_INV_SRC_ALPHA:
-      return nir_replicate(b, nir_fsub(b, const_one, nir_channel(b, blend_src, 3)), 4);
+      return nir_replicate(b, fsub_(b, const_one, nir_channel(b, blend_src, 3)), 4);
    case PIPE_BLENDFACTOR_INV_DST_COLOR:
-      return nir_fsub(b, one_vec, blend_dst);
+      return fsub_(b, one_vec, blend_dst);
    case PIPE_BLENDFACTOR_INV_DST_ALPHA:
-      return nir_replicate(b, nir_fsub(b, const_one, nir_channel(b, blend_dst, 3)), 4);
+      return nir_replicate(b, fsub_(b, const_one, nir_channel(b, blend_dst, 3)), 4);
    case PIPE_BLENDFACTOR_INV_CONST_COLOR:
       return nir_imm_vec4(b, 1.0f - ctx->blend_color.color[0],
                              1.0f - ctx->blend_color.color[1],
@@ -113,9 +122,9 @@ get_factor_def(struct mwv207_context *ctx, nir_builder *b, unsigned int factor,
    case PIPE_BLENDFACTOR_INV_CONST_ALPHA:
       return nir_replicate(b, nir_imm_float(b, 1.0f - ctx->blend_color.color[3]), 4);
    case PIPE_BLENDFACTOR_INV_SRC1_COLOR:
-      return nir_fsub(b, one_vec, blend_src1);
+      return fsub_(b, one_vec, blend_src1);
    case PIPE_BLENDFACTOR_INV_SRC1_ALPHA:
-      return nir_replicate(b, nir_fsub(b, const_one, nir_channel(b, blend_src1, 3)), 4);
+      return nir_replicate(b, fsub_(b, const_one, nir_channel(b, blend_src1, 3)), 4);
    default:
       /* 未知因子按 ZERO 处理, 不要返回未初始化指针 */
       return zero_vec;
@@ -159,9 +168,9 @@ blend_func_apply(nir_builder *b, unsigned func, nir_def *src, nir_def *dst)
    case PIPE_BLEND_ADD:
       return nir_fadd(b, src, dst);
    case PIPE_BLEND_SUBTRACT:
-      return nir_fsub(b, src, dst);
+      return fsub_(b, src, dst);
    case PIPE_BLEND_REVERSE_SUBTRACT:
-      return nir_fsub(b, dst, src);
+      return fsub_(b, dst, src);
    case PIPE_BLEND_MIN:
       return nir_fmin(b, src, dst);
    case PIPE_BLEND_MAX:

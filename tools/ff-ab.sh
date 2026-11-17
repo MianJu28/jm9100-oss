@@ -22,7 +22,9 @@
 set -e
 
 MODE="${1:-base}"
+[ $# -gt 0 ] && shift   # 后面的参数才是要打开的 URL，别把 mode 当 URL 传给 firefox
 DEV_DRI="${DEV_DRI:-$HOME/dev-dri}"
+FF="${FF:-$(command -v firefox || echo /usr/bin/firefox)}"
 
 if [ "$MODE" = "--clean" ]; then
    rm -rf /tmp/ff-ab-base /tmp/ff-ab-notile /tmp/ff-ab-bufwait /tmp/ff-ab-all /tmp/ff-ab-soft /tmp/ff-ab-wr0 /tmp/ff-ab-dump /tmp/ff-shaders
@@ -32,6 +34,11 @@ fi
 
 PROFILE="/tmp/ff-ab-$MODE"
 mkdir -p "$PROFILE"
+# 目录存在但没有 prefs.js 时, firefox --profile 会弹"配置文件缺失"对话框而不是
+# 新建 profile。先用 -CreateProfile 首次初始化一次。
+if [ ! -f "$PROFILE/prefs.js" ]; then
+   "$FF" -CreateProfile "ffab-$MODE $PROFILE" >/dev/null 2>&1 || true
+fi
 
 ENV_EXTRA=""
 case "$MODE" in
@@ -62,5 +69,5 @@ echo "[ff-ab] env: $ENV_EXTRA"
 echo "[ff-ab] 用这个 profile 打开出问题的页面，观察是否复现；关闭窗口即结束。"
 
 # shellcheck disable=SC2086
-env $ENV_EXTRA firefox --profile "$PROFILE" --no-remote "$@" >/dev/null 2>&1 &
+env $ENV_EXTRA "$FF" --profile "$PROFILE" --no-remote "$@" >/dev/null 2>&1 &
 echo "[ff-ab] firefox pid=$!"
