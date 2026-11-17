@@ -1434,7 +1434,9 @@ emit_alu(struct mwv207_compile *c, nir_alu_instr *alu)
       src = src_swizzle(src, dst_swiz);
 
       if (src.rgroup != 0x7) {
-         src.neg = (alu->op == nir_op_fneg);
+         /* fsub = fadd(a, -b): 第二个源取负, 与 fneg 的 neg 位叠加 */
+         src.neg ^= (alu->op == nir_op_fneg) ||
+                    (alu->op == nir_op_fsub && i == 1);
          src.abs = (alu->op == nir_op_fabs);
       }
 

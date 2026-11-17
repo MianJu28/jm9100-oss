@@ -54,7 +54,7 @@
 static nir_def *
 fsub_(nir_builder *b, nir_def *a, nir_def *c)
 {
-   return nir_fadd(b, a, nir_fneg(b, c));
+   return nir_fsub(b, a, c);
 }
 
 static nir_def *
