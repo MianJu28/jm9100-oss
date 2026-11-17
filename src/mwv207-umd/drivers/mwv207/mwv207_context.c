@@ -117,6 +117,9 @@ mwv207_context_destroy(struct pipe_context *pctx)
 {
    struct mwv207_context *ctx = mwv207_context(pctx);
 
+   pipe_sampler_view_reference(&ctx->dual_copy_view, NULL);
+   pipe_resource_reference(&ctx->dual_copy_tex, NULL);
+
    for (unsigned i = 0; i < ARRAY_SIZE(ctx->retired_staging); i++) {
       if (ctx->retired_staging[i]) {
          mwv207_wait_resource(pctx, ctx->retired_staging[i]);

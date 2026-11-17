@@ -124,6 +124,14 @@ struct mwv207_context {
 
    struct pipe_framebuffer_state fb_state;
 
+   /* 双源混合在硬件上没有 SRC1 因子, 只能把混合降级进片元着色器, 并且每个
+    * dual draw 都要把渲染目标(按 scissor 裁剪)拷一份给着色器 texelFetch 用。
+    * 拷贝目标纹理与采样视图按 (宽, 高, 格式) 缓存复用, 避免每 draw 新建/销毁。 */
+   struct pipe_resource *dual_copy_tex;
+   struct pipe_sampler_view *dual_copy_view;
+   unsigned dual_copy_w, dual_copy_h;
+   enum pipe_format dual_copy_fmt;
+
    struct mwv207_rasterizer_state *rast_state;
    struct mwv207_depth_stencil_alpha_state *zsa;
    struct mwv207_stencil_ref stencil_ref;

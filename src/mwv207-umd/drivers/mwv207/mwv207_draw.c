@@ -1230,29 +1230,71 @@ mwv207_config_dual_blend(struct pipe_context *pctx,
       res_templ.format = src_surface->format;
       res_templ.array_size = 1;
       res_templ.usage = PIPE_USAGE_DEFAULT;
-      texture_res = pctx->screen->resource_create(pctx->screen, &res_templ);
+
+      /* 复用同一张拷贝纹理/视图: 尺寸或格式变了才重建 (见 mwv207_context.h) */
+      if (!ctx->dual_copy_tex ||
+          ctx->dual_copy_w != src_surface->width ||
+          ctx->dual_copy_h != src_surface->height ||
+          ctx->dual_copy_fmt != src_surface->format) {
+         pipe_sampler_view_reference(&ctx->dual_copy_view, NULL);
+         pipe_resource_reference(&ctx->dual_copy_tex, NULL);
+
+         texture_res = pctx->screen->resource_create(pctx->screen, &res_templ);
+         if (!texture_res) {
+            ctx->info.dsbi.is_dual = false;
+            return;
+         }
+
+         memset(&sampler_view, 0, sizeof(struct pipe_sampler_view));
+         util_blitter_default_src_texture(ctx->blitter, &sampler_view, texture_res, 0);
+         sampler_view.format = src_surface->format;
+         ctx->dual_copy_view = pctx->create_sampler_view(pctx, texture_res, &sampler_view);
+         if (!ctx->dual_copy_view) {
+            pipe_resource_reference(&texture_res, NULL);
+            ctx->info.dsbi.is_dual = false;
+            return;
+         }
+         ctx->dual_copy_tex = texture_res;
+         ctx->dual_copy_w = src_surface->width;
+         ctx->dual_copy_h = src_surface->height;
+         ctx->dual_copy_fmt = src_surface->format;
+      }
+      texture_res = ctx->dual_copy_tex;
+
+      /* 只拷这次 draw 会写到的区域: 片元着色器只对自己覆盖的像素做 texelFetch,
+       * 其余区域拷了也不会被读。火狐的次像素文字每个 draw 只写一行文字高的
+       * 一条, 整张拷贝(1280x800 约 0.39 ms)会让文字密集页面慢一个数量级,
+       * 所以按 scissor(启用时)裁剪; 没有 scissor 时才退化成整张。 */
+      unsigned bx = 0, by = 0, bw = src_surface->width, bh = src_surface->height;
+      if (ctx->rast_state && ctx->rast_state->base.scissor) {
+         const struct pipe_scissor_state *sc = &ctx->scissor;
+         unsigned sx0 = MIN2(sc->minx, src_surface->width);
+         unsigned sy0 = MIN2(sc->miny, src_surface->height);
+         unsigned sx1 = MIN2(sc->maxx, src_surface->width);
+         unsigned sy1 = MIN2(sc->maxy, src_surface->height);
+         if (sx1 > sx0 && sy1 > sy0) {
+            bx = sx0; by = sy0; bw = sx1 - sx0; bh = sy1 - sy0;
+         }
+      }
+
       blt_info.mask = PIPE_MASK_RGBA;
       blt_info.dst.resource = texture_res;
       blt_info.dst.format = src_surface->format;
       blt_info.dst.level = 0;
-      blt_info.dst.box.x = 0;
-      blt_info.dst.box.y = 0;
+      blt_info.dst.box.x = bx;
+      blt_info.dst.box.y = by;
       blt_info.dst.box.depth = 1;
-      blt_info.dst.box.width = src_surface->width;
-      blt_info.dst.box.height = src_surface->height;
+      blt_info.dst.box.width = bw;
+      blt_info.dst.box.height = bh;
       blt_info.src.resource = src_surface->texture;
       blt_info.src.format = src_surface->format;
       blt_info.src.level = 0;
-      blt_info.src.box.x = 0;
-      blt_info.src.box.y = 0;
+      blt_info.src.box.x = bx;
+      blt_info.src.box.y = by;
       blt_info.src.box.depth = 1;
-      blt_info.src.box.width = src_surface->width;
-      blt_info.src.box.height = src_surface->height;
+      blt_info.src.box.width = bw;
+      blt_info.src.box.height = bh;
       pctx->blit(pctx, &blt_info);
-
-      memset(&sampler_view, 0, sizeof(struct pipe_sampler_view));
-      util_blitter_default_src_texture(ctx->blitter, &sampler_view, texture_res, 0);
-      sampler_view.format = src_surface->format;
 
       ctx->info.dsbi.y_invert = 0;
       /* FIX(jm9100-oss): 视图与采样器状态必须绑在同一个槽上。原来视图绑在
@@ -1261,20 +1303,15 @@ mwv207_config_dual_blend(struct pipe_context *pctx,
        * sampler_index 取视图时拿到 NULL 或错位视图 → 编译期解引用 ->texture
        * 崩溃 (crash_address 0x48)。统一用视图计数。 */
       ctx->info.dsbi.sampler_index = ctx->num_sampler_views[PIPE_SHADER_FRAGMENT];
-      struct pipe_sampler_view *src_view;
-      src_view = pctx->create_sampler_view(pctx, texture_res, &sampler_view);
-      if (!src_view) {
-         ctx->info.dsbi.is_dual = false;
-         return;
-      }
+      struct pipe_sampler_view *src_view = ctx->dual_copy_view;
+      /* take_ownership=false: 这张视图是缓存的, 自己持有引用 */
       pctx->set_sampler_views(pctx, PIPE_SHADER_FRAGMENT,
                               ctx->num_sampler_views[PIPE_SHADER_FRAGMENT], 1,
-                              0, true, &src_view);
+                              0, false, &src_view);
       void *sampler_state = mwv207_get_sampler_state(ctx);
       pctx->bind_sampler_states(pctx, PIPE_SHADER_FRAGMENT,
                                 ctx->num_sampler_views[PIPE_SHADER_FRAGMENT],
                                 1, &sampler_state);
-      pipe_resource_reference(&texture_res, NULL);
    }
 }
 
