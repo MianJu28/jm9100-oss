@@ -2,7 +2,7 @@
 
 > 目的：把当前进度、环境、方法学与"下一步做什么"完整交给下一个会话。
 > 本文档随进度更新；未修问题权威清单在 `docs/UNRESOLVED.md`（含 2026-11-10 的 §0.1 速览）。
-> VP9 专项见 `docs/HANDOVER-VP9.md`。
+> VP9 专项见 `docs/HANDOVER-VP9.md`；2D 引擎专项见 `docs/HANDOVER-2D.md`。
 
 ## 1. 当前状态（2026-11-17 15:30）
 
