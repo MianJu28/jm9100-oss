@@ -11,6 +11,7 @@
 #   tools/ff-ab.sh all       # 两者都开
 #   tools/ff-ab.sh soft      # 火狐 GL 走 llvmpipe（软件渲染，完全绕开我们的驱动）
 #   tools/ff-ab.sh wr0       # 关闭 WebRender（basic compositor）
+#   tools/ff-ab.sh dump      # 复现时把 Mesa 编译的着色器落到 /tmp/ff-shaders（用于查编译器）
 #   tools/ff-ab.sh --clean   # 删除这四个 profile
 #
 # 每次使用独立 profile（/tmp/ff-ab-<mode>），互不干扰当前 Firefox。
@@ -22,7 +23,7 @@ MODE="${1:-base}"
 DEV_DRI="${DEV_DRI:-$HOME/dev-dri}"
 
 if [ "$MODE" = "--clean" ]; then
-   rm -rf /tmp/ff-ab-base /tmp/ff-ab-notile /tmp/ff-ab-bufwait /tmp/ff-ab-all /tmp/ff-ab-soft /tmp/ff-ab-wr0
+   rm -rf /tmp/ff-ab-base /tmp/ff-ab-notile /tmp/ff-ab-bufwait /tmp/ff-ab-all /tmp/ff-ab-soft /tmp/ff-ab-wr0 /tmp/ff-ab-dump /tmp/ff-shaders
    echo "[ff-ab] 已清理 profile"
    exit 0
 fi
@@ -36,9 +37,11 @@ case "$MODE" in
    notile)  ENV_EXTRA="MWV207_SCANOUT_TILE=0" ;;
    soft)    ENV_EXTRA="LIBGL_ALWAYS_SOFTWARE=1 MOZ_WEBRENDER=1" ;;
    wr0)     ENV_EXTRA="MOZ_WEBRENDER=0" ;;
+   dump)    rm -rf /tmp/ff-shaders; mkdir -p /tmp/ff-shaders
+            ENV_EXTRA="MESA_SHADER_DUMP_PATH=/tmp/ff-shaders MESA_SHADER_CAPTURE_PATH=/tmp/ff-shaders" ;;
    bufwait) ENV_EXTRA="LIBGL_DRIVERS_PATH=$DEV_DRI MESA_LOADER_DRIVER_OVERRIDE=mwv207 MWV207_BUFWAIT_ALL=1" ;;
    all)     ENV_EXTRA="MWV207_SCANOUT_TILE=0 LIBGL_DRIVERS_PATH=$DEV_DRI MESA_LOADER_DRIVER_OVERRIDE=mwv207 MWV207_BUFWAIT_ALL=1" ;;
-   *) echo "用法: $0 {base|notile|bufwait|all|soft|wr0|--clean}" >&2; exit 2 ;;
+   *) echo "用法: $0 {base|notile|bufwait|all|soft|wr0|dump|--clean}" >&2; exit 2 ;;
 esac
 
 if [ "$MODE" = "bufwait" ] || [ "$MODE" = "all" ]; then
