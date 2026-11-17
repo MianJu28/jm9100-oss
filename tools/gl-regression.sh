@@ -101,6 +101,20 @@ else
    SKIP=$((SKIP+1))
 fi
 
+# 7. dmabuf 导出/导入往返（Firefox 的 DMABUF_SURFACE_EXPORT 依赖同一条路径：
+# 导出 fd 后必须能被另一个进程导入；驱动缺 is_dmabuf_modifier_supported 时会 BAD_MATCH）
+if [ ! -x "$BIN/dmabufprobe" ] && [ -f tests/gl-probe/dmabuf.c ] &&
+   cc -O2 -o "$BIN/dmabufprobe" tests/gl-probe/dmabuf.c -lEGL -lGLESv2 -ldl 2>/dev/null; then
+   :
+fi
+if [ -x "$BIN/dmabufprobe" ]; then
+   out=$("$BIN/dmabufprobe" 2>&1 | grep -E "EXPORT|IMPORT|RESULT|FAIL" | tail -4)
+   if echo "$out" | grep -q "RESULT: PASS"; then echo "$out" | tail -2; report "dmabuf" 0;
+   else echo "$out"; report "dmabuf" 1; fi
+else
+   echo "SKIP dmabuf（未构建）"; SKIP=$((SKIP+1))
+fi
+
 if [ -x "$BIN/rbbench" ]; then
    out=$("$BIN/rbbench" 10 2>&1 | grep "1024x1024" | tail -1)
    echo "$out"
@@ -110,7 +124,7 @@ else
    echo "SKIP rbbench（未构建）"; SKIP=$((SKIP+1))
 fi
 
-# 7. glmark2 全套（可选）
+# 8. glmark2 全套（可选）
 if [ "${DUR}" != "0" ] && command -v glmark2 >/dev/null 2>&1; then
    score=$(timeout 900 glmark2 -b ":duration=$DUR" 2>&1 | sed -n 's/^.*glmark2 Score: //p' | tail -1)
    echo "glmark2 score: ${score:-?}"

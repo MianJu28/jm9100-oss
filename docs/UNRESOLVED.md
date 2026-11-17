@@ -1715,6 +1715,58 @@ staging BO 的页面，拿到 ECS/表的确切字节。
   DC 平铺扫描出不可达，present 必然要把窗口内容用 PE 拷进线性屏幕（约 9 GB/s 上限）。
   该项不再作为优化目标；只有 client-array 的 map 等待是真正可修的性能缺陷。
 
+### Firefox 的 WEBRENDER_COMPOSITOR / DMABUF_SURFACE_EXPORT 被 blocklist（2026-11-17）：浏览器策略，不是驱动缺陷
+
+现象（Firefox 159.0.1，`about:support` → 图形 → 特性）：两条都是 blocklisted，
+`WEBRENDER_COMPOSITOR` 的 failure id 是 `FEATURE_FAILURE_WEBRENDER_COMPOSITOR_DISABLED`，
+`DMABUF_SURFACE_EXPORT` 的 failure id 是 `FEATURE_FAILURE_BROKEN_DRIVER`。
+
+Firefox 侧的证据（upstream 源码，逐条可查）：
+
+| 位置 | 规则 | 影响 |
+|---|---|---|
+| `widget/gtk/GfxInfo.cpp`（`APPEND_TO_DRIVER_BLOCKLIST`，`OPERATING_SYSTEM=Linux`、`DeviceFamily=All`） | `FEATURE_WEBRENDER_COMPOSITOR` → `FEATURE_BLOCKED_DEVICE`，failure id `FEATURE_FAILURE_WEBRENDER_COMPOSITOR_DISABLED` | Linux 上**对所有设备**关闭，与显卡无关 |
+| 同文件，`FEATURE_DMABUF_SURFACE_EXPORT` 段 | `DriverVendor::MesaAll`、`DeviceFamily::All` → `FEATURE_FAILURE_BROKEN_DRIVER`（注释列出 Mesa issue 6666/6796/6688/6988） | **对所有 Mesa 驱动**关闭 |
+| `gfx/thebes/gfxPlatformGtk.cpp` 的 `InitWebRenderConfig()` | `#ifdef MOZ_WAYLAND` … `IsWaylandDisplay()` … 否则 `ForceDisable("Not available on X11", FEATURE_FAILURE_NO_WAYLAND)` | WR compositor 还要求 **Wayland 会话**；X11 上直接不可用 |
+
+我们为什么被归到 `MesaAll`：`widget/gtk/GfxInfo.cpp` 判定 `mIsMesa = glVersion.Find("Mesa") != -1`，
+而我们的 `GL_VERSION` 是 `4.0 (Compatibility Profile) Mesa 24.1.2 (git-9466c83cfc)` ⇒ `mIsMesa = true`、
+`mDriverVendor = "mesa/mwv207"`，于是上面这条"Mesa 全族"规则命中原样生效（GL_VENDOR 虽然是 `JingjiaMicro`，但不参与这个判定）。
+
+结论：**这两项在驱动侧改不掉**。可行途径只有 Firefox 侧：
+① 用 Nightly 构建 + `widget.dmabuf-export.force-enabled=true`（代码里该逃生开关包在 `#ifdef NIGHTLY_BUILD` 里，release/beta 无效）+ `gfx.webrender.compositor.force-enabled=true`，且 WR compositor 仍要求 Wayland；
+② 自行打补丁删掉这两条 blocklist 规则；
+③ 向上游提 issue（Mesa 全族关闭是有历史的，需要带我们的实测证据）。
+
+#### 顺带修掉的真实驱动缺口：dmabuf 导出能出 fd，导入却必然失败
+
+即使 Firefox 放行，我们的 dmabuf 往返也是断的：`eglExportDMABUFImageMESA` 给出
+`fourcc=0x34324241 (AB24)`、`modifier=0x600000000000002`（`DRM_FORMAT_MOD_VIVANTE_SUPER_TILED`）、
+`stride=256`，但把同一个 fd 用 `EGL_LINUX_DMA_BUF_EXT` 导入回来时 `eglCreateImageKHR` 返回
+`EGL_BAD_MATCH (0x3009)`。
+
+根因：Mesa 的导入校验（`src/gallium/frontends/dri/dri2.c` 的 `dri2_get_modifier_num_planes()`）会调
+`pipe_screen::is_dmabuf_modifier_supported()`；驱动没实现这个钩子时它返回 0 个 plane ⇒ `BAD_MATCH`。
+我们此前只实现了导出侧的 `query_dmabuf_modifiers()`。
+
+修法（`src/mwv207-umd/drivers/mwv207/mwv207_resource.c`）：
+- 新增 `mwv207_screen_is_dmabuf_modifier_supported()`：`LINEAR` 恒支持（压缩格式除外）、
+  `VIVANTE_SUPER_TILED` 交给 `mwv207_tile_supported_format()` 判定，YUV 置 `external_only`；
+- 新增 `mwv207_screen_get_dmabuf_modifier_planes()`（`util_format_get_num_planes()`）；
+- 在 `mwv207_screen_create()` 里挂到 `pscreen->is_dmabuf_modifier_supported` / `pscreen->get_dmabuf_modifier_planes`。
+
+验证探针 `tests/gl-probe/dmabuf.c`（EGL pbuffer 渲染 → `eglCreateImageKHR(GL_TEXTURE_2D)` →
+`eglExportDMABUFImageQueryMESA`/`...MESA` → 用 `EGL_LINUX_DMA_BUF_EXT` 导回 → 挂 FBO 读回比对）：
+
+```
+EXPORT: fourcc=0x34324241 (AB24) planes=1 modifier=0x600000000000002
+FDS: 7 stride=256 offset=0
+IMPORT: px=64,128,191,255 期望 64,128,191,255
+RESULT: PASS
+```
+
+回归：`gl-regression` **8/8**（glmark2 902，当时有桌面负载）、`vp9-regression` **20/20**。
+
 ### 2D 引擎：已能执行命令流，但 draw op 不产生写（2026-11-16）
 
 之前记录的"2D 引擎提交成功但硬件不执行"已经推进一大步：**waitlink 链能被引擎真正执行**，

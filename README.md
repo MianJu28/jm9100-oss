@@ -14,6 +14,7 @@ Vulkan 无。
 | 类别 | 支持 | 说明 |
 |---|---|---|
 | GL / GLES | 4.0 / 3.2 | 含 GBM/Wayland、DRI3、Present、`GL_EXT_blend_func_extended`（次像素文字用）；glamor blit 快路径 |
+| dmabuf | 导出 + 导入往返 | `linear` 与 `VIVANTE_SUPER_TILED` 均可导入（Firefox 的 dmabuf 传递依赖它）；`tests/gl-probe/dmabuf.c` 验收 |
 | VA-API 解码 | H.264 ConstrainedBaseline/Main/High、HEVC Main/Main10、VP9 Profile0/Profile2（10-bit） | 全部与软件解码逐字节一致（含跨尺寸参考、`show_existing` 重放帧） |
 | VA-API 处理 | `VAProfileNone` + `VAEntrypointVideoProc`（VPP/缩放） | 走 Mesa 通用 compositor，无需驱动侧 codec |
 | OpenCL | Rusticl 3.0 | 走同一 Mesa 栈 |

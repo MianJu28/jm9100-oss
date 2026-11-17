@@ -753,6 +753,39 @@ mwv207_context_resource_init(struct pipe_context *pctx)
    pctx->transfer_flush_region = mwv207_flush_region;
 }
 
+/* Firefox 的 DMABUF_SURFACE_EXPORT / WEBRENDER_COMPOSITOR 在两个进程之间
+ * 传递 dmabuf: 一个进程导出, 另一个进程导入。Mesa 的 EGL 导入校验会调用
+ * pipe_screen::is_dmabuf_modifier_supported 判断 us 支持的 modifier,
+ * 驱动不实现时它返回 0 个 plane, EGL 直接失败(BAD_MATCH)。
+ * 这里把导出用的两个 modifier 明确声明为可导入, 让 dmabuf 往返闭合。 */
+static bool
+mwv207_screen_is_dmabuf_modifier_supported(struct pipe_screen *pscreen,
+                                           uint64_t modifier,
+                                           enum pipe_format format,
+                                           bool *external_only)
+{
+   if (external_only)
+      *external_only = util_format_is_yuv(format);
+
+   switch (modifier) {
+   case DRM_FORMAT_MOD_LINEAR:
+      return !util_format_is_compressed(format);
+   case DRM_FORMAT_MOD_VIVANTE_SUPER_TILED:
+      return mwv207_tile_supported_format(format);
+   default:
+      return false;
+   }
+}
+
+static unsigned
+mwv207_screen_get_dmabuf_modifier_planes(struct pipe_screen *pscreen,
+                                         uint64_t modifier,
+                                         enum pipe_format format)
+{
+   /* 我们的平铺/线性资源都是单 plane(打包格式), YUV 由导入方按 plane 数描述 */
+   return util_format_get_num_planes(format);
+}
+
 static const uint64_t supported_modifiers[] = {
    DRM_FORMAT_MOD_LINEAR,
    DRM_FORMAT_MOD_VIVANTE_SUPER_TILED,
@@ -830,6 +863,8 @@ mwv207_screen_resource_init(struct pipe_screen *pscreen)
    pscreen->resource_from_handle = mwv207_resource_from_handle;
 
    pscreen->query_dmabuf_modifiers = mwv207_screen_query_dmabuf_modifiers;
+   pscreen->is_dmabuf_modifier_supported = mwv207_screen_is_dmabuf_modifier_supported;
+   pscreen->get_dmabuf_modifier_planes = mwv207_screen_get_dmabuf_modifier_planes;
    pscreen->resource_create_with_modifiers = mwv207_resource_create_modifiers;
 }
 
