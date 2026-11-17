@@ -13,7 +13,7 @@ Vulkan 无。
 
 | 类别 | 支持 | 说明 |
 |---|---|---|
-| GL / GLES | 4.0 / 3.2 | 含 GBM/Wayland、DRI3、Present；glamor blit 快路径 |
+| GL / GLES | 4.0 / 3.2 | 含 GBM/Wayland、DRI3、Present、`GL_EXT_blend_func_extended`（次像素文字用）；glamor blit 快路径 |
 | VA-API 解码 | H.264 ConstrainedBaseline/Main/High、HEVC Main/Main10、VP9 Profile0/Profile2（10-bit） | 全部与软件解码逐字节一致（含跨尺寸参考、`show_existing` 重放帧） |
 | VA-API 处理 | `VAProfileNone` + `VAEntrypointVideoProc`（VPP/缩放） | 走 Mesa 通用 compositor，无需驱动侧 codec |
 | OpenCL | Rusticl 3.0 | 走同一 Mesa 栈 |
@@ -38,7 +38,7 @@ sudo ./switch-mwv207.sh stack oss     # 从厂商栈切回（重启）
 
 ```bash
 tests/verify-installed.sh <srcversion>                      # 21 项：版本/GL/引擎/VAAPI/解码/TDR
-DRI_DIR=/usr/local/lib/mwv207-oss tools/gl-regression.sh    # 7 项：GL/GLES + glmark2
+DRI_DIR=/usr/local/lib/mwv207-oss tools/gl-regression.sh    # 8 项：GL/GLES + 双源混合 + glmark2
 LIBVA_DRIVERS_PATH=/usr/local/lib/mwv207-oss tools/vp9-regression.sh   # 20 个码流逐字节比对
 LIBVA_DRIVERS_PATH=/usr/local/lib/mwv207-oss tests/vp9-12bit/run-vp9-12bit.sh  # 12bit 拒绝行为
 ```

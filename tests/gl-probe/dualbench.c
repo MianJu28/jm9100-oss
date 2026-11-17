@@ -62,11 +62,13 @@ int main(int argc, char **argv)
    const char *fs =
       "#version 300 es\n"
       "#extension GL_EXT_blend_func_extended : require\n"
+      "precision highp float;\n"
       "layout(location=0,index=0) out vec4 o0;\n"
       "layout(location=0,index=1) out vec4 o1;\n"
       "void main(){ o0 = vec4(0.30,0.55,0.72,0.35); o1 = vec4(0.6,0.4,0.25,0.8); }\n";
    const char *fs1 =
       "#version 300 es\n"
+      "precision highp float;\n"
       "layout(location=0,index=0) out vec4 o0;\n"
       "void main(){ o0 = vec4(0.30,0.55,0.72,0.35); }\n";
 
@@ -78,7 +80,10 @@ int main(int argc, char **argv)
    GLint ok = 0;
    glGetShaderiv(f, GL_COMPILE_STATUS, &ok);
    if (!ok) { char log[1024]; glGetShaderInfoLog(f, sizeof log, NULL, log); printf("FS compile fail: %s\n", log); }
-   glAttachShader(prog, v); glAttachShader(prog, f); glLinkProgram(prog);
+   glAttachShader(prog, v); glAttachShader(prog, f);
+   if (maxd)
+      (void)0;
+   glLinkProgram(prog);
    glGetProgramiv(prog, GL_LINK_STATUS, &ok);
    if (!ok) { char log[1024]; glGetProgramInfoLog(prog, sizeof log, NULL, log); printf("link fail: %s\n", log); }
    glUseProgram(prog);
@@ -108,6 +113,7 @@ int main(int argc, char **argv)
    }
    glFinish();
    double dt = now_ms() - t0;
-   printf("%dx%d dual=%d draws=%d: %.3f ms/draw\n", W, H, maxd, N, dt / N);
+   printf("%dx%d dual=%d%s draws=%d: %.3f ms/draw\n", W, H, maxd,
+          use_scissor ? " scissor" : "", N, dt / N);
    return 0;
 }
