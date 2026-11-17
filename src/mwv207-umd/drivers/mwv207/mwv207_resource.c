@@ -485,7 +485,13 @@ mwv207_transfer_map(struct pipe_context *pctx,
        * client-array 形态每 draw 2 次 ioctl、26–44 µs/draw（VBO 形态只要 0.5 µs）。
        * 非 PERSISTENT 的普通写（glBufferSubData / WebRender UBO）仍保留等待，
        * 那是 P6 修过的场景，不能回退。 */
-      bool cpu_managed = (usage & (PIPE_MAP_PERSISTENT | PIPE_MAP_UNSYNCHRONIZED)) != 0;
+      /* MWV207_BUFWAIT_ALL=1: 回退到 N19 之前的"任何映射写前都等待"行为。
+       * 仅用于 A/B 定位 WebRender 常量环回绕造成的画错（正常保持默认）。 */
+      static int bufwait_all = -1;
+      if (bufwait_all < 0)
+         bufwait_all = debug_get_bool_option("MWV207_BUFWAIT_ALL", false);
+      bool cpu_managed = !bufwait_all &&
+         (usage & (PIPE_MAP_PERSISTENT | PIPE_MAP_UNSYNCHRONIZED)) != 0;
       if (!cpu_managed) {
          if (usage & PIPE_MAP_WRITE)
             mwv207_wait_resource(pctx, pres);

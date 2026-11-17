@@ -2047,3 +2047,20 @@ DE 不可达之后，换了个不依赖显示侧的做法：**窗口缓冲在驱
 顺带修了刷屏：12bit 的关键帧被拒后，后续每一帧都会命中"reference has no decoded
 picture"检查；该日志改为**只播报一次**（`mwv207_dec_vp9.c` 的 `warned_no_ref`），
 避免掩盖真正的首因。复跑入口 `tests/vp9-12bit/run-vp9-12bit.sh`。
+
+### 火狐渲染异常（2026-11-17）：A/B 定位手段
+
+**现象**：火狐特定页面（本地 GUI 的段落文字、侧栏标签）出现竖直彩色条纹、黑条叠加，重绘后不一定消失。复现依赖具体页面与滚动/重绘时序，agent 侧无法稳定触发。
+
+**已排除**：字形图集小矩形上传与采样路径。探针 `tests/tex-upload/subrect.c`（1024²/2048²/4096² RGBA、每轮 400 次 2–20 px 不对齐 `glTexSubImage2D`、CPU 侧对照、FBO 读回 + 1:1 采样比对）在安装栈 r36 上连续 `RESULT: PASS (total mismatch=0)`。
+
+**待定的三条候选**：
+1. 客户端窗口缓冲"平铺 + 线性影子"（`mwv207_flush_resource()` 的单份影子拷贝）与 X 合成之间的时序；
+2. N19 的持久映射免等待（`MWV207_BUFWAIT_ALL`）导致 WebRender 常量/顶点环回绕；
+3. X 合成时机或 WebRender 自身。
+
+**A/B 手段**：`tools/ff-ab.sh {base|notile|bufwait|all}`，每个模式独立 profile 启动火狐：
+- `notile` = `MWV207_SCANOUT_TILE=0`（客户端窗口缓冲保持线性、无影子拷贝）；
+- `bufwait` = 开发驱动 + `MWV207_BUFWAIT_ALL=1`（回退到 N19 之前"映射写前一律等待"）；
+- 判读：`notile` 消失 ⇒ 影子路径；`bufwait` 消失 ⇒ 映射写竞态；都不消失 ⇒ 候选 3。
+
