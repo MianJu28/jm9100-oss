@@ -1608,6 +1608,21 @@ Hantro G1 的参考实现（ST 的 `v6.6-stm32mp` 分支，`hantro_g1_jpeg_dec.c
 在厂商栈上用 kprobe 抓 `DecWriteRegs` 的 `core->regs` 指向的内容，或直接 dump 厂商
 staging BO 的页面，拿到 ECS/表的确切字节。
 
+#### 火狐"打开网页就崩溃 / 文字整页乱码"：着色器 arena 只放得下 8 个变体（2026-11-17，已修）
+
+- 现象：Firefox 159 打开 `https://cnb.cool/...` 一类的页面，3.6 s 内即崩溃；不崩时整页文字被裁边/串字（几何与图标正常）。排障模式（禁用附加组件/硬件加速）下正常。
+- 崩溃取证（`~/.mozilla/firefox/Crash Reports/pending/*.extra` 的 `StackTraces`，按模块基址算偏移再 `addr2line` 到 r37 的 `libmwv207_dri.so`）：
+  - `SIGABRT / SI_TKILL`，帧链 `libc abort ← __assert_fail ← libmwv207_dri.so+0x7131ec ← +0x6f6e1c ← +0x6f85d8 ← +0x2ae4e4`
+    → `mwv207_record_code`（`nir/mwv207_compiler.c:405`）← `mwv207_set_current_shader` ← `mwv207_update_shader` ← `_mesa_DrawElements…`
+  - 另有 `SIGSEGV / SEGV_MAPERR` 落在 `src/mesa/main/get.c` 的 `find_value`（堆已被破坏的后果）。
+- 根因：`mwv207_record_code()` 把每个着色器变体的 GPU 二进制放进 context 内的"着色器 arena"BO：容量按 `code_size * 4 * 16` 申请，而每个变体实际占用 `code_size * 4 * 2` 字节 ⇒ **只放得下 8 个变体**。双源混合把混合状态（因子/方程/blend color）烘焙进着色器后，变体数量随页面内容暴涨，第 9 个变体的 `memcpy` 就越界写入（先污染其他显存 → 文字乱码），紧接着那句 `assert(state->bo_offset < state->bo->base.base.size)` 触发 `abort`（→ 崩溃）。
+- 复现探针：`tests/gl-probe/dualarena.c`（每 draw 改一次 `glBlendColor` 并让 dst 因子用 `CONSTANT_COLOR_EXT`，画 64 次）。修复前驱动 **abort**：`dualarena: ../src/gallium/drivers/mwv207/nir/mwv207_compiler.c:405: mwv207_record_code: Assertion 'state->bo_offset < …' failed`（rc=134，与火狐崩溃同一条断言）；修复后 `RESULT: PASS`。
+- 修复（`src/mwv207-umd/drivers/mwv207/nir/mwv207_compiler.c`）：
+  1. arena 起步容量 `0x200000`（2 MB，约数百个变体），仍保留 `code_size * 4 * 16` 的下限；
+  2. 越界从 `assert` 改成**一次性告警**（`[mwv207] 着色器 arena 溢出 …`），不再 abort；
+  3. 顺带把 lower_dual 使用的"渲染目标读回"槽号（`ctx->info.dsbi.sampler_index`）并进 `fp_dual_blend` 指纹 —— 该槽号随每次 draw 的视图数量变化，原来不进缓存键会让同一变体在"绑 1 张 / 绑 2 张纹理"的 draw 之间复用（`tests/gl-probe/dualtex.c`）。
+- 验证：`tools/gl-regression.sh` 新增第 8 项 `dualarena`，全套 **pass=9 fail=0**；火狐用开发驱动打开原崩溃页面渲染完全正常、无崩溃、无 arena 告警。
+
 #### 追加取证（2026-11-13 深夜）：寄存器已 100% 对齐，仍 `STRM_CORRUPTED`
 
 1. **字级比对**：给 `mwv207_dec_jpeg.c` 的厂商路径加 `MWV207_JPEGREGS` 原始字打印

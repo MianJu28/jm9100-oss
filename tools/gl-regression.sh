@@ -124,7 +124,19 @@ else
    echo "SKIP rbbench（未构建）"; SKIP=$((SKIP+1))
 fi
 
-# 8. glmark2 全套（可选）
+# 8. 双源混合变体数量（着色器 arena 容量；火狐"打开网页就崩"的根因：
+# 每个 blend color/因子组合一个变体，arena 只放得下 8 个 → 越界写 + assert abort）
+if [ ! -x "$BIN/dualarena" ] && [ -f tests/gl-probe/dualarena.c ] &&
+   cc -O2 -o "$BIN/dualarena" tests/gl-probe/dualarena.c -lEGL -lGLESv2 2>/dev/null; then :; fi
+if [ -x "$BIN/dualarena" ]; then
+   out=$("$BIN/dualarena" 64 2>&1 | grep -E "RESULT|draws|Assertion|FAIL" | tail -3)
+   if echo "$out" | grep -q "RESULT: PASS"; then echo "$out" | tail -1; report "dualarena" 0;
+   else echo "$out"; report "dualarena" 1; fi
+else
+   echo "SKIP dualarena（未构建）"; SKIP=$((SKIP+1))
+fi
+
+# 9. glmark2 全套（可选）
 if [ "${DUR}" != "0" ] && command -v glmark2 >/dev/null 2>&1; then
    score=$(timeout 900 glmark2 -b ":duration=$DUR" 2>&1 | sed -n 's/^.*glmark2 Score: //p' | tail -1)
    echo "glmark2 score: ${score:-?}"

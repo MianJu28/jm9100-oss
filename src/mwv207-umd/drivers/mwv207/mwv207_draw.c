@@ -1178,6 +1178,14 @@ mwv207_update_shader(struct mwv207_context *ctx)
             union { float f; uint32_t u; } v = { ctx->blend_color.color[i] };
             fp = (fp ^ v.u) * 16777619u;
          }
+         /* FIX(jm9100-oss): lower_dual 把"读回渲染目标"用的采样器槽号
+          * (ctx->info.dsbi.sampler_index = 本次 draw 已绑定的视图数)编译进着色器。
+          * 该槽号随每次 draw 的视图数量变化, 但着色器变体键里原来没有它 ——
+          * 于是火狐同一个 ps_text_run 变体在"绑 1 张字形图集"和"绑 2 张"的
+          * draw 之间复用, texelFetch 就落到别的纹理上, 整页文字乱码。
+          * 把槽号并进指纹, 让每个视图数量各自拥有正确的变体。 */
+         fp = (fp ^ (ctx->info.dsbi.is_dual ?
+                     ctx->info.dsbi.sampler_index : 0xFFFFFFFFu)) * 16777619u;
          ctx->fp_dual_blend = fp;
       }
       ctx->fp_dirty = false;

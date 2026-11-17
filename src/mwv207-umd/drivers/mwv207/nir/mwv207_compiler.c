@@ -373,10 +373,16 @@ mwv207_record_code(struct mwv207_context *ctx,
    if (!offline) {
       if (state->bo == NULL) {
 
+         /* FIX(jm9100-oss): 这块 BO 是该 context 的"着色器二进制 arena", 每个变体
+          * 占 code_size*4*2 字节, 而原来只按 code_size*4*16 申请(->
+          * 实际只放得下 8 个变体)。双源混合把混合状态烘焙进着色器后变体数量
+          * 暴涨(火狐每个不同的 blend color/因子组合一个变体), 一页网页就能
+          * 撑爆 -> 下面那句 assert 触发 abort, 表现为"打开网页就崩溃"。
+          * 起步给 2 MB(约数百个变体), 并把越界改成警告而不是 abort。 */
          uint32_t bo_size = shader->code_size * sizeof(uint32_t) * 16;
 
-         if (bo_size < 0x1000)
-            bo_size = 0x1000;
+         if (bo_size < 0x200000)
+            bo_size = 0x200000;
 
          state->bo = ctx->ws->bo_create(ctx->ws, bo_size,
             MWV207_DOMAIN_VRAM, MWV207_FLAG_CPU_ACCESS);
@@ -402,7 +408,15 @@ mwv207_record_code(struct mwv207_context *ctx,
          state->bo_offset += (state->current->code_size * sizeof(uint32_t) * 2);
       }
 
-      assert(state->bo_offset < state->bo->base.base.size);
+      if (unlikely(state->bo_offset >= state->bo->base.base.size)) {
+         static bool warned;
+         if (!warned) {
+            warned = true;
+            fprintf(stderr, "[mwv207] 着色器 arena 溢出: offset=%u size=%zu"
+                    " (变体过多, 该变体的 GPU 代码未写入)\n",
+                    state->bo_offset, (size_t)state->bo->base.base.size);
+         }
+      }
    }
 
    shader->code = code;
