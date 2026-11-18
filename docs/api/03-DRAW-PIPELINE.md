@@ -840,7 +840,7 @@ TCS/TES/GS 会先写各自的 uniform base 偏移：`0x5291` = `MWV207REG_TCS_UN
 | `0x505` | **未映射** | `surface->stride` | `draw.c:473` |
 | `0xE23` | `MWV207REG_DEPTH_SLICE` | `surface->size` | `draw.c:474` |
 | `0x503` | **未映射** | `fui(depth_normalize)` | `draw.c:476` |
-| `0x500` | **未映射** | 无 ZS 时的深度配置常量组合 | `draw.c:480-486` |
+| `0x500` | `AQ_DEPTH_CONFIG`（地址 `0x1400`） | 无 ZS 时的深度配置常量组合 | `draw.c:480-486` |
 | `0x426` | `MWV207REG_PS_MAX` | `rtMaxLayers`（= 最大 layer_count - 1） | `draw.c:491` |
 | `0x38D` | `MWV207REG_RA_CONTROL_EX` | bit4（`0x10`）= `(rtMaxLayers != 0)` | `draw.c:493-494` |
 
@@ -961,7 +961,7 @@ TCS/TES/GS 会先写各自的 uniform base 偏移：`0x5291` = `MWV207REG_TCS_UN
 |---|---|---|
 | `FRAMEBUFFER \| BLEND` | `0x5240+(n-1)`（**未收录**）= `peInfo.pixel_config_ex \| blend_state->blend_configex[i]` | `draw.c:958-964` |
 | 同上 + `rast_samples > 1` | `0x415` bit12 = `blend_state.alpha_to_coverage` | `draw.c:967-969` |
-| `FRAMEBUFFER \| ZSA \| SHADER` 且有 ZS | `0x500`（**未映射**）= `surface->peInfo.depth_config & ctx->zsa->depth_config &`（PS 写深度时的位域组合） | `draw.c:996-1005` |
+| `FRAMEBUFFER \| ZSA \| SHADER` 且有 ZS | `0x500`（`AQ_DEPTH_CONFIG`，地址 `0x1400`）= `surface->peInfo.depth_config & ctx->zsa->depth_config &`（PS 写深度时的位域组合） | `draw.c:996-1005` |
 | 同上 | `0x382` = `MWV207REG_RA_CONTROL`：bits31:30 = `subsamplez_dirty ? 0x0 : 0x1`；bit0/bit4-7；bits29:28 = `ps_modify_z`；bit2 = DISABLE；bit26/bit24 = true | `draw.c:1007-1010, 1018-1022` |
 | `ZSA \| STENCIL_REF \| RASTERIZER` | `0x506`（**未映射**）= `zsa->stencil_op[front_ccw]`；`0x507`（**未映射**）= `zsa->stencil_config[front_ccw] \| stencil_ref.stencil_reference[front_ccw]`；`0x528`（PE_EXTRA_REFERENCE）= `stencil_back_reference[front_ccw]`；`0x52E`（PE_BACKFACE_STENCIL）= `zsa->stencil_back_config[front_ccw]` | `draw.c:1027-1036` |
 
@@ -1262,7 +1262,9 @@ TCS/TES/GS 会先写各自的 uniform base 偏移：`0x5291` = `MWV207REG_TCS_UN
 |---|---|
 | `MWV207_EMITF/EMITFS` 中 `0x0C000000` 基址（bit26）的「F」语义 | `P/include/hw/mwv207reg_{3d,texture,shader}.h` 为空壳（`REGISTERS.md:29-31`），无寄存器字段名可反推 |
 | `VALUE/NAME/MASK/MASK_VALUE/MASK_NAME` 的实际可用性 | 依赖被剥离的 `reg##_##field##_Offset/_Mask`，本发行版无任何调用点（§1.3） |
-| 所有 REG §3 寄存器的位域语义 | `0xE02/0xE03/0x404/0x500/0x50B/0x192/0x28C/0x28D/0x503/0x594/0x595/0xFFFF/0x191/0x281-0x28F/0x301-0x306/0x401/0x501/0x502/0x505-0x50A/0x50D/0x596/0x598/0x599/0x59B/0x6D0/0xE00/0xE05/0xE13/0xF00` 在厂商头文件中**无 `_Address` 定义**（`REGISTERS.md:243-299`），位域含义必须实测 |
+| 所有 REG §3 寄存器的位域语义 | `0xE02/0xE03/0x404/0x50B/0x192/0x28C/0x28D/0x503/0x594/0x595/0xFFFF/0x191/0x281-0x28F/0x301-0x306/0x401/0x501/0x502/0x505-0x50A/0x50D/0x596/0x598/0x599/0x59B/0x6D0/0xE00/0xE05/0xE13/0xF00` 在厂商头文件中**无 `_Address` 定义**（`REGISTERS.md:243-299`），位域含义必须实测 |
+
+> 已解决：`0x500` = `AQ_DEPTH_CONFIG`（厂商 `jmgpu_toolkit.h:26` `AQ_DEPTH_CONFIG_Address 0x01400`，驱动号 = 地址 >> 2）。位域：bit16 `EARLY`、bit17 `MASK_EARLY`、bit12 `WRITE`、bits10:8 `COMPARE`、bit14 `D32_FLOAT_OPT`、bit18 `CLAMP_FAR_Z`、bit20 `DEPTH_ONLY`。实测在 JM9100 上置 bit16 无性能变化（见 `docs/UNRESOLVED.md`「厂商栈结构性零拷贝取证」）。
 
 ### 13.2 因超出本次阅读范围而无法确认
 

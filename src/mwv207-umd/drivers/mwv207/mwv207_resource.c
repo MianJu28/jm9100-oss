@@ -44,6 +44,14 @@
 /* 暂存缓存预算: 环里最多留这么多字节的上传暂存 */
 #define MWV207_STAGING_CACHE_BUDGET      (96ull * 1024ull * 1024ull)
 
+/* C2（零拷贝异步翻转移植）: 会被 DRI3/Present 直接翻转的 scanout 缓冲若走
+ * "平铺 + 线性影子"，UMD 每帧要把整帧平铺内容拷进线性影子
+ * （mwv207_flush_resource -> mwv207_copy_image），这就是 present 固定
+ * 0.4–2.7 ms 的来源。大窗口/全屏才值得省这次拷贝；小窗口保留平铺以维持
+ * 渲染带宽（PE 写平铺 ~38 GB/s vs 线性 ~6.7 GB/s）。
+ * 阈值按缓冲像素数；MWV207_SCANOUT_LINEAR_MIN=0 可整体关掉此分流做 A/B。 */
+#define MWV207_SCANOUT_LINEAR_MIN_DEFAULT (1280u * 720u)
+
 static bool mwv207_tile_supported_format(enum pipe_format format)
 {
    if (util_format_get_blocksize(format) > 8)
@@ -97,6 +105,19 @@ mwv207_can_tile(struct mwv207_resource *res)
          const char *name = util_get_process_name();
          is_server = (name && strstr(name, "Xorg")) ? 1 : 0;
       }
+      /* C2: 大尺寸客户端 scanout 缓冲强制线性，跳过"平铺 + 线性影子"整帧拷贝。
+       * 这类缓冲会被 DRI3/Present 直接翻转，线性化后 get_handle 直接导出本体，
+       * KMS/WIN0 拿到的就是渲染缓冲本身，无需影子。小窗口保留平铺（平铺渲染
+       * 带宽收益 > 一次影子拷贝）。MWV207_SCANOUT_LINEAR_MIN=0 可关闭做 A/B。 */
+      const int64_t linear_min = debug_get_num_option("MWV207_SCANOUT_LINEAR_MIN",
+                                                       MWV207_SCANOUT_LINEAR_MIN_DEFAULT);
+      if (linear_min > 0 && !is_server &&
+          (uint64_t)res->base.width0 * (uint64_t)res->base.height0 >= (uint64_t)linear_min &&
+          res->base.array_size == 1 &&
+          res->base.depth0 == 1 &&
+          res->base.last_level == 0)
+         return PIPE_ERROR_BAD_INPUT;  /* 强制线性 */
+
       if (enable_scanout_tile && !is_server &&
           res->base.array_size == 1 &&
           res->base.depth0 == 1 &&

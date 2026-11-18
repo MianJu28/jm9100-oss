@@ -186,3 +186,215 @@ DISPLAY=:0 XAUTHORITY=/home/admin/.Xauthority vblank_mode=0 ~/dev-bin/pbench 800
   `ccd9d9c`（每 draw CPU 0.86→0.17 µs）、`f486a1b`（窗口平铺 + 线性影子）、
   `7a1fa9a`（Xorg 进程保持线性）、`6b685b7`（present 去重 A/B：不做）、
   `163218d`/`4d56016`（厂商栈显示窗口取证）、`37918b3`（dmabuf modifier 导入钩子，C1 的前置条件之一）。
+
+## 10. 移植进展（2026-11-17，C2 尺寸档已落地）
+
+### 10.1 已实现：C2 尺寸档（`mwv207_can_tile()`）
+
+按 §5/§6 的推荐顺序先做 C2 尺寸档，纯 UMD 改动，落在
+`src/mwv207-umd/drivers/mwv207/mwv207_resource.c` 的 `mwv207_can_tile()`：
+
+- 新增 `MWV207_SCANOUT_LINEAR_MIN` 调试选项（默认 `1280*720` 像素，`debug_get_num_option`）。
+  客户端 `PIPE_BIND_SCANOUT` 资源若 `width0*height0 >= 阈值` 且为单层面/单 mip，
+  直接判为**线性**（返回 `PIPE_ERROR_BAD_INPUT` 即不走平铺分支）。
+- 线性化后 `mwv207_set_miptree()` 不再为它建 `res->linear` 影子，
+  `mwv207_flush_resource()` 的整帧 `mwv207_copy_image()` 消失，
+  `mwv207_resource_get_handle()` 直接导出本体并标 `DRM_FORMAT_MOD_LINEAR`。
+- Xorg 进程（`is_server`）与阈值以下的小窗口仍走原"平铺 + 影子"路径，避免伤
+  `300²` 这种平铺带宽收益远大于一次影子拷贝的场景。
+- `MWV207_SCANOUT_LINEAR_MIN=0` 可一键关掉分流做 A/B；
+  原 `MWV207_SCANOUT_TILE` 语义不变（全局开关保留作为 fallback）。
+
+### 10.2 实测（r38 安装栈 + 新构建，同机 1920×1080，vblank_mode=0）
+
+**全屏 glmark2 build:duration=8 --fullscreen**（复现 §2.2 的 C2 收益，render-heavy）：
+
+| 配置 | FPS | 帧时 | 判读 |
+|---|---|---|---|
+| C2 ON（默认尺寸档，线性 scanout） | **943** | **1.061 ms** | 跳过整帧影子拷贝 |
+| C2 OFF（`MWV207_SCANOUT_LINEAR_MIN=0`，平铺+影子） | 769 | 1.301 ms | 基线 |
+| 全局 `MWV207_SCANOUT_TILE=0` | 937 | 1.068 ms | 与默认尺寸档等效（1080p 下都线性） |
+
+⇒ **+22.6% FPS / −0.24 ms/帧**，与 §2.2 表中"去掉影子拷贝净赚 ~0.25 ms"吻合。
+默认尺寸档在 1080p 下与全局线性等效，但保住了小窗口的平铺收益（见下）。
+
+**present 基准（`pbench 200 1`，窗口模式，受合成器 glamor 拷贝掩盖）**：
+
+| 场景 | C2 ON | C2 OFF | 说明 |
+|---|---|---|---|
+| 300×300 | 0.22 ms | 0.22 ms | 阈值下，均平铺，打平 |
+| 800×600 | 0.81 ms | 0.82 ms | 阈值下（48 万像素 < 92 万），均平铺，打平 |
+| 1920×1080 | 2.77 ms | 2.83 ms | 线性化只省 UMD 侧一次拷贝，X 合成拷贝仍在 |
+
+（窗口模式收益小是预期的：§2.2 已说明窗口 present 被 glamor 合成拷贝掩盖；
+真正的零拷贝收益要在全屏 PAGE_FLIP 路径上看，见上表。）
+
+**全屏 override-redirect 窗口 clear+swap（`pbench-fs 1920 1080 400 1`）**：
+C2 ON 0.56 ms vs C2 OFF 0.63 ms（约 −0.07 ms）。窗口模式与全屏模式之间的
+差值就是合成器拷贝的固定开销，C2 只负责消掉 UMD 侧那一次。
+
+### 10.3 回归验证
+
+- 编译：`tools/build-umd.sh build` 成功，`libmwv207_dri.so` 正常产出。
+- `tools/gl-regression.sh`（DRI_DIR=sim）：**pass=10 fail=0**（query/fbo/texcheck/
+  texbench/bufbench/dualblend/dmabuf/rbbench/dualarena/glmark2），无正确性退化。
+
+### 10.4 C1 评估：KMD 侧已就绪，卡在手动上屏验证与 X 侧补丁
+
+第一轮 §10.4 的止损理由在第二轮已逐条推进（2026-11-17）：
+
+1. **C2 已正式部署系统栈**：`payload-49` / active-stack `oss-24.1.2-fullstack-r39`，
+   C2 marker=1。全屏 glmark2 956 FPS/1.047ms vs OFF（LINEAR_MIN=0）788 FPS/1.270ms
+   （+21%/−0.22ms），`GL_DURATION=1 ./tools/gl-regression.sh` → 10/10 pass。
+2. **KMD 切换成功**：`switch-mwv207.sh kmd install` 后加载 srcversion
+   `C3A62E5C00106C402380ADE`（6.6.159 新构建），`/sys/module/mwv207/parameters/overlay`=Y，
+   lightdm/Xorg/DISPLAY 正常，Xorg 日志 `glamor initialized` + `AIGLX Loaded mwv207`。
+   `modetest`/`kmscube` 已 apt 安装。`modetest -M mwv207 -p` 确认每个 CRTC 各多一个
+   `type=0`(Overlay) plane：id 35（CRTC 37）与 id 42，format AR24/XR24 均 LINEAR。
+3. **WIN0 与 >64×64 光标冲突风险已排除（仅针对 OSS 栈）**：KMD 中 cursor 走独立寄存器——
+   `mwv207_cursor_switch()` 写 0x478，`mwv207_cursor_atomic_update()` 写 0x4B4/0x454/0x4A8；
+   WIN0 overlay 走 0x990000+ 系列（0x02C enable/0x010 pos/0x050 addr>>6/0x068 pitch/0x0E4 size）。
+   两套寄存器完全独立，`mwv207_va.c:50/260` 注释中的"共用"仅指厂商 jmgpu 驱动，
+   OSS 栈不存在该冲突。
+
+**上屏硬件验证已通过（2026-11-18）**：用户按上述命令在文本 VT 手动运行 `overlay-test`，
+屏幕出现品红矩形 ⇒ overlay plane 可见、位置正确（(100,100) 800×600）、与主平面共存。
+结合"OSS KMD cursor 走独立寄存器、无 WIN0 冲突"，**C1 的 KMD 硬件链路全部闭环**。
+
+**X 侧 present→overlay 补丁路径评估（只读，2026-11-18）：结论不实施**，理由：
+
+1. **Xorg 用 modesetting DDX**（`xserver-xorg-core 2:21.1.16`，非闭源 `mwv207_drv.so`）。
+   `nm -D /usr/lib/xorg/modules/drivers/modesetting_drv.so` 确认它**不导入 `drmModeSetPlane`**——
+   没有把任意客户端缓冲挂到 overlay plane 的代码路径。其 Present flip 只走
+   `drmModePageFlip`（翻 PRIMARY scanout）+ `drmModeSetCrtc`；`drmModeGetPlaneResources /
+   GetPlane` 仅用于 PRIMARY/CURSOR 枚举。要让窗口 flip 挂 WIN0，必须改 xserver 的 present
+   路径（`ms_present.c` / `drmmode_display.c`），即自编并替换整个 DDX，而非改 UMD/KMD。
+2. **单 WIN0 窗口的结构性限制**：每 CRTC 只有一个 overlay plane，只能服务**一个**窗口，
+   桌面多窗口场景无解。走 overlay 的窗口绕过 X 合成，被遮挡或不在最上层时会显示错误内容，
+   还需 damage / 可见性 / z-order 跟踪——不是"多打一次 SetPlane"能解决。
+3. **厂商也没走通**：`reports/PRESENT-PATH-20261111.md` §13.1 证实厂商 KMD 的
+   `DRM_PLANE_TYPE_OVERLAY` 是空分支，其 DDX 同样只翻 PRIMARY。
+4. **工程量/风险**：2–4 周 + 自编 xserver + 单窗口/遮挡/合成处理，中高风险；
+   而 C2 已落地并实测 +21%/−0.22ms、回归 10/10 PASS。
+
+**最终结论**：C1 的 KMD 硬件链路已验证可用（overlay 作为"能力原型"保留，模块参数默认 N）；
+但 X 侧 present→overlay 全链路受"DDX 无 SetPlane 路径 + 单 WIN0 只能服务一个窗口 +
+厂商亦未走通"三重限制，投入产出比远低于 C2。按 §6 第 5 条止损条件 **不实施 X 侧补丁，
+维持 C2 为最终交付**。若日后重试 C1，起点是自编 xserver（可复用 `tools/build-xglamor.sh`
+的构建/回滚基础设施）改 modesetting present 路径。
+
+### 10.5 待办（C2 真实判据）
+
+尺寸档是 §5 的"中间档"。若要进一步逼近厂商"只翻转的缓冲才线性"的语义，
+可在 `mwv207_flush_resource()`/`get_handle()` 里按该资源是否被 Present 过
+（`whandle` 导出次数 / usage 含 `DRM_RDWR|DRM_WRITE`）做真实判据迁移；
+本轮未做——尺寸档在关键场景已拿到全部可测收益（+22.6%），真实判据的边际
+收益不确定且风险更高。
+### 10.6 present 路径现状（2026-11-18，Xorg 重启后）
+
+本文件前文"我方 present 0.4–2.7ms 来自两次整帧拷贝"是 11 月中上旬的状态。
+11-18 查明其中最关键的一次拷贝走的是 glamor **着色器路径**而不是
+`glBlitFramebuffer`：`patches/xserver/0001-glamor-blit-fast-path.patch` 被
+ostree 部署切换冲掉（运行中的 `libglamoregl.so` md5 与较新 deploy 一致、不含
+`GLAMOR_NO_BLIT`）。重新构建并装载后实测：
+
+- present 800×600 clear+swap：**0.500 ms**（原 0.931 ms）；300×300：0.104 ms（原 0.344 ms）
+- `glmark2 -b build`：**1477–1520 FPS**（原 945）；全套 Score 784 → **1215**；glxgears 2375 → 4220
+- `GL_DURATION=1 ./tools/gl-regression.sh`：pass=10 fail=0
+
+即"第二次拷贝"已经降到 blit 理论值附近（3.8 MB / 17.3 GB/s ≈ 0.22 ms，余下是
+swap/合成/同步），present 不再是轻载场景的唯一瓶颈；剩余轻载差距（vs 厂商
+5982 FPS）主要是每帧 fixed overhead 与本文件 §10.4 已止损的结构性零拷贝。
+详见 `docs/UNRESOLVED.md` 的"性能回归根因"与"glamor blit 快路径生效后的实测"。
+每次 X 重启/部署切换后跑一次 `tools/verify-glamor-patch.sh` 确认补丁还在。
+
+### 10.7 厂商"结构性零拷贝"到底是什么（2026-11-18 取证结论）
+
+回答"厂商 0.014 ms present / glmark2 5982 FPS 是怎么来的、要不要自编 xserver"。
+取证对象：`ref/vendor-1.8.0/mwv207-dev_1.8.0.uos_arm64.deb` 解包后的
+`/tmp/vendor-extract/usr/lib/xorg/modules/drivers/mwv207_drv.so`（未 strip、含 DWARF）
+与 `/usr/src/mwv207-1.8.0.uos` 的 KMD 源码。
+
+**结论一：厂商没有用 DRM overlay 平面，也不需要自编整个 xserver。**
+DDX 导入符号里**没有 `drmModeSetPlane`**；只有 `drmModePageFlip` /
+`drmModeSetCrtc` / `drmModeAddFB`(v1) / `drmWaitVBlank` /
+`PixmapStartDirtyTracking` / `PixmapSyncDirtyHelper` / `present_screen_init` /
+`dri3_screen_init`。NEEDED 里**没有 libglamoregl**，DWARF 文件表里
+`jmgpu_glamor.c` 只有 **1 行**（即完全没实现 glamor）。真正的大头是自研
+**EXA DDX**：`jmgpu_exa.c` 2349 行、`jmgpu_drmmode_display.c` 5091 行、
+`jmgpu_present.c` 492 行、`jmgpu_dri3.c` 176 行。
+
+**结论二：它做的是"2D 引擎按 damage 拷贝 + scanout pixmap 直接 page flip"。**
+- `jmgpuDrmModeCrtcScanOutCreate/Destroy/Free` 维护一块专用 scanout BO；
+- `jmgpuScanOutFlip`(0xf600) / `jmgpuScanOutUpdate`(0xf3f0) /
+  `jmgpuScanOutDoUpdate` / `jmgpuSyncScanOutPixmaps` 在 dirty 区域上做拷贝；
+- `jmgpuPresentFlip` 反汇编确认结构为：`jmgpuPresentCheckFlip` 放行 →
+  `jmgpuFlushInDirect` → `jmgpuDoPageFlip`（带 abort/flip 双回调）→ 清 pending；
+- `jmgpuPresentCheckFlip` 只对"覆盖整屏的单窗口"放行，与 X 核心
+  `present_check_flip()` 的门禁一致；
+- 拷贝走 **2D 引擎**：`jmgpu2dCopyAreaHW`(0x14ad0) 取 `exaGetPixmapDriverPrivate`
+  两侧 priv、按 `[priv+72]/[priv+76]` 判断源尺寸，配套
+  `jmgpu2dCopyArea/jmgpu2dFillRect/jmgpuFlush2dCmd/jmgpuWait2dIdle`。
+
+**结论三：2D 命令编码完全在用户态，内核只当搬运工。**
+厂商 KMD `jmgpu_garbage.c:950-975` 的 `j9_handle_j9m_muriculate()` 收到
+`struct drm_jm_j2d_send_cmd` 后直接 `j9_handle_insurrecto(gdev->p2d, args->cmd,
+args->size, nowait)`（`jmgpu_define.c:449`），后者只做 `size & 0x3` 校验、加
+`enginelock`，然后 `p2d->engine->ops->input_cmds(engine, pcmds, size, no_wait,
+from_user=1)`。**内核不解析 2D 命令字**。这就是我方缺的那块：我方 KMD 有
+ring/fence 框架（`src/kernel-6.6/mwv207_pipe_2d.c`），但 UMD 侧没有任何 2D
+命令流（`docs/HANDOVER-2D.md` 记录"draw 数据面寻址"仍未解出）。
+
+**结论四：厂商 DDX 二进制不可直接复用。** `nm -D --undefined-only` 显示它强依赖
+厂商 KMD 私有 ioctl：`drm_jmgpu_bo_create/destroy/mmap/export_to_fd/
+import_from_fd/get_handle/invalidate/query/read_rect/write_rect/xfer_to_dev/
+xfer_from_dev/clean`、`drm_jmgpu_create/close`、**`drm_jmgpu_j2d_send_cmd` /
+`drm_jmgpu_j2d_wait_idle`**。我方 KMD 没有这些 ioctl，直接装 `mwv207_drv.so`
+不可能起来；要复刻就得写一个等价 DDX + 补 2D 命令通路。
+
+**结论五：我方 present 其实已经走 page flip，差距不在"翻转"。**
+kprobe 实测（`drm_mode_page_flip_ioctl` / `drm_mode_atomic_ioctl` /
+`drm_mode_setcrtc` / `drm_mode_addfb2` / `drm_mode_dirtyfb_ioctl` 五个探针）：
+1920×1080 全屏 override-redirect 连渲 2 s（4862 帧）→ `pgflip=202`、
+`addfb2=202`、`atomic=0`、`setcrtc=0`、`dirtyfb=0`，即**每帧一次 page flip**；
+静止时 `pgflip=0`。800×600 窗口同样测法 `pgflip=0` —— 小窗口走的是
+`present_copy_region()` 的整块 `CopyArea`，X 核心
+`present/present_scmd.c:61 present_check_flip()` 要求
+`RegionEqual(&window->clipList, &root->winSize)`，**非全屏窗口在 X 核心里
+根本不允许 flip**（这一条改 DDX 也没用，必须改 X 核心或自研 DDX）。
+
+**结论六：present 的 0.29–0.33 ms 就是"一次全屏纹理采样绘制"。**
+自写探针 `/tmp/filltex.c`（全屏 textured quad 画到 FBO）：800×600
+NEAREST = **0.2481 ms**（1.93 Gpx/s）、纯色几何 0.1273 ms、LINEAR 0.2779 ms；
+1920×1080 NEAREST = 0.8939 ms。这个数字与窗口态 present 净成本
+（windowed 0.482 ms − offscreen 0.189 ms ≈ 0.29 ms）基本相等。对照：
+`glBlitFramebuffer` 800×600 = 0.2053 ms（18.70 GB/s）；`glReadPixels` 走
+DMA 回读只有 **2.7440 ms（0.70 GB/s）** —— 所以"DMA 引擎做 present 拷贝"
+这条路可以直接排除。
+
+**结论七：真正的大头是渲染吞吐，不是 present。**
+- 通用 draw 填充率：800×600 全屏三角形 **5.9 Gpx/s（23.6 GB/s）**，
+  1920×1080 6.2 Gpx/s；对照 `glClear` RGBA8 是 **458.9 Gpx/s（1835 GB/s）**。
+- 片元着色边际成本极大：300 次 sin 的重片元从 5.90 掉到 **0.32 Gpx/s**；
+  而 `discard` / colorMask off（不写色）只省 20%（7.36 Gpx/s）。
+- 深度测试在高 overdraw 下贵 **2.8×**（20000 小三角形：2.5153 ms vs 0.9069 ms）；
+  blending 免费。
+- 顶点吞吐饱和 ~810 Mverts/s，顶点着色不是瓶颈。
+- 我方 glxgears 6392 FPS vs 厂商 17621 FPS（2.8×）；glmark2 offscreen
+  800×600 build 5250 FPS 已接近厂商 windowed 5982 FPS（说明小尺寸下渲染
+  差距不大），差距随分辨率/overdraw 放大。
+
+**结论八：early-Z 两个候选位在 JM9100 上实测无效（已回滚）。**
+按厂商头文件补了 `AQ_DEPTH_CONFIG.EARLY`（0x1400 bit16，普通 LESS 也开）与
+`RA_CONTROL.EX_EARLY_DEPTH_IN_APP`（0x382 bit5），并做了 discard 反例保护。
+5 轮交替 A/B（`glmark2 -b build:duration=2`）：2072/2074、2070/2070、
+2073/2072、2072/2075、2070/2073 —— **完全无差异**；`/tmp/earlyz`（近→远
+全被深度拒绝）与 `/tmp/layers 1`（高 overdraw）也无差异，bit5 甚至略慢。
+`GL_DURATION=1 ./tools/gl-regression.sh` pass=10 fail=0（无回归）。
+既然零收益又带正确性风险（discard/alpha 交互），改动已 `git checkout` 回滚，
+结论写进 `docs/UNRESOLVED.md`，避免以后重复试。
+
+**要不要自编 xserver？** 不需要自编 xserver 核心，但需要写一个**新的 DDX 模块**
+（EXA 或 glamor 皆可），并补上 2D 引擎命令通路；工作量主体在 2D 命令编码
+（闭源知识）而非 X。按当前证据，**性价比最高的仍是已经拿到的两层**：
+C2 线性翻转（+21–22%）与 glamor blit 快路径（+57%），二者均已上系统栈。

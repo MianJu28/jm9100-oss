@@ -2131,3 +2131,289 @@ picture"检查；该日志改为**只播报一次**（`mwv207_dec_vp9.c` 的 `wa
 - `bufwait` = 开发驱动 + `MWV207_BUFWAIT_ALL=1`（回退到 N19 之前"映射写前一律等待"）；
 - 判读：`notile` 消失 ⇒ 影子路径；`bufwait` 消失 ⇒ 映射写竞态；都不消失 ⇒ 候选 3。
 
+
+### 零拷贝异步翻转移植：C2 尺寸档已落地，C1 止损（2026-11-17）
+
+按 `docs/HANDOVER-ZEROCOPY-PRESENT.md` 的方案先做 C2（纯 UMD）。改动在
+`src/mwv207-umd/drivers/mwv207/mwv207_resource.c` 的 `mwv207_can_tile()`：新增
+`MWV207_SCANOUT_LINEAR_MIN`（默认 `1280*720` 像素），客户端 `PIPE_BIND_SCANOUT`
+资源达到阈值即判线性，跳过"平铺 + 线性影子"，`get_handle` 直接导出本体
+（`DRM_FORMAT_MOD_LINEAR`）；Xorg 进程与阈值以下小窗口仍走平铺+影子。
+`MWV207_SCANOUT_LINEAR_MIN=0` 可关掉分流做 A/B。
+
+实测（r38 + 新构建，vblank_mode=0）：全屏 `glmark2 build:duration=8 --fullscreen`
+从 **769 FPS / 1.301 ms**（平铺+影子）提升到 **943 FPS / 1.061 ms**（线性），
+**+22.6% / −0.24 ms**，与"去掉影子拷贝净赚 ~0.25 ms"吻合；窗口模式 present
+因合成器 glamor 拷贝掩盖基本打平（§2.2 已述）；`300²` 小窗口保留平铺不受伤。
+`tools/gl-regression.sh` **10/10 PASS**，无正确性退化。
+
+第二轮更新（2026-11-17）：C2 已用 `payload-49`（active-stack `oss-24.1.2-fullstack-r39`）
+正式装进系统栈，C2 marker=1；系统栈全屏 glmark2 956 FPS/1.047ms vs OFF 788 FPS/1.270ms
+（+21%/−0.22ms），`GL_DURATION=1 ./tools/gl-regression.sh` 10/10 PASS。
+
+C1 的 KMD 前置条件已就绪：`switch-mwv207.sh kmd install` 后加载 srcversion
+`C3A62E5C00106C402380ADE`（6.6.159，路径 `/lib/modules/6.6.159-arm64-desktop-hwe/updates/dkms/mwv207.ko`），
+`overlay`=Y，`modetest` 确认每 CRTC 多一个 type=0 Overlay plane（id 35/42，AR24/XR24 LINEAR）。
+`modetest`/`kmscube` 已 apt 装好。WIN0 与 >64×64 光标冲突风险**仅对厂商 jmgpu 驱动成立**——
+OSS KMD 的 cursor 走独立寄存器（0x478 + 0x4B4/0x454/0x4A8），与 WIN0（0x990000+ 系列）无关。
+
+**上屏硬件验证已通过（2026-11-18）**：用户在文本 VT 手动运行 `overlay-test`，屏幕出现
+品红矩形 ⇒ overlay plane 可见、位置/尺寸正确、与主平面共存。至此 C1 的 KMD 硬件链路全部闭环。
+
+**X 侧 present→overlay 补丁评估后不实施（止损）**：
+- Xorg 用 modesetting DDX（`xserver-xorg-core 2:21.1.16`），`nm -D modesetting_drv.so`
+  确认其**不导入 `drmModeSetPlane`**，Present flip 只走 `drmModePageFlip`（翻 PRIMARY）；
+  让客户端窗口 flip 挂 WIN0 必须自编整个 xserver（改 present 路径），非 UMD/KMD 小改。
+- 每 CRTC 只有一个 overlay plane，只能服务一个窗口；遮挡/不在顶层时显示错误内容，
+  需额外 damage/可见性/z-order 跟踪。厂商 KMD 的 `DRM_PLANE_TYPE_OVERLAY` 也是空分支
+  （`PRESENT-PATH-20261111.md` §13.1），即厂商亦未走通全链路。
+- 工程量 2–4 周 + 中高风险，投入产出比远低于已落地的 C2（+21%/−0.22ms、10/10 PASS）。
+
+最终交付维持 C2；C1 的 overlay 仅作为"能力原型"保留（模块参数默认 N）。详见交接文档 §10.4。
+
+### 性能回归根因：glamor blit 快路径补丁被 ostree 部署切换冲掉（2026-11-18）
+
+`glmark2 -b :duration=3`（800×600，vblank_mode=0）实测 **784**，厂商 1.8.0 记录 5209；
+`present-bench` 800×600 swap-only **0.904 ms**，而本报告 §15.2 带补丁时为 0.248 ms。
+
+根因不是 C2 或驱动回退，而是 **X 侧 `libglamoregl.so` 被换回发行版原版**：
+运行中的 `/usr/lib/xorg/modules/libglamoregl.so` md5 `60ecd5a4…` 与较新 ostree
+deploy `70b6d385…` 内的同名文件一致，两者都不含 `GLAMOR_NO_BLIT` 标记 ⇒
+`patches/xserver/0001-glamor-blit-fast-path.patch` 已丢失；备份
+`libglamoregl.so.mwv207-orig`（md5 `03fe0a6e…`）属 724bc2 deploy，同样未打补丁。
+
+机理：线性目标上 glamor 着色器拷贝 6.7 GB/s（0.576 ms/800×600），
+`glBlitFramebuffer` 17.3 GB/s（0.222 ms）；补丁把每个 box 的着色器拷贝换成 blit。
+
+已处理：
+- `./tools/build-xglamor.sh --build` 重建，产物 md5 `6a1c6822…`，含 `GLAMOR_NO_BLIT`；
+  导出符号与系统版一致（45/45，无缺失），`ldd` 依赖全解析；已 `sudo` 安装到
+  `/usr/lib/xorg/modules/libglamoregl.so`。
+- **需重启 X 才生效**。注意：本会话的 DSH 服务跑在该 X 会话内终端里，重启 lightdm 会一并结束它。
+- `switch-mwv207.sh umd check` 新增 glamor 补丁在位检查（只警告不改动），
+  避免下次部署切换后再次静默退化。
+
+补丁恢复后仍存在的结构性差距：
+- present ≈0.25 ms vs 厂商 ≈0.05 ms（厂商 DDX 用 DRI3 + EXA/2D 引擎做 dirty 区域拷贝 + scanout flip）；
+- 渲染层 offscreen `build` 0.277 ms vs 厂商 ≈0.05 ms（≈5×，PE/3D 管线效率）。
+
+验证入口：`./tools/verify-glamor-patch.sh`（只读判定 + 实测）。它会检查模块是否含
+`GLAMOR_NO_BLIT`、运行中的 Xorg 是否在补丁安装之后启动、并跑 `glmark2 -b build`
+与 `glxgears`。当前基线（着色器路径，未重启 X）：build **945 FPS**、glxgears **2375 FPS**、
+全量 glmark2 **784**；补丁生效后预期 build ~1600–2000。
+
+### 每帧固定开销分解（2026-11-18，着色器 present 路径下测得）
+
+用 /tmp/roundtrip.c（64×64 pbuffer，一个三角形）把一帧拆成三段，分离出
+"CPU 构建命令 / 提交 ioctl / 同步等待"：
+
+| 模式 | 每帧 | 增量 |
+|---|---|---|
+| 只构建、不提交（mode 2） | 40.5 µs | — 状态+命令构建 |
+| 每帧 glFlush（mode 1） | 53.6 µs | +13 µs（submit ioctl） |
+| 每帧 glFinish（mode 0） | 250.4 µs | **+197 µs（GPU 完成→fence 唤醒）** |
+
+`draw-bench 1 200`（每帧 1 个 draw）同样给出 207 µs/帧；`draw-bench 20000 5`
+是 0.40 µs/draw ⇒ 这 197 µs 是**提交往返延迟**，不是 GPU 吞吐（GPU 本身很快）。
+
+glmark2 离屏（`--off-screen`，无 X present）基线，说明固定开销占比：
+
+| 画布 | FPS | ms/帧 |
+|---|---|---|
+| 100×100 | 2383 | 0.420 |
+| 300×300 | 2134 | 0.469 |
+| 800×600 | 1739 | 0.575 |
+| 1920×1080 | 965 | 1.037 |
+
+100×100 就要 0.42 ms，其中约 0.25 ms 是上面那三段固定开销。厂商基线（报告）
+build 5982 FPS=0.167 ms，差距的大头也在这里，而不在填充率。
+
+**待查**：KMD `mwv207_submit_ioctl` 本身是异步的（返回 dma_fence），197 µs
+应来自 job 完成中断→fence 信号→`sync_wait` 唤醒这条链路，值得单独 profiling
+（IRQ 是否走了 threaded handler / workqueue 延迟）。这部分不阻塞 glamor 快路径
+的收益，属于下一步优化。
+
+### X 重启验证工具（2026-11-18）
+
+`tools/glamor-restart-verify.sh`：重启 lightdm → 等新 Xorg 并观察 12 s →
+起得来就跑 `tools/verify-glamor-patch.sh` 报告实测；起不来自动
+`build-xglamor.sh --rollback` 还原并再重启，日志写 /tmp/glamor-restart-*.log。
+支持 `--dry-run`（只检查前置条件）。重启 lightdm 会关闭当前桌面会话，
+建议从 SSH/TTY 执行。
+
+### glamor blit 快路径的上屏前验证（2026-11-18，用自建 Xephyr）
+
+重启 X 是不可逆的（会关掉用户桌面），所以在重启前先用自建 Xephyr 验证了补丁
+本身的行为——Xephyr 的 glamor 是静态链接的，可以从打过补丁的同一份源码构建：
+
+1. 依赖：`apt install libxcb-render-util0-dev libxcb-image0-dev libxcb-icccm4-dev
+   libxcb-keysyms1-dev libxcb-util0-dev libxcb-xkb-dev libxkbcommon-x11-dev
+   libxcb-xv0-dev`
+2. `meson setup build-kdrive ... -Dxephyr=true`（其余选项同 build-xglamor.sh，
+   注意 -Dxephyr 默认 false）→ `ninja -C build-kdrive hw/kdrive/ephyr/Xephyr`
+3. `Xephyr :9 -screen 800x600 -glamor -ac -no-host-grab` + 诊断补丁 0002
+   （文件旗标 /tmp/mwv207-xg-dbg 打开打印，/tmp/mwv207-xg-noblit 运行时切换回
+   着色器路径）观察 `MWV207DBG: blit=N shader=M | last: BLIT ...`。
+
+结果：
+- `blit=100 shader=0 | last: BLIT 200x100 -> 800x600 nbox=1` —— **Present 那种
+  "客户端 pixmap → 屏幕 pixmap、尺寸不同"的拷贝确实走 blit 快路径**；
+- 200x100 pixmap 上红下蓝拷到 800x600 屏幕，读回 (100,25)=ff0000、
+  (100,75)=0000ff —— **跨高度拷贝没有 y 翻转**（这是该补丁最可能出错的地方）；
+- 不逐次 XSync 的微基准：blit 0.010 ms/copy vs 着色器 0.021 ms/copy（Xephyr 内，
+  含宿主 present 干扰，仅作同环境 A/B 参考）。
+
+结论：补丁在本驱动的 glamor 里会被命中且方向正确，重启 X 的风险主要只剩
+"模块与发行版 ABI 不匹配导致加载失败"，而导出符号 45/45 一致已排除该项。
+
+### glamor blit 快路径生效后的实测（2026-11-18 10:00，Xorg 重启后）
+
+Xorg 于 10:00:22 重启，日志确认加载 `/usr/lib/xorg/modules/libglamoregl.so`
+（md5 `6a1c68221fa5`，含 `GLAMOR_NO_BLIT`）。同一台机器、`vblank_mode=0`：
+
+| 指标 | 补丁前（着色器路径） | 补丁后（blit 路径） | 变化 |
+|---|---|---|---|
+| `glmark2 -b build` FPS | 945 | 1477–1520（3 次） | **+56%** |
+| `glmark2 -b :` 全套 Score | 784 | **1215** | +55% |
+| `glxgears` FPS | 2375 | 4208–4249（3 次） | **+78%** |
+| present 300×300 clear+swap | 0.344 ms | **0.104 ms** | 3.3× |
+| present 800×600 swap-only | 0.904 ms | **0.488 ms** | 1.85× |
+| present 800×600 clear+swap | 0.931 ms | **0.500 ms** | 1.86× |
+| present 1920×1080 clear+swap | ~2.83 ms（窗口） | **1.519 ms** | — |
+
+`tools/verify-glamor-patch.sh`：`[OK] 模块含标记`、`[OK] Xorg 启动于补丁安装之后`
+→ 结果通过。`GL_DURATION=1 ./tools/gl-regression.sh` → **pass=10 fail=0**。
+
+逐场景（自研 / 厂商，FPS）：`build` 1477–1520 / 5982；`conditionals` 1662–1794 /
+7589；`function` 1167–1479 / 6882–6990；`loop` 1128–1176 / 6875–6962；
+`jellyfish` 770 / 1175；`terrain` 121 / 155；`refract` 106 / 123；`shadow` 906 / 1241。
+
+结论（差距分层已按新数据修正）：
+1. **轻载场景**（build/conditionals/function/loop）从落后 ~6–8× 收窄到 **~4–6×**，
+   瓶颈全部是每帧 fixed overhead（present 0.50 ms + 生成侧 ~0.2 ms），已不再有
+   "一次多余的全帧拷贝"这层。
+2. **重载场景**（terrain/refract）落后 **1.2–1.3×**，`jellyfish` 1.5×、`shadow` 1.4×，
+   与之前判断一致：属 GPU 填充率/ALU 与窗口线性缓冲回读，不是 present。
+3. 下一刀应在 `present 800×600=0.50 ms` 里继续拆：其中 blit 理论值 ~0.22 ms
+   （3.8 MB / 17.3 GB/s），余下 ~0.28 ms 是 swap/合成/同步；再往下就是结构性的
+   "屏幕 pixmap 再拷一次"（需 DDX 零拷贝，已评估止损）。
+
+顺带修了回归脚本：`tests/query/run-query-tests.sh` 在 `/tmp/mwv207-sim` 被清掉后
+会退回系统 DRI 目录（`/usr/lib/aarch64-linux-gnu/dri`），不再误报 FAIL。
+
+### 更正：提交链路的 kernel 侧其实很快（2026-11-18，kprobe 实测）
+
+上一节把帧内 ~200 µs 记为"job 完成中断→fence 信号→sync_wait 唤醒"，用 kprobe
+直接量了一下提交链路（`mwv207_submit_ioctl` / `mwv207_sched_run_job` /
+`mwv207_pipe_3d_submit` / `mwv207_pipe_3d_isr` / `dma_fence_signal`）：
+
+```
+356200 mwv_ioctl → 356205 mwv_run → 356206 mwv_sub3d → 356211 mwv_isr → 356213 mwv_fence
+```
+
+即 **ioctl → 调度线程 → 提交 → IRQ → fence 信号 ≈ 13 µs**，相邻两次 ioctl 间隔
+也才 35–45 µs。所以那 200 µs 不在内核提交路径上，大头是**等待/唤醒**：
+
+- `glFinish` 为空操作时也要 ~90 µs（`GL_ARB_sync` 轮询到已完成的 fence 后再
+  `glFinish` 仍要 231 µs）；
+- 同进程加 `usleep` 再 `glFinish`，耗时随 sleep 增加而变大
+  （0/200/1000/5000 µs → 79/134/529/793 µs），这是典型的 **CPU 浅睡眠后唤醒延迟**，
+  在当前桌面（firefox 占 ~80% CPU、loadavg 3.4）下被放大；
+- RT 优先级 + 绑核后仍有 ~90 µs/帧。
+
+结论：**帧内固定开销主要是调度/唤醒延迟，不是 KMD 的某个 usleep 或 IRQ 处理慢**。
+要再压这一层需要减少"每帧至少一次跨进程往返"的次数（合批 / 少 sync / 直接用
+submit 返回的 fence），属于 UMD 侧行为改动，收益依赖机器负载，暂不作为本轮交付。
+
+### 厂商栈"结构性零拷贝"取证与渲染吞吐量化（2026-11-18）
+
+回答"为什么差厂商栈那么多、参考厂商栈怎么实现"。取证对象:
+`ref/vendor-1.8.0/mwv207-dev_1.8.0.uos_arm64.deb` → `/tmp/vendor-extract/usr/lib/xorg/modules/drivers/mwv207_drv.so`
+（未 strip，含 DWARF）与 `/usr/src/mwv207-1.8.0.uos` KMD 源码。
+
+**厂商 DDX 结构（与"自编 xserver"无关）**
+- NEEDED 只有 libgomp/libdrm/libdrm_jmgpu/libpixman/libgbm，**无 libglamoregl**；
+  DWARF 里 `jmgpu_glamor.c` 仅 1 行 ⇒ 完全没实现 glamor。
+- 导入符号**无 `drmModeSetPlane`**；有 `drmModePageFlip`/`drmModeSetCrtc`/
+  `drmModeAddFB`(v1)/`drmWaitVBlank`/`PixmapStartDirtyTracking`/
+  `PixmapSyncDirtyHelper`/`present_screen_init`/`dri3_screen_init`。
+- 自研 **EXA DDX**：`jmgpu_exa.c` 2349 行、`jmgpu_drmmode_display.c` 5091、
+  `jmgpu_present.c` 492、`jmgpu_dri3.c` 176。
+- 路径 = 专用 scanout BO（`jmgpuDrmModeCrtcScanOutCreate/Destroy/Free`）
+  + dirty 区域 2D 引擎拷贝（`jmgpuScanOutFlip`/`jmgpuScanOutUpdate`/
+  `jmgpu2dCopyAreaHW`）+ `drmModePageFlip` 异步回调。
+- `jmgpuPresentFlip` 反汇编：`jmgpuPresentCheckFlip` 放行 → `jmgpuFlushInDirect`
+  → `jmgpuDoPageFlip`(带 abort/flip 双回调) → 清 pending。
+- `jmgpuPresentCheckFlip` 只对覆盖整屏的单窗口放行，与 X 核心门禁一致。
+
+**厂商 2D 命令通路（我方缺的那块）**
+- `jmgpu_garbage.c:950-975` `j9_handle_j9m_muriculate()` 收到
+  `struct drm_jm_j2d_send_cmd` 直接转 `j9_handle_insurrecto(gdev->p2d,
+  args->cmd, args->size, nowait)`。
+- `jmgpu_define.c:449` 只做 `size & 0x3` 校验 + `enginelock`，然后
+  `p2d->engine->ops->input_cmds(engine, pcmds, size, no_wait, from_user=1)`
+  ⇒ **内核不解析 2D 命令字，编码全在用户态**。
+- 我方 KMD 有 ring/fence 框架（`src/kernel-6.6/mwv207_pipe_2d.c`，
+  含 `module_param(diag, ...)`），但 UMD 侧无任何 2D 命令流；
+  `docs/HANDOVER-2D.md` 记录"draw 数据面寻址"仍未解出。
+
+**厂商 DDX 不可直接复用**
+`nm -D --undefined-only mwv207_drv.so` 强依赖厂商私有 ioctl：
+`drm_jmgpu_bo_create/destroy/mmap/export_to_fd/import_from_fd/get_handle/
+invalidate/query/read_rect/write_rect/xfer_to_dev/xfer_from_dev/clean`、
+`drm_jmgpu_create/close`、`drm_jmgpu_j2d_send_cmd`/`drm_jmgpu_j2d_wait_idle`。
+我方 KMD 无这些 ioctl ⇒ 直接装厂商 DDX 起不来，复刻必须自写 DDX + 补 2D 通路。
+
+**我方 present 已在走 page flip（kprobe 实测）**
+五个探针（`drm_mode_page_flip_ioctl`/`drm_mode_atomic_ioctl`/`drm_mode_setcrtc`/
+`drm_mode_addfb2`/`drm_mode_dirtyfb_ioctl`）：
+- 1920×1080 全屏 override-redirect 连渲 2 s（4862 帧，0.411 ms/帧）→
+  `pgflip=202 addfb2=202 atomic=0 setcrtc=0 dirtyfb=0` ⇒ **每帧一次 flip**；
+- 800×600 同测法 → **全 0**（走 `present_copy_region()` 整块 CopyArea）；
+- 静止 → 0（无泄漏）。
+X 核心门禁: `/tmp/xorg-server-21.1.16/present/present_scmd.c:61
+present_check_flip()` 要求 `RegionEqual(&window->clipList, &root->winSize)`，
+**非全屏窗口在 X 核心里根本不允许 flip**；`present/present.c:66
+present_copy_region()` 的 CopyArea 宽高恒为整块 pixmap，update region 只当裁剪。
+
+**present 成本归属（自写探针）**
+- `/tmp/filltex.c`（全屏 textured quad 画到 FBO）：800×600 NEAREST
+  **0.2481 ms (1.93 Gpx/s)**、纯色 0.1273、LINEAR 0.2779；1920×1080 NEAREST 0.8939。
+  ≈ 窗口态 present 净成本（0.482 − 0.189 = 0.29 ms）⇒ **present 就是一次全屏纹理采样**。
+- `glBlitFramebuffer` 800×600 = 0.2053 ms (18.70 GB/s)，1920×1080 = 0.8607 (19.27)；
+  与 `patches/xserver/0001` 的 17.3 GB/s 记录吻合。
+- `glReadPixels`（DMA 回读路径）= **2.7440 ms (0.70 GB/s)**、1080p 9.4997 ms
+  ⇒ **DMA 引擎做 present 拷贝这条路排除**。
+- `XCopyArea` 恒定 ~22 µs/op 且与面积无关（200²=0.0206 … 1600×1000=0.0221），
+  X 请求异步批处理直接掩盖 ⇒ 不是 present 成本来源。
+
+**渲染吞吐量化（真正的大头）**
+| 项目 | 数值 |
+|---|---|
+| 通用 draw 填充 800×600 | **5.9 Gpx/s (23.6 GB/s)** |
+| 通用 draw 填充 1920×1080 | 6.2 Gpx/s (24.8 GB/s) |
+| `glClear` RGBA8 800×600 | **458.9 Gpx/s (1835 GB/s)** |
+| 重片元（300×sin） | **0.32 Gpx/s**（5.90 → 0.32） |
+| discard / colorMask off | 7.36 Gpx/s（只省 20%） |
+| 深度高 overdraw | **2.8× 惩罚**（2.5153 vs 0.9069 ms） |
+| blending | 免费 |
+| 顶点吞吐 | 饱和 ~810 Mverts/s |
+| CPU memcpy 64MB | 12.6 GB/s（GPU 通用路径 23.6 已高于它） |
+| glxgears 我方/厂商 | 6392 / 17621（2.8×） |
+
+**early-Z 两个候选位实测无效（已回滚）**
+按厂商头文件（`jmgpu_toolkit.h:26/135-147` `AQ_DEPTH_CONFIG_Address 0x01400`,
+`EARLY` bit16；`jmgpu_protocol.h:679-684` `EX_EARLY_DEPTH_IN_APP` 0x382 bit5）
+实现了"普通 LESS 也开 early_z + 补 bit5 + discard 反例保护"：
+- 5 轮交替 A/B（`glmark2 -b build:duration=2`）：2072/2074、2070/2070、
+  2073/2072、2072/2075、2070/2073 ⇒ **完全无差异**；
+- `/tmp/earlyz N ORDER`（近→远全被深度拒绝）无改善，bit5 打开略慢；
+- `/tmp/layers 1`（20000 三角形高 overdraw）2.5133 vs 2.5106 ms ⇒ 无差异；
+- `GL_DURATION=1 ./tools/gl-regression.sh` pass=10 fail=0。
+⇒ JM9100 上这两点不生效（可能不做 early-Z，或 tile 化整块提交使其失效）。
+零收益且带 discard/alpha 正确性风险 ⇒ 已 `git checkout` 回滚，
+`mwv207_draw.c` / `mwv207_state.c` 恢复原状。
+
+**结论**：不需要自编 xserver 核心，但确实需要**新的 DDX 模块** + 2D 命令通路
+（工作量在闭源的 2D 数据面编码）。已落地且性价比最高的是 C2 线性翻转
+（+21–22%）与 glamor blit 快路径（+57%）；再往上要动 2D 引擎或 X 核心。

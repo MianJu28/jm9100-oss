@@ -250,7 +250,7 @@
 | `0xe03` | `0x0380C` | 14 | mwv207_draw.c:7, mwv207_cmd.c:3, mwv207_sampler.c:3 |
 | `0xe02` | `0x03808` | 8 | mwv207_cmd.c:3, mwv207_compute.c:2, mwv207_draw.c:2 |
 | `0x404` | `0x01010` | 3 | mwv207_draw.c:2, mwv207_compute.c:1 |
-| `0x500` | `0x01400` | 3 | mwv207_draw.c:3 |
+| `0x500` | `0x01400` | 3 | mwv207_draw.c:3 — **已解析：`AQ_DEPTH_CONFIG`**（`jmgpu_toolkit.h:26`），bit16 `EARLY`、bit17 `MASK_EARLY`、bit12 `WRITE`、bits10:8 `COMPARE` |
 | `0x50b` | `0x0142C` | 3 | mwv207_draw.c:3 |
 | `0x192` | `0x00648` | 2 | mwv207_draw.c:2 |
 | `0x28c` | `0x00A30` | 2 | mwv207_compute.c:1, mwv207_shader.c:1 |

@@ -386,6 +386,22 @@ umd_check() {
     systemctl cat lightdm.service >/dev/null 2>&1 && echo "  [OK] lightdm.service 存在" || { echo "  [FAIL] 无 lightdm"; rc=1; }
     [ -e /dev/dri/renderD128 ] && echo "  [OK] /dev/dri/renderD128" || { echo "  [FAIL] 无 render 节点"; rc=1; }
 
+    # glamor blit 快路径补丁 —— 它装在 /usr/lib/xorg/modules/libglamoregl.so,
+    # **不受本脚本管理**。ostree 部署切换会把该文件换回发行版原版, 于是 present
+    # 从 ~0.25ms 静默退化到 ~0.90ms (2026-11-18 实测: 60ecd5a4 原版 vs 6a1c6822 补丁版),
+    # glmark2 廉价场景掉一半。这里只报警不改动, 避免切换流程引入额外风险。
+    local gmod=/usr/lib/xorg/modules/libglamoregl.so
+    if [ -f "$gmod" ]; then
+        if strings "$gmod" 2>/dev/null | grep -q 'GLAMOR_NO_BLIT'; then
+            echo "  [OK] glamor blit 快路径补丁在位 (libglamoregl.so 含 GLAMOR_NO_BLIT)"
+        else
+            echo "  [WARN] libglamoregl.so 缺 glamor blit 快路径补丁 —— present 会慢 ~2.6×"
+            echo "         修: ./tools/build-xglamor.sh --build 后 sudo ./tools/build-xglamor.sh, 再重启 X"
+        fi
+    else
+        echo "  [WARN] 未找到 $gmod (glamor 不可用)"
+    fi
+
     # 部署目录可写性 —— deepin 不可变根会把 /usr 挂成 ro overlay,
     # VA/VDPAU/DRI-glVND 目录不可写则 install 必失败 (03:24 实测 vdpau ln 报错)
     if [ "$(id -u)" = 0 ]; then

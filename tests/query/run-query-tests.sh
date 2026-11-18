@@ -6,6 +6,8 @@
 #   拿系统 libGL 来比版本戳 → DRI driver not from this Mesa build → 全部 FAIL）。
 set -u
 DRI_DIR=${DRI_DIR:-/tmp/mwv207-sim}
+# sim 目录是临时产物，清掉后仍应能对系统安装栈跑本测试
+[ -e "$DRI_DIR/mwv207_dri.so" ] || DRI_DIR=/usr/lib/aarch64-linux-gnu/dri
 export LIBGL_DRIVERS_PATH="$DRI_DIR" MESA_LOADER_DRIVER_OVERRIDE=mwv207
 if [ -f "$DRI_DIR/libGL.so.1" ]; then
    export LD_LIBRARY_PATH="$DRI_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
