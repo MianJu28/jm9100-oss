@@ -490,9 +490,61 @@ sudo ./tools/build-xddx.sh --rollback # 一键回滚(恢复旧 Xorg/删模块/�
 overlay），并写 `/usr/share/X11/xorg.conf.d/10-mwv207-oss.conf`
 （`MatchDriver "mwv207"` + `Driver "mwv207oss"`）。两者的 `.mwv207-bak` 是回滚备份。
 
-### 11.5 当前状态（2026-11-18 13:20）
+### 11.5 非 overlay 路径的回归证据（Xvfb，不动现有的 X）
 
-已构建并安装完毕，**尚未重启 X**（重启会经 pty SIGHUP 终止本会话，按用户要求由
-用户手动执行）。预期收益：窗口态 present 从 0.49 ms（glamor blit 拷贝）
-降到 0.1 ms 量级；glmark2 build 从 1477 FPS 向离屏基线 5396 FPS 靠近
-（厂商窗口态 5982 FPS ⇒ 差距从 2.87× 收窄到约 1.11×）。
+改 X 核心最怕把别的服务器/别的路径搞坏。为此从**同一棵打了补丁的源码树**编了
+Xvfb（`-Dxvfb=true -Dglx=false`，产物 `build-vfb/hw/vfb/Xvfb`），它是典型的
+"版本 1 present info / 没有 overlay 钩子"的服务器，正好用来验证补丁的白名单分支
+不会误触发：
+
+| 客户端 | 命令 | 结果 |
+|---|---|---|
+| `tests/present-xcb/present-xcb.c` | `DISPLAY=:98 present-xcb 400 300 60` | 60/60 完成、copy=60、16.664 ms/帧（60.0 FPS） |
+| 同上（整屏尺寸） | `present-xcb 800 600 60` | 60/60 完成、copy=60、16.659 ms/帧 |
+| 同上（带 update 区域） | `present-xcb 800 600 180 --update` | 180/180 完成、copy=180、16.712 ms/帧 |
+
+无超时、无卡死、无崩溃 ⇒ `present_execute` 在 `vblank->overlay == FALSE` 时行为与
+打补丁前一致，`present_copy_region()` 的裁剪分支也没被破坏。
+（对照：同一个客户端在 live X `:0` 上也是 60/60 copy、60.9 FPS。）
+
+`tests/present-xcb/present-xcb.c` 是**不依赖 GL** 的 Present 客户端，用
+`xcb_present_select_input` + `xcb_present_pixmap` 直接打 Present 请求，并统计
+完成事件里的 flip/copy 分布。踩过的坑：Present 的完成事件是 GeGeneric 事件，
+必须 `ev->response_type == XCB_GE_GENERIC` + `ce->extension == present major_opcode`
++ `ce->event_type == XCB_PRESENT_EVENT_COMPLETE_NOTIFY` 才能匹配，写成
+`(response_type & 0x7f) == 0` 会一帧都收不到（表现为 1 s 超时/帧）。
+
+### 11.6 当前状态（2026-11-18 13:35）
+
+已构建并安装完毕（DDX md5 `248aff385613c9a8bc6e883b44815a13`、
+Xorg md5 `5366caa3cb1d62cbc4a74b349e7bbd7b`），**尚未重启 X**（重启会经 pty
+SIGHUP 终止本会话，按用户要求由用户手动执行）。
+
+重启前后的正确流程：
+
+```bash
+# 1) 重启前，先把 watcher 脱离会话挂上（重启后它自己跑验证并写报告）
+setsid nohup ./tools/overlay-postrestart-watch.sh >/tmp/overlay-watch.out 2>&1 &
+
+# 2) 手动重启 X
+sudo systemctl restart lightdm
+
+# 3) 重启后看报告（脚本会等新 Xorg 出现，最多 90s）
+cat /tmp/overlay-watch.out
+ls -t /tmp/overlay-report-*.log | head -1
+```
+
+watcher 会依次跑 `verify-overlay-present.sh`、`verify-glamor-patch.sh`、
+present-bench（300²/800×600/1080p）、glmark2（build + 全套）、
+`GL_DURATION=1 ./tools/gl-regression.sh`，并把 Xorg.0.log 里的 overlay 行、
+`(EE)/(WW)` 一起归档；X 起不来时它会输出 lightdm 状态与回滚命令。
+
+DDX 侧加了两个计数器，X 退出时（`CloseScreen`）打印
+`overlay present: flips=N disables=M` ⇒ **`flips > 0` 就是"这条路真的被用上了"的
+硬证据**；`flips == 0` 而 present 仍然慢，说明卡在 `mwx_present_check_overlay()`
+的判据上（逐条对照 11.2 里的条件，重点看窗口是否被 redirect、是否被遮挡、
+缓冲 modifier 是否线性）。
+
+预期收益：窗口态 present 从 0.49 ms（glamor blit 拷贝）降到 0.1 ms 量级；
+glmark2 build 从 1477 FPS 向离屏基线 5396 FPS 靠近（厂商窗口态 5982 FPS
+⇒ 差距从 2.87× 收窄到约 1.11×）。

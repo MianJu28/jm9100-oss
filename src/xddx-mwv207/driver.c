@@ -2125,6 +2125,11 @@ CloseScreen(ScreenPtr pScreen)
     /* Clear mask of assigned crtc's in this generation */
     mwx_ent->assigned_crtcs = 0;
 
+    /* 零拷贝 overlay 通路的统计: 重启后若日志里 flips>0 说明这条路真的被用上了 */
+    xf86DrvMsg(pScrn->scrnIndex, X_INFO,
+               "overlay present: flips=%u disables=%u\n",
+               ms->overlay_flips, ms->overlay_disables);
+
 #ifdef GLAMOR_HAS_GBM
     if (ms->drmmode.dri2_enable) {
         mwx_dri2_close_screen(pScreen);

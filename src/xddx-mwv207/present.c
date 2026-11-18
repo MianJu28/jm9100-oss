@@ -349,6 +349,7 @@ mwx_present_overlay_disable(ScrnInfoPtr scrn)
         drmmode_overlay_plane_disable(crtc);
     }
 
+    ms->overlay_disables++;
     ms->overlay_active = FALSE;
     ms->overlay_window = NULL;
 }
@@ -491,6 +492,7 @@ mwx_present_overlay_flip(RRCrtcPtr crtc, WindowPtr window, PixmapPtr pixmap,
 
     ms->overlay_active = TRUE;
     ms->overlay_window = window;
+    ms->overlay_flips++;
 
     /* Report completion at the next vblank, the same way a page flip would.  If
      * the vblank event cannot be queued we still have to tell Present that the

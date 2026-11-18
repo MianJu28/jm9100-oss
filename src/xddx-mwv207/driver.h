@@ -144,6 +144,8 @@ typedef struct _modesettingRec {
      */
     Bool overlay_active;
     WindowPtr overlay_window;
+    unsigned overlay_flips;
+    unsigned overlay_disables;
 
     /* shadow API */
     struct {

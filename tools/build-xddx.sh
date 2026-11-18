@@ -37,6 +37,19 @@ INSTALLED_XORG=/usr/lib/xorg/Xorg
 XORG_BACKUP=$INSTALLED_XORG.mwv207-bak
 
 log() { printf '%s\n' "$*"; }
+
+# 是不是我们自己编的模块(或核心)? 用来避免把自建产物当成"系统备份"。
+is_our_module() {
+    [ -f "$1" ] || return 1
+    nm -D "$1" 2>/dev/null | grep -q 'mwv207ossModuleData'
+}
+is_our_core() {
+    [ -f "$1" ] || return 1
+    # 我们编的 Xorg 比系统的大且带 present overlay 的版本 2 结构;
+    # 用大小 + 是否导出 present_screen_init 的兄弟符号难以区分,
+    # 这里退一步: 与当前构建产物比对 md5。
+    [ -f "$CORE_OUT" ] && [ "$(md5sum "$1" | cut -d' ' -f1)" = "$(md5sum "$CORE_OUT" | cut -d' ' -f1)" ]
+}
 die() { printf '[ERROR] %s\n' "$*" >&2; exit 1; }
 
 need_sudo() {
@@ -194,8 +207,12 @@ do_install() {
     local out=$BUILD/$TARGET
 
     if [ -f "$INSTALLED" ] && [ ! -f "$BACKUP" ]; then
-        log "[INFO] 备份已存在的 $MODULE -> $BACKUP"
-        $SUDO cp -a "$INSTALLED" "$BACKUP" || die "备份失败"
+        if is_our_module "$INSTALLED"; then
+            log "[INFO] 系统里已是我们自建的 $MODULE, 不覆盖备份"
+        else
+            log "[INFO] 备份系统原有的 $MODULE -> $BACKUP"
+            $SUDO cp -a "$INSTALLED" "$BACKUP" || die "备份失败"
+        fi
     fi
     log "[INFO] 安装 $out -> $INSTALLED"
     $SUDO cp -a "$out" "$INSTALLED" || die "安装失败"
@@ -203,8 +220,12 @@ do_install() {
     # 核心也要换: 只有打了 present overlay 补丁的 Xorg 才会走到我们新增的
     # check_overlay/overlay_flip 钩子(版本 2)。
     if [ -f "$INSTALLED_XORG" ] && [ ! -f "$XORG_BACKUP" ]; then
-        log "[INFO] 备份已存在的 Xorg -> $XORG_BACKUP"
-        $SUDO cp -a "$INSTALLED_XORG" "$XORG_BACKUP" || die "备份 Xorg 失败"
+        if is_our_core "$INSTALLED_XORG"; then
+            log "[INFO] 系统 Xorg 已是我们自建的, 不覆盖备份"
+        else
+            log "[INFO] 备份系统原有的 Xorg -> $XORG_BACKUP"
+            $SUDO cp -a "$INSTALLED_XORG" "$XORG_BACKUP" || die "备份 Xorg 失败"
+        fi
     fi
     log "[INFO] 安装 $CORE_OUT -> $INSTALLED_XORG"
     $SUDO cp -a "$CORE_OUT" "$INSTALLED_XORG" || die "安装 Xorg 失败"
@@ -242,12 +263,22 @@ do_rollback() {
         $SUDO rm -f "$INSTALLED"
     fi
     if [ -f "$BACKUP" ]; then
-        log "[INFO] 恢复备份 $BACKUP -> $INSTALLED"
-        $SUDO mv -f "$BACKUP" "$INSTALLED"
+        if is_our_module "$BACKUP"; then
+            log "[INFO] 备份其实是自建模块, 直接丢弃"
+            $SUDO rm -f "$BACKUP"
+        else
+            log "[INFO] 恢复备份 $BACKUP -> $INSTALLED"
+            $SUDO mv -f "$BACKUP" "$INSTALLED"
+        fi
     fi
     if [ -f "$XORG_BACKUP" ]; then
-        log "[INFO] 恢复备份 $XORG_BACKUP -> $INSTALLED_XORG"
-        $SUDO mv -f "$XORG_BACKUP" "$INSTALLED_XORG"
+        if is_our_core "$XORG_BACKUP"; then
+            log "[INFO] Xorg 备份其实是自建的, 直接丢弃"
+            $SUDO rm -f "$XORG_BACKUP"
+        else
+            log "[INFO] 恢复备份 $XORG_BACKUP -> $INSTALLED_XORG"
+            $SUDO mv -f "$XORG_BACKUP" "$INSTALLED_XORG"
+        fi
     fi
     log "[OK] 已回滚到系统 modesetting。重启 X 后生效:"
     log "     sudo systemctl restart lightdm"

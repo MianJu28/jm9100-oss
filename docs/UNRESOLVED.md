@@ -2452,6 +2452,36 @@ override-redirect 真全屏才 pgflip=126/3s。
 `using overlay plane N for zero-copy present`；800×600 clear+swap 应 <0.30 ms，
 拷贝路径基线 0.49 ms）。回滚：`sudo ./tools/build-xddx.sh --rollback` + 重启。
 
-**状态。** 2026-11-18 13:20 已安装到系统栈（DDX md5 b0803e20、Xorg md5 5366caa3），
-**尚未重启 X**，因此本轮所有性能数字仍是拷贝路径的。重启后要补：present 分尺寸
-实测、glmark2 build/全套、`GL_DURATION=1 ./tools/gl-regression.sh` pass=10。
+**状态。** 2026-11-18 13:35 已安装到系统栈（DDX md5 `248aff385613c9a8bc6e883b44815a13`、
+Xorg md5 `5366caa3cb1d62cbc4a74b349e7bbd7b`），**尚未重启 X**，因此本轮所有性能数字
+仍是拷贝路径的。重启后要补：present 分尺寸实测、glmark2 build/全套、
+`GL_DURATION=1 ./tools/gl-regression.sh` pass=10。
+
+**核心补丁的非 overlay 回归证据（Xvfb，2026-11-18 13:33）。** 从同一棵打了补丁的树
+编 Xvfb（`-Dxvfb=true -Dglx=false` → `build-vfb/hw/vfb/Xvfb`），它是"版本 1 / 无
+overlay 钩子"的服务器。用不依赖 GL 的 `tests/present-xcb/present-xcb.c`
+（`xcb_present_pixmap`，统计完成事件里的 flip/copy）打：
+`400 300 60` → 60/60 完成、copy=60、16.664 ms/帧；`800 600 60` → 60/60、copy=60；
+`800 600 180 --update` → 180/180、copy=180、16.712 ms/帧。无超时/卡死/崩溃 ⇒ 补丁在
+版本 1 服务器上行为不变，`present_copy_region()` 的裁剪分支也没坏。
+踩坑：Present 完成事件是 GeGeneric 事件，必须同时判 `response_type == XCB_GE_GENERIC`、
+`extension == present major_opcode`、`event_type == XCB_PRESENT_EVENT_COMPLETE_NOTIFY`；
+按 `(response_type & 0x7f) == 0` 匹配会一帧都收不到（表现为 1 s 超时/帧）。
+
+**重启前后流程（watcher，2026-11-18 13:36）。** `tools/overlay-postrestart-watch.sh`
+要在重启**之前**以 `setsid nohup ./tools/overlay-postrestart-watch.sh
+>/tmp/overlay-watch.out 2>&1 &` 脱离会话挂上——因为重启 lightdm 会经 pty SIGHUP 把
+本会话杀掉，而验证只能等新 Xorg 起来才能做。它等新 Xorg pid（90 s，再观察 10 s 存活）
+→ 等 DISPLAY（60 s）→ 跑 verify-overlay-present / verify-glamor-patch /
+present-bench(300²、800×600、1080p) / glmark2(build + 全套) / gl-regression，
+汇总到 `/tmp/overlay-report-<时间>.log`；X 起不来则写 lightdm 状态、日志尾部与回滚命令。
+
+**overlay 硬证据（计数器）。** DDX 在 `mwv207Rec` 里加了 `overlay_flips` /
+`overlay_disables`，X 退出时 `CloseScreen()` 打印
+`overlay present: flips=N disables=M`。`flips > 0` 才证明 WIN0 直扫真的被用上了；
+`flips == 0` 而 present 仍慢 ⇒ 卡在 `mwx_present_check_overlay()` 的判据上。
+
+**build-xddx.sh 备份语义修正。** 之前第二次 `--install` 会把自建模块备份成
+`.mwv207-bak`，导致 `--rollback` 把自建模块又装回去。现加 `is_our_module()`（`nm -D`
+查 `mwv207ossModuleData`）与 `is_our_core()`（md5 比对构建产物）：安装时若现有文件已是
+自建产物则不覆盖备份，回滚时若备份本身是自建产物则直接丢弃。
