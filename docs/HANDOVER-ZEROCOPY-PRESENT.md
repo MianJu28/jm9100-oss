@@ -514,9 +514,36 @@ Xvfb（`-Dxvfb=true -Dglx=false`，产物 `build-vfb/hw/vfb/Xvfb`），它是典
 + `ce->event_type == XCB_PRESENT_EVENT_COMPLETE_NOTIFY` 才能匹配，写成
 `(response_type & 0x7f) == 0` 会一帧都收不到（表现为 1 s 超时/帧）。
 
-### 11.6 当前状态（2026-11-18 13:35）
+### 11.6 自诊断：为什么没用上 overlay（重启后先看这个）
 
-已构建并安装完毕（DDX md5 `248aff385613c9a8bc6e883b44815a13`、
+`mwx_present_check_overlay()` 每个拒绝条件对应一条**只打一次**的日志（`overlay:
+not used (<原因>); falling back to copy`），原因位图存在 `mwv207Rec.overlay_reject_mask`
+里，一共 15 条：
+
+| bit | 原因 | 处理 |
+|---|---|---|
+| 0 | 无 crtc/window/pixmap、VT 切走、无 glamor | 正常（VT 切换时必然发生） |
+| 1 | glamor 没有 `gbm_bo_from_pixmap` | glamor 未初始化 |
+| 2 | crtc 关着 | 显示器没开 |
+| 3 | crtc 没有 overlay plane | **KMD `overlay` 参数不是 1 / 没重载模块** |
+| 4 | 窗口不是 root 的直接子窗口 | WM 把它们挂到了 frame window 下 |
+| 5 | 窗口被 redirect（有 backing pixmap） | 合成器开着 |
+| 6 | `x_off/y_off != 0` | 客户端自己在做子区域 present |
+| 7 | pixmap 尺寸 ≠ 窗口尺寸 | 同上 |
+| 8/9 | 窗口坐标为负 / 越出 CRTC | 窗口部分在屏外 |
+| 10 | `clipList != 窗口矩形` | **被别的窗口遮住**（最常见） |
+| 11 | 深度不是 24/32 | 视觉不支持 |
+| 12 | stride 不是 64 字节对齐 | WIN0 的 `pitch & 0x3F == 0` 要求 |
+| 13 | 缓冲不是线性（tiled） | C2 阈值（1280×720）以下的小窗口会平铺 |
+| 14 | 格式不是 ARGB/XRGB/ABGR/XBGR8888 | 少见 |
+
+另外加了熔断：`drmmode_overlay_plane_set()` 连续失败 3 次就置
+`overlay_disabled`，本代 X 不再尝试（避免每帧建 FB + 刷日志）；日志会有一行
+`overlay: plane update keeps failing, disabling the zero-copy path...`。
+
+### 11.7 当前状态（2026-11-18 13:44）
+
+已构建并安装完毕（DDX md5 `ef8727b80f0f9f0d5c1d878a8142755c`、
 Xorg md5 `5366caa3cb1d62cbc4a74b349e7bbd7b`），**尚未重启 X**（重启会经 pty
 SIGHUP 终止本会话，按用户要求由用户手动执行）。
 

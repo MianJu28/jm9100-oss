@@ -146,6 +146,9 @@ typedef struct _modesettingRec {
     WindowPtr overlay_window;
     unsigned overlay_flips;
     unsigned overlay_disables;
+    unsigned overlay_reject_mask;   /* 每种"不用 overlay"的原因只记一次日志 */
+    unsigned overlay_set_fails;     /* 连续失败计数, 超过阈值就彻底停用 */
+    Bool overlay_disabled;
 
     /* shadow API */
     struct {

@@ -363,6 +363,16 @@ mwx_present_overlay_disable(ScrnInfoPtr scrn)
  * millisecond at 800x600) WIN0 is pointed directly at the client buffer and
  * the display controller composites it on top of the primary plane.
  */
+/* 每种拒绝原因只往日志里写一次, 方便重启后一眼看出 overlay 为什么没被用上。 */
+#define OVERLAY_REASON(bit, text) \
+    do { \
+        if (!(ms->overlay_reject_mask & (1u << (bit)))) { \
+            ms->overlay_reject_mask |= (1u << (bit)); \
+            xf86DrvMsg(scrn->scrnIndex, X_INFO, \
+                       "overlay: not used (%s); falling back to copy\n", text); \
+        } \
+    } while (0)
+
 static Bool
 mwx_present_check_overlay(RRCrtcPtr crtc, WindowPtr window, PixmapPtr pixmap,
                           int16_t x_off, int16_t y_off)
@@ -376,43 +386,65 @@ mwx_present_check_overlay(RRCrtcPtr crtc, WindowPtr window, PixmapPtr pixmap,
     BoxRec box;
     Bool fully_visible;
 
-    if (!crtc || !scrn->vtSema || !ms->drmmode.glamor)
+    if (ms->overlay_disabled)
         return FALSE;
-    if (!ms->glamor.gbm_bo_from_pixmap)
+    if (!crtc || !window || !pixmap || !scrn->vtSema || !ms->drmmode.glamor) {
+        OVERLAY_REASON(0, "no crtc/window/pixmap, VT switched away or no glamor");
         return FALSE;
+    }
+    if (!ms->glamor.gbm_bo_from_pixmap) {
+        OVERLAY_REASON(1, "glamor has no gbm_bo_from_pixmap");
+        return FALSE;
+    }
 
     xf86_crtc = crtc->devPrivate;
-    if (!xf86_crtc || !xf86_crtc_on(xf86_crtc))
+    if (!xf86_crtc || !xf86_crtc_on(xf86_crtc)) {
+        OVERLAY_REASON(2, "crtc is off");
         return FALSE;
+    }
 
     drmmode_crtc = xf86_crtc->driver_private;
-    if (!drmmode_crtc->overlay_plane_id)
+    if (!drmmode_crtc->overlay_plane_id) {
+        OVERLAY_REASON(3, "crtc has no overlay plane (KMD overlay=0?)");
         return FALSE;
+    }
 
     /* The overlay plane sits above the primary plane, so it can only be used
      * when nothing else overlaps the window and the window is not redirected:
      * whatever the plane covers becomes invisible, including other windows.
      */
-    if (window->parent != screen->root)
+    if (window->parent != screen->root) {
+        OVERLAY_REASON(4, "window is not a child of the root window");
         return FALSE;
-    if (screen->GetWindowPixmap(window) != screen->GetScreenPixmap(screen))
+    }
+    if (screen->GetWindowPixmap(window) != screen->GetScreenPixmap(screen)) {
+        OVERLAY_REASON(5, "window is redirected (compositing/backing pixmap)");
         return FALSE;
+    }
 
     /* Source pixmap must align with window exactly */
-    if (x_off || y_off)
+    if (x_off || y_off) {
+        OVERLAY_REASON(6, "present x_off/y_off is not zero");
         return FALSE;
+    }
     if (window->drawable.width != pixmap->drawable.width ||
-        window->drawable.height != pixmap->drawable.height)
+        window->drawable.height != pixmap->drawable.height) {
+        OVERLAY_REASON(7, "pixmap size differs from window size");
         return FALSE;
+    }
 
     /* Negative window coordinates cannot be expressed in the WIN0 position
      * register, and the plane must stay inside the CRTC.
      */
-    if (window->drawable.x < 0 || window->drawable.y < 0)
+    if (window->drawable.x < 0 || window->drawable.y < 0) {
+        OVERLAY_REASON(8, "window has negative coordinates");
         return FALSE;
+    }
     if (window->drawable.x + window->drawable.width > xf86_crtc->mode.HDisplay ||
-        window->drawable.y + window->drawable.height > xf86_crtc->mode.VDisplay)
+        window->drawable.y + window->drawable.height > xf86_crtc->mode.VDisplay) {
+        OVERLAY_REASON(9, "window is (partly) outside the CRTC");
         return FALSE;
+    }
 
     /* Nothing may cover the window */
     box.x1 = window->drawable.x;
@@ -422,14 +454,17 @@ mwx_present_check_overlay(RRCrtcPtr crtc, WindowPtr window, PixmapPtr pixmap,
     RegionInit(&win_region, &box, 1);
     fully_visible = RegionEqual(&window->clipList, &win_region);
     RegionUninit(&win_region);
-    if (!fully_visible)
+    if (!fully_visible) {
+        OVERLAY_REASON(10, "window is clipped or covered by another window");
         return FALSE;
+    }
 
     switch (pixmap->drawable.depth) {
     case 24:
     case 32:
         break;
     default:
+        OVERLAY_REASON(11, "pixmap depth is neither 24 nor 32");
         return FALSE;
     }
 
@@ -451,13 +486,19 @@ mwx_present_check_overlay(RRCrtcPtr crtc, WindowPtr window, PixmapPtr pixmap,
 #endif
         gbm_bo_destroy(gbm);
 
-        if (stride & 0x3f)
+        if (stride & 0x3f) {
+            OVERLAY_REASON(12, "buffer stride is not 64 byte aligned (WIN0 limit)");
             return FALSE;
-        if (modifier != DRM_FORMAT_MOD_LINEAR)
+        }
+        if (modifier != DRM_FORMAT_MOD_LINEAR) {
+            OVERLAY_REASON(13, "buffer is not linear (WIN0 needs linear scanout)");
             return FALSE;
+        }
         if (format != DRM_FORMAT_ARGB8888 && format != DRM_FORMAT_XRGB8888 &&
-            format != DRM_FORMAT_ABGR8888 && format != DRM_FORMAT_XBGR8888)
+            format != DRM_FORMAT_ABGR8888 && format != DRM_FORMAT_XBGR8888) {
+            OVERLAY_REASON(14, "buffer format is not ARGB/XRGB/ABGR/XBGR8888");
             return FALSE;
+        }
     }
 
     return TRUE;
@@ -485,6 +526,13 @@ mwx_present_overlay_flip(RRCrtcPtr crtc, WindowPtr window, PixmapPtr pixmap,
     if (drmmode_overlay_plane_set(xf86_crtc, pixmap,
                                   window->drawable.x,
                                   window->drawable.y) != 0) {
+        if (++ms->overlay_set_fails >= 3) {
+            if (!ms->overlay_disabled)
+                xf86DrvMsg(scrn->scrnIndex, X_WARNING,
+                           "overlay: plane update keeps failing, disabling the "
+                           "zero-copy path for this server generation\n");
+            ms->overlay_disabled = TRUE;
+        }
         xf86DrvMsg(scrn->scrnIndex, X_ERROR,
                    "overlay: failed to point the plane at the client buffer\n");
         return FALSE;

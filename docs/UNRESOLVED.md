@@ -2481,6 +2481,15 @@ present-bench(300²、800×600、1080p) / glmark2(build + 全套) / gl-regressio
 `overlay present: flips=N disables=M`。`flips > 0` 才证明 WIN0 直扫真的被用上了；
 `flips == 0` 而 present 仍慢 ⇒ 卡在 `mwx_present_check_overlay()` 的判据上。
 
+**自诊断与熔断（2026-11-18 13:44）。** `mwx_present_check_overlay()` 的每个拒绝分支
+都改成 `OVERLAY_REASON(bit, text)`：同一种原因只打一次
+`overlay: not used (<原因>); falling back to copy`，位图在
+`mwv207Rec.overlay_reject_mask`（15 条：crtc/window/pixmap 缺失、无 glamor、
+crtc 关、无 overlay plane、非 root 子窗口、被 redirect、x_off/y_off 非 0、尺寸不符、
+负坐标、越界、被遮挡、深度、stride 非 64 对齐、非线性 modifier、格式不支持）。
+另外 `drmmode_overlay_plane_set()` 连续失败 3 次即置 `overlay_disabled`，
+本代 X 不再尝试（避免每帧建 FB 与刷日志）。
+
 **build-xddx.sh 备份语义修正。** 之前第二次 `--install` 会把自建模块备份成
 `.mwv207-bak`，导致 `--rollback` 把自建模块又装回去。现加 `is_our_module()`（`nm -D`
 查 `mwv207ossModuleData`）与 `is_our_core()`（md5 比对构建产物）：安装时若现有文件已是
