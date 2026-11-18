@@ -2417,3 +2417,41 @@ present_copy_region()` 的 CopyArea 宽高恒为整块 pixmap，update region �
 **结论**：不需要自编 xserver 核心，但确实需要**新的 DDX 模块** + 2D 命令通路
 （工作量在闭源的 2D 数据面编码）。已落地且性价比最高的是 C2 线性翻转
 （+21–22%）与 glamor blit 快路径（+57%）；再往上要动 2D 引擎或 X 核心。
+
+### 自研 X DDX + WIN0 overlay 零拷贝 present（2026-11-18，已装未生效）
+
+**做了什么。** 把窗口态 Present 的整帧拷贝换成"WIN0 cover 平面直扫客户端缓冲"，
+链路是：X 核心版本 2 钩子（`patches/xserver/0003-present-overlay-zero-copy.patch`）
+→ 自研 DDX `src/xddx-mwv207/`（fork 自 modesetting，模块名 `mwv207oss`）
+→ `drmmode_overlay_plane_set()` atomic 提交 WIN0。
+
+**为什么非改核心不可。** X 的 `present_check_flip()` 在
+`window->clipList != root->winSize` 处直接拒绝，带 WM 装饰的普通窗口永远到不了
+DDX。实测：屏幕改 800×600 + 窗口盖满整屏，kprobe `pgflip` 仍为 0；只有
+override-redirect 真全屏才 pgflip=126/3s。
+
+**构建坑（已写进 `tools/build-xddx.sh`）。**
+- 必须用开了 GLX 的构建目录（`build-glx`）：系统会加载 `libglx.so`，它需要
+  `glxServer`；`-Dglx=false` 的 Xorg 会让 GLX 整体不可用。
+- `-Dglx=true` 需要 `dri.pc`，mesa 24 起不再提供 → `/tmp/pkgconfig/dri.pc` 最小 shim。
+- 我们的 Xorg 比系统少 62 个导出符号，**全是 DRI1**；已逐个 `nm` 检查，
+  没有已装模块依赖它们。
+
+**风险点（重启后要盯）。**
+1. 窗口被别的窗口遮住时必须立刻退回拷贝路径 —— `check_overlay` 要求
+   `clipList == 窗口矩形`，`present_check_flip_window()` 的 ClipNotify 会重新判定并
+   `present_unflip`；若这里漏判，表现为"被遮住的窗口仍然显示在上面"。
+2. overlay 生效期间屏幕 pixmap 里那块区域是**旧内容**；unflip 时按窗口偏移拷回
+   （`present_restore_screen_pixmap()`）。若拷回缺失，表现为"窗口关闭后留下幽灵"。
+3. `flip_pending` 只能靠下一次 `present_event_notify` 释放；overlay 分支下任何
+   alloc/queue 失败都必须补发一次，否则 Present 卡死（已加兜底）。
+4. 每 CRTC 只有 1 个 overlay 平面 → 同时只服务一个窗口；第二个窗口提交时会因为
+   `check_overlay` 的遮挡判定失败而退回拷贝路径（正确但无收益）。
+
+**验证。** `./tools/verify-overlay-present.sh`（日志里应有 `mwv207oss` 与
+`using overlay plane N for zero-copy present`；800×600 clear+swap 应 <0.30 ms，
+拷贝路径基线 0.49 ms）。回滚：`sudo ./tools/build-xddx.sh --rollback` + 重启。
+
+**状态。** 2026-11-18 13:20 已安装到系统栈（DDX md5 b0803e20、Xorg md5 5366caa3），
+**尚未重启 X**，因此本轮所有性能数字仍是拷贝路径的。重启后要补：present 分尺寸
+实测、glmark2 build/全套、`GL_DURATION=1 ./tools/gl-regression.sh` pass=10。

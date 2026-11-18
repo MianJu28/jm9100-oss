@@ -10,6 +10,9 @@
 src/*
 !src/mwv207-umd/
 !src/kernel-6.6/
+#   src/xddx-mwv207/  —— 我们自研的 X DDX 模块(从 xserver modesetting 派生),
+#                         承载 WIN0 overlay 零拷贝 present 通路
+!src/xddx-mwv207/
 
 # 参考材料: 上游源码树、厂商闭源包、内核源码压缩包（体积大, 不入库）
 ref/

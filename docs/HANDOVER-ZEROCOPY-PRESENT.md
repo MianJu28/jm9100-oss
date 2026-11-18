@@ -398,3 +398,101 @@ DMA 回读只有 **2.7440 ms（0.70 GB/s）** —— 所以"DMA 引擎做 presen
 （EXA 或 glamor 皆可），并补上 2D 引擎命令通路；工作量主体在 2D 命令编码
 （闭源知识）而非 X。按当前证据，**性价比最高的仍是已经拿到的两层**：
 C2 线性翻转（+21–22%）与 glamor blit 快路径（+57%），二者均已上系统栈。
+
+## 11. 自研 X DDX（mwv207oss）+ WIN0 overlay 零拷贝 present（2026-11-18）
+
+§10.7 的结论是"厂商不需要自编 xserver，但需要一个新 DDX"。本节记录把这条路
+真正做出来的第一版：**不动 X 核心的翻转门禁就不可能有窗口态零拷贝**，所以采用
+"X 核心加一组版本 2 钩子 + 自研 DDX 用 WIN0 平面直扫"的组合。
+
+### 11.1 为什么必须同时改 X 核心
+
+窗口态 Present 走 `present_check_flip()`（`present/present_scmd.c:61`），它按顺序
+拦掉：无 DDX flip 钩子 → window pixmap 三项比对 → **`window->clipList != root->winSize`
+（即窗口不覆盖整屏，含 WM 装饰）** → `x_off/y_off` 非 0 → `valid != 整屏` →
+窗口 x/y 非 0 或尺寸不等于 pixmap。真实窗口在带装饰的 WM 下**永远被第三条拦掉**，
+到不了 DDX。实测佐证：把屏幕改成 800×600、窗口盖满整屏，kprobe `pgflip` 仍为 0；
+只有 override-redirect 真全屏才 pgflip=126/3s。
+
+因此核心加了版本 2 钩子（`patches/xserver/0003-present-overlay-zero-copy.patch`，253 行）：
+
+- `present/present.h`：`PRESENT_SCREEN_INFO_VERSION` 1→2，`present_screen_info_rec`
+  末尾追加 `present_check_overlay_ptr check_overlay` 与
+  `present_overlay_flip_ptr overlay_flip`；
+- `present/present_priv.h`：`present_vblank.overlay`、`present_screen_priv.flip_overlay`；
+- `present/present_vblank.c`：flip 判定**先问 overlay**，命中即标记
+  `overlay + flip + sync_flip`（簿记复用 flip 队列，不引入新队列）；
+- `present/present_scmd.c`：`present_execute()` 的 flip 分支里 overlay 走
+  `overlay_flip()`，成功直接 return（**不** `present_set_tree_pixmap`、**不**
+  `DamageDamageRegion`，因为屏幕 pixmap 根本没有被写过）；失败则清标志回落到拷贝路径；
+  `present_flip_notify()` 记 `flip_overlay`；`present_restore_screen_pixmap()` 在
+  overlay 场景下按**窗口偏移**把最后一帧拷回屏幕 pixmap；`present_check_flip_window()`
+  的 pending/current/queued 三处改为走 `present_check_overlay`；
+  `present_scmd_can_window_flip()` 在 overlay 钩子存在时直接返回 TRUE（让客户端
+  拿到可直扫的缓冲区/modifier）。
+
+### 11.2 自研 DDX（`src/xddx-mwv207/`）
+
+从 xserver 21.1.16 的 `modesetting` 原样 fork（10 文件约 328 KB），符号重命名
+`modesettingRec→mwv207Rec`、`modesettingPtr→mwv207Ptr`、`ms_*→mwx_*`（`ms->`
+结构体指针保持不变），模块身份统一为 `mwv207oss`
+（`DriverRec mwv207oss` / `XF86ModuleData mwv207ossModuleData` / `scrn->driverName`），
+所以能与系统的 modesetting 并存、互不干扰。在此基础上加：
+
+1. **overlay 平面枚举**（`src/xddx-mwv207/drmmode_display.c`）：
+   `drmmode_crtc_create_planes()` 原来对非 PRIMARY 平面直接丢弃，现在把
+   `DRM_PLANE_TYPE_OVERLAY` 记录为 `overlay_plane_id` + `props_overlay_plane[]`，
+   并把主平面命中时的 `break` 改 `continue`（否则扫不到后面的 overlay）；
+   `is_plane_assigned()` 同时比对 `plane_id` 与 `overlay_plane_id`。
+2. **`drmmode_overlay_plane_set()` / `drmmode_overlay_plane_disable()`**：
+   直接 atomic 提交 WIN0 的 `FB_ID/CRTC_ID/SRC_*/CRTC_*`，`NONBLOCK`；换帧时释放
+   上一个 FB（内核在平面状态被替换前仍持有引用，安全）。
+3. **Present 钩子**（`src/xddx-mwv207/present.c`）：
+   - `mwx_present_check_overlay()` 放行条件：CRTC 开着、`vtSema`、glamor 可用、
+     已枚举到 overlay 平面、窗口是 root 的直接子窗口且**未被重定向**、
+     窗口尺寸等于 pixmap、窗口坐标非负且不越出 CRTC、
+     **`clipList` 等于窗口矩形（即没有任何窗口遮挡它）**、depth 24/32、
+     gbm stride 满足 **`stride & 0x3f == 0`**（KMD 要求）、modifier 为
+     `DRM_FORMAT_MOD_LINEAR`、格式为 ARGB/XRGB/ABGR/XBGR8888。
+   - `mwx_present_overlay_flip()` 提交平面更新后，用
+     `mwx_drm_queue_alloc()+mwx_queue_vblank(MS_QUEUE_RELATIVE,0)` 在下一个 vblank
+     回 `present_event_notify()`；**任何失败路径都必须补一次
+     `present_event_notify(event_id,0,0)`**，否则 `flip_pending` 永久占位、Present 卡死。
+   - `mwx_present_unflip()` 开头新增 overlay 分支：只关平面、不发 flip。
+4. `mwv207Rec` 增加 `overlay_active` / `overlay_window`。
+
+### 11.3 构建（关键坑）
+
+`tools/build-xddx.sh` 一把梭（`--build/--install/--rollback/--status/--test`）：
+
+- 构建目录必须是 **开了 GLX 的 `build-glx`**。系统 Xorg 会加载
+  `/usr/lib/xorg/modules/extensions/libglx.so`，它需要 `glxServer` 符号；
+  `-Dglx=false` 编出来的 Xorg 没有该符号，GLX 会整体不可用。
+- `-Dglx=true` 要 `dri.pc`，而 mesa 24 起不再提供 ⇒ 脚本在 `/tmp/pkgconfig/dri.pc`
+  造一个最小 shim（只为取 `dridriverdir` 与链接 `dl`）。
+- 符号面核对：我们的 Xorg 导出 1947 个符号、系统 2008 个，差的 62 个**全是 DRI1**
+  （`DRICreateContext` 等）；逐个 `nm` 检查已装模块，**没有任何模块依赖它们**。
+- DDX 模块 dlopen 验证（先 `dlopen libxorgserver.so RTLD_GLOBAL` 再 `dlopen` 模块）：
+  `mwv207ossModuleData` / `mwv207oss` 均可解析。
+
+### 11.4 安装/回滚与验证
+
+```bash
+./tools/build-xddx.sh --build        # 只构建
+sudo ./tools/build-xddx.sh --install # 装 DDX + 打了补丁的 Xorg + OutputClass 配置
+sudo systemctl restart lightdm       # 手动执行(会杀掉 pty 里的会话)
+./tools/verify-overlay-present.sh    # 一条命令判定是否真的走了 overlay
+sudo ./tools/build-xddx.sh --rollback # 一键回滚(恢复旧 Xorg/删模块/删配置)
+```
+
+`--install` 会同时替换 `/usr/lib/xorg/modules/drivers/mwv207oss_drv.so` 与
+`/usr/lib/xorg/Xorg`（**必须成对换**：旧核心不认识版本 2 钩子，新核心缺 DDX 也没有
+overlay），并写 `/usr/share/X11/xorg.conf.d/10-mwv207-oss.conf`
+（`MatchDriver "mwv207"` + `Driver "mwv207oss"`）。两者的 `.mwv207-bak` 是回滚备份。
+
+### 11.5 当前状态（2026-11-18 13:20）
+
+已构建并安装完毕，**尚未重启 X**（重启会经 pty SIGHUP 终止本会话，按用户要求由
+用户手动执行）。预期收益：窗口态 present 从 0.49 ms（glamor blit 拷贝）
+降到 0.1 ms 量级；glmark2 build 从 1477 FPS 向离屏基线 5396 FPS 靠近
+（厂商窗口态 5982 FPS ⇒ 差距从 2.87× 收窄到约 1.11×）。
